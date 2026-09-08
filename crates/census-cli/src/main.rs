@@ -793,8 +793,21 @@ fn print_report(report: &CrawlReport) {
     );
     println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
     println!("  capture      {}", report.dir.display());
+    if report.shards_restarted > 0 {
+        println!(
+            "  restarted    {} (steam stopped serving early; walked again)",
+            report.shards_restarted
+        );
+    }
 
-    if !report.complete {
+    if report.shards_short > 0 {
+        eprintln!(
+            "\nwarning: {} window(s) stayed short of Valve's own count after every attempt \
+             and were left unfinished rather than counted. Run the same command again to \
+             walk them.",
+            report.shards_short
+        );
+    } else if !report.complete {
         eprintln!(
             "\nwarning: some shards did not finish. Completed shards are on disk; \
              run the same command again to continue."

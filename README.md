@@ -145,9 +145,16 @@ Three rules keep those figures honest:
   paginates by creation date instead, and reports the coverage it achieved against Valve's own
   stated total as a figure you can read rather than a claim you have to trust.
 
-- **Some reviews are genuinely unreachable.** Reviews from deleted and private accounts are
-  counted in Valve's totals but cannot be retrieved by anyone, which is why coverage is
-  reported per corpus rather than assumed to be complete.
+- **Some reviews are genuinely unreachable, and a shortfall must never be blamed on that
+  without checking.** Reviews from deleted and private accounts are counted in Valve's totals
+  and cannot be retrieved by anyone. Steam separately, and intermittently, just stops serving
+  a window early: pages arrive full, then one arrives empty long before the window is
+  exhausted, which looks exactly like reaching the end. Walking the same window again returns
+  everything. A crawler that accepts the first answer therefore undercounts by a quarter of a
+  window at a time while reporting every shard as finished, so this one compares each window
+  against Valve's count for it, walks it again when it lands short, and refuses to mark a
+  window complete while it stays short. Coverage is reported per corpus either way, because
+  the first number is the one worth doubting.
 
 - **The target moves.** New reviews arrive constantly, so a corpus is a snapshot with a
   timestamp, and it can be topped up rather than rebuilt. Reviews are also edited and deleted
