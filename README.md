@@ -1,15 +1,17 @@
 # Steam Review Census
 
-> ## ⚠️ IN DEVELOPMENT — NOT USABLE YET
+> ## ⚠️ IN DEVELOPMENT — DO NOT TRUST THE NUMBERS YET
 >
-> **This does not work yet. There is nothing to install and nothing to run.**
+> There is a working command-line tool. There is no release, no installer and no interface.
 >
-> The repository currently contains a description of what is being built and nothing else.
-> No interface exists, no analysis runs, and none of the behaviour described below is
-> implemented. Everything here is subject to change, including the whole approach.
+> The pipeline runs end to end: it downloads every review Valve will serve, embeds them
+> locally, sorts them into categories and reports what it found. **What it does not yet have
+> is any measure of how often it is right.** No labelled reference set exists, so no figure
+> it produces carries an error bar, and the categories are assigned by comparing text
+> similarity rather than by reading.
 >
-> Do not depend on this, do not report bugs against it, and do not expect any of it to
-> work. If you found this looking for a working tool, this is not one yet.
+> Everything is subject to change, including the whole approach. Do not depend on this, and
+> do not quote its output as fact.
 
 A tool for finding out what players of a game actually think, rather than what the loudest
 reviews say.
@@ -37,6 +39,10 @@ The only way to remove the argument is to hold every review and count.
 - Click through from any number, anywhere, to the actual reviews behind it.
 
 You choose which model does the sorting, and how closely it reads.
+
+Today the first two work, and the third works only against the built-in categories. The rest
+is described here because it is what the tool is for, not because it exists; Status, at the
+bottom, says exactly what runs.
 
 ### What a percentage means here
 
@@ -145,16 +151,32 @@ de-identification.
 
 ## Status
 
-**Nothing described above is implemented.** This repository holds a specification, a
-README, and the beginnings of a Rust workspace.
+Three commands work, from a checkout, with no account and no API key:
 
-What does exist is prior work this is being built from: the underlying approach has been
-run against a corpus of 1.7 million reviews across 62 games, which is where the 64% and
-24.7% figures above come from. That work lives elsewhere as a set of one-off scripts, and
-it predates the parameter findings recorded under Honest limits, so those figures will be
-re-measured against a freshly crawled corpus before they are presented as anything more
-than indicative. The tool is the attempt to turn that work into something anyone can point
-at a game.
+```sh
+census crawl 296970      # every review Valve will serve, into Parquet
+census embed 296970      # vectors, computed locally
+census classify 296970   # categories, mention rates and bias factors
+```
+
+**What works.** Crawling is sharded by date, resumable after an interruption, and can top up
+an existing corpus rather than rebuilding it. Each crawl reports the share of Valve's own
+stated total it actually retrieved. Embedding runs on the machine, on the GPU where one is
+available, at roughly 280 reviews a second. Categories come from a fixed sixteen-item core
+spine, and every percentage says which denominator it uses.
+
+**What does not.** There is no graphical interface, no installer and no release. Categories
+are assigned by text similarity alone; the game-specific categories, the written summaries
+and the flag for reviews whose rating disagrees with their text all need a model and are not
+built. Most importantly, **nothing measures how often the categories are right**, so no
+figure has an error bar and none should be quoted as fact.
+
+Prior work sits behind this: the approach has been run against 1.7 million reviews across 62
+games, which is where the 64% and 24.7% figures above come from. That work predates the
+parameter findings recorded under Honest limits, so those corpora were gathered with filters
+that omit roughly a tenth of the reviews and a sixth of the negative ones. Both figures will
+be re-measured against freshly crawled corpora before they are presented as anything more
+than indicative.
 
 There is no release, no version, and no timeline.
 
