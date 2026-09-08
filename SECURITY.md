@@ -30,16 +30,16 @@ Three different things are commonly called signing, and they answer different qu
 - **Provenance** (SLSA attestations, cosign). Proves an asset was built by this repository's
   workflow from a specific commit. Verified deliberately, with the command above.
 - **Operating-system trust** (a certificate chaining to a CA the OS ships). This is the only
-  thing that suppresses SmartScreen and Gatekeeper warnings. Windows builds carry it;
-  macOS builds do not.
+  thing that suppresses SmartScreen and Gatekeeper warnings. **No build carries it.**
 - **Self-signing.** Proves the bytes came from the holder of a key the operating system has
   never heard of. It changes no warnings.
 
-macOS builds are unsigned by Apple's definition, so Gatekeeper will refuse them on first
-launch and you will need to allow the app explicitly under System Settings, Privacy and
-Security. That is expected, and it is not a signal that the download is untrustworthy.
-Verify provenance with the command above rather than relying on the operating system's
-opinion.
+So every build will warn on first launch. Windows will show a SmartScreen prompt you can
+click past; macOS will refuse outright until you allow the app under System Settings,
+Privacy and Security. That is expected, and it is not a signal that the download has been
+tampered with. Verify provenance with the command above rather than relying on the
+operating system's opinion, which here reflects only that nobody has paid a certificate
+authority.
 
 ## Handling of credentials and data
 
