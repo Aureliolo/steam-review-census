@@ -780,7 +780,7 @@ fn languages(out: &mut String, app: &AppReport) {
             "<li><span class=\"lang-name\">{}</span>\
              <span class=\"bar\" style=\"--fill:{fill:.4}\"></span>\
              <span class=\"lang-count\">{}</span></li>",
-            escape(name),
+            escape(&language_name(name)),
             thousands(*count)
         );
     }
@@ -889,45 +889,60 @@ const FOOTER_LIMITS: [&str; 4] = [
      photograph of it, not a permanent fact.",
 ];
 
-/// Steam's own name for a language as a BCP 47 tag.
+/// Steam's own names for languages, the tags a browser understands, and what to call them
+/// on screen.
 ///
-/// Steam uses names of its own ("schinese", "koreana", "brazilian"), and a page that repeats
-/// those tells a screen reader nothing. Unknown names get no tag rather than a guess: an
-/// element inheriting the page's English is a smaller error than one claiming to be a
-/// language it is not.
+/// Steam uses names of its own: "schinese", "koreana", "brazilian", "latam". A page that
+/// repeats those tells a screen reader nothing and a reader not much more.
+const LANGUAGES: [(&str, &str, &str); 29] = [
+    ("english", "en", "English"),
+    ("schinese", "zh-Hans", "Chinese (simplified)"),
+    ("tchinese", "zh-Hant", "Chinese (traditional)"),
+    ("japanese", "ja", "Japanese"),
+    ("koreana", "ko", "Korean"),
+    ("thai", "th", "Thai"),
+    ("bulgarian", "bg", "Bulgarian"),
+    ("czech", "cs", "Czech"),
+    ("danish", "da", "Danish"),
+    ("german", "de", "German"),
+    ("greek", "el", "Greek"),
+    ("spanish", "es", "Spanish"),
+    ("latam", "es-419", "Spanish (Latin America)"),
+    ("finnish", "fi", "Finnish"),
+    ("french", "fr", "French"),
+    ("hungarian", "hu", "Hungarian"),
+    ("indonesian", "id", "Indonesian"),
+    ("italian", "it", "Italian"),
+    ("dutch", "nl", "Dutch"),
+    ("norwegian", "no", "Norwegian"),
+    ("polish", "pl", "Polish"),
+    ("portuguese", "pt", "Portuguese"),
+    ("brazilian", "pt-BR", "Portuguese (Brazil)"),
+    ("romanian", "ro", "Romanian"),
+    ("russian", "ru", "Russian"),
+    ("swedish", "sv", "Swedish"),
+    ("turkish", "tr", "Turkish"),
+    ("ukrainian", "uk", "Ukrainian"),
+    ("vietnamese", "vi", "Vietnamese"),
+];
+
+/// The BCP 47 tag for a Steam language name.
+///
+/// An unknown name gets no tag rather than a guess: an element inheriting the page's English
+/// is a smaller error than one claiming to be a language it is not.
 fn bcp47(steam: &str) -> Option<&'static str> {
-    Some(match steam {
-        "english" => "en",
-        "schinese" => "zh-Hans",
-        "tchinese" => "zh-Hant",
-        "japanese" => "ja",
-        "koreana" => "ko",
-        "thai" => "th",
-        "bulgarian" => "bg",
-        "czech" => "cs",
-        "danish" => "da",
-        "german" => "de",
-        "greek" => "el",
-        "spanish" => "es",
-        "latam" => "es-419",
-        "finnish" => "fi",
-        "french" => "fr",
-        "hungarian" => "hu",
-        "indonesian" => "id",
-        "italian" => "it",
-        "dutch" => "nl",
-        "norwegian" => "no",
-        "polish" => "pl",
-        "portuguese" => "pt",
-        "brazilian" => "pt-BR",
-        "romanian" => "ro",
-        "russian" => "ru",
-        "swedish" => "sv",
-        "turkish" => "tr",
-        "ukrainian" => "uk",
-        "vietnamese" => "vi",
-        _ => return None,
-    })
+    LANGUAGES
+        .iter()
+        .find(|(name, _, _)| *name == steam)
+        .map(|(_, tag, _)| *tag)
+}
+
+/// What to call a Steam language on screen, falling back to whatever Steam called it.
+fn language_name(steam: &str) -> String {
+    LANGUAGES
+        .iter()
+        .find(|(name, _, _)| *name == steam)
+        .map_or_else(|| steam.to_owned(), |(_, _, display)| (*display).to_owned())
 }
 
 fn escape(raw: &str) -> String {
@@ -1225,6 +1240,31 @@ mod tests {
             escape("<script>alert(\"x\" & 'y')</script>"),
             "&lt;script&gt;alert(&quot;x&quot; &amp; &#39;y&#39;)&lt;/script&gt;"
         );
+    }
+
+    #[test]
+    fn steam_language_names_become_tags_a_browser_knows() {
+        assert_eq!(bcp47("schinese"), Some("zh-Hans"));
+        assert_eq!(bcp47("koreana"), Some("ko"));
+        assert_eq!(bcp47("brazilian"), Some("pt-BR"));
+        // A language Steam adds after this was written must not be guessed at.
+        assert_eq!(bcp47("klingon"), None);
+        assert_eq!(language_name("klingon"), "klingon");
+        assert_eq!(language_name("latam"), "Spanish (Latin America)");
+
+        // Every tag has to be one, and no two names may claim the same one.
+        let mut tags: Vec<&str> = LANGUAGES.iter().map(|(_, tag, _)| *tag).collect();
+        tags.sort_unstable();
+        let count = tags.len();
+        tags.dedup();
+        assert_eq!(tags.len(), count, "two languages share a tag");
+        for (name, tag, display) in LANGUAGES {
+            assert!(!name.is_empty() && !display.is_empty(), "{name} is unnamed");
+            assert!(
+                tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'),
+                "{tag} is not a tag"
+            );
+        }
     }
 
     #[test]
