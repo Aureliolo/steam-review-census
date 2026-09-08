@@ -9,7 +9,14 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+arrow = "59.3.0"
+parquet = "59.3.0"
 percent-encoding = "2.3"
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "gzip", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]
 workspace = true

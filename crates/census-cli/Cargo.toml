@@ -13,7 +13,10 @@ name = "census"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0.104"
 census-core.workspace = true
+clap = { version = "4.6.6", features = ["derive"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 
 [lints]
 workspace = true
