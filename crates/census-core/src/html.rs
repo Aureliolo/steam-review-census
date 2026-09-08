@@ -174,7 +174,26 @@ fn overview(out: &mut String, report: &Report) {
         }
         out.push_str("</tr>\n");
     }
-    out.push_str("</tbody>\n</table>\n</div>\n</div>\n</section>\n");
+    out.push_str("</tbody>\n</table>\n</div>\n");
+    pooled_agreement(out, report);
+    out.push_str("</div>\n</section>\n");
+}
+
+/// What the classifier is measured to get wrong, over every game at once.
+///
+/// A hundred held-back reviews put a band twenty points wide around any one game's figure.
+/// Six hundred is the number worth quoting, and it exists only when every game in the report
+/// has a reference set behind it.
+fn pooled_agreement(out: &mut String, report: &Report) {
+    let measured: Vec<crate::AgreementReport> = report
+        .apps
+        .iter()
+        .filter_map(|app| app.agreement.clone())
+        .collect();
+    if measured.len() != report.apps.len() || measured.len() < 2 {
+        return;
+    }
+    agreement_note(out, &crate::evaluate::pooled(&measured));
 }
 
 fn game(out: &mut String, app: &AppReport) {
