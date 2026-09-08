@@ -263,18 +263,34 @@ fn categories(out: &mut String, app: &AppReport) {
     let widest = rows.first().map_or(0, |c| c.mention_count).max(1);
 
     out.push_str("<div class=\"scroll\">\n<table class=\"categories\">\n<thead><tr>");
-    out.push_str("<th scope=\"col\">Category</th>");
-    out.push_str("<th scope=\"col\" class=\"num\">Mention rate</th>");
-    out.push_str("<th scope=\"col\" class=\"num\">Main subject</th>");
-    out.push_str("<th scope=\"col\" class=\"num\">Top of the pile</th>");
-    out.push_str("<th scope=\"col\" class=\"num\">Bias</th>");
-    out.push_str("<th scope=\"col\" class=\"num\">Recommended</th>");
+    heading(out, "Category", false);
+    heading(out, "Mention rate", true);
+    heading(out, "Main subject", true);
+    heading(out, "Top of the pile", true);
+    heading(out, "Bias", true);
+    heading(out, "Recommended", true);
     out.push_str("</tr></thead>\n<tbody>\n");
 
     for category in rows {
         category_row(out, app, category, widest);
     }
     out.push_str("</tbody>\n</table>\n</div>\n");
+}
+
+/// A column header that can reorder the table.
+///
+/// A button rather than a clickable cell, so it is reachable and announced without the page
+/// reinventing what a button is. With scripting off it is an inert label and the table keeps
+/// the order it was rendered in.
+fn heading(out: &mut String, label: &str, numeric: bool) {
+    let class = if numeric { " class=\"num\"" } else { "" };
+    let _ = write!(
+        out,
+        "<th scope=\"col\"{class} aria-sort=\"none\">\
+         <button type=\"button\" class=\"sort\" data-sort>{}\
+         <span class=\"arrow\" aria-hidden=\"true\"></span></button></th>",
+        escape(label)
+    );
 }
 
 fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, widest: u64) {
@@ -315,25 +331,17 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
     let share = category.mention_count as f64 / widest as f64;
     let _ = write!(
         out,
-        "<td class=\"num bar-cell\"><span class=\"bar\" style=\"--fill:{:.4}\"></span>\
+        "<td class=\"num bar-cell\" data-value=\"{}\">\
+         <span class=\"bar\" style=\"--fill:{:.4}\"></span>\
          <span class=\"value\">{}</span><span class=\"count\">{}</span></td>",
+        category.mention_count,
         share,
         app.rate(category.mention_count)
             .map_or("—".to_owned(), percent),
         thousands(category.mention_count)
     );
-    let _ = write!(
-        out,
-        "<td class=\"num\">{}</td>",
-        app.rate(category.primary_count)
-            .map_or("—".to_owned(), percent)
-    );
-    let _ = write!(
-        out,
-        "<td class=\"num\">{}</td>",
-        app.top_rate(category.top_mention_count)
-            .map_or("—".to_owned(), percent)
-    );
+    rate_cell(out, app.rate(category.primary_count));
+    rate_cell(out, app.top_rate(category.top_mention_count));
     bias_cell(out, app.bias(category));
     verdict_cell(out, category.positive_share(), app.positive_baseline());
     out.push_str("</tr>\n");
@@ -345,10 +353,24 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
     }
 }
 
+/// A rate, carrying the number it was formatted from so the table can be reordered by it.
+fn rate_cell(out: &mut String, rate: Option<f64>) {
+    match rate {
+        Some(rate) => {
+            let _ = write!(
+                out,
+                "<td class=\"num\" data-value=\"{rate:.9}\">{}</td>",
+                percent(rate)
+            );
+        }
+        None => out.push_str("<td class=\"num\" data-value=\"-1\">—</td>"),
+    }
+}
+
 /// Bias is the point, so it gets a bar that leaves the middle rather than a bare number.
 fn bias_cell(out: &mut String, factor: Option<f64>) {
     let Some(factor) = factor else {
-        out.push_str("<td class=\"num\">—</td>");
+        out.push_str("<td class=\"num\" data-value=\"-1\">—</td>");
         return;
     };
     // Log scale: twice as often and half as often are the same distance from the middle,
@@ -357,7 +379,7 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
     let side = if offset >= 0.0 { "over" } else { "under" };
     let _ = write!(
         out,
-        "<td class=\"num bias\"><span class=\"gauge {side}\" style=\"--offset:{:.4}\"></span>\
+        "<td class=\"num bias\" data-value=\"{factor:.6}\"><span class=\"gauge {side}\" style=\"--offset:{:.4}\"></span>\
          <span class=\"value\">{factor:.1}\u{d7}</span></td>",
         offset.abs()
     );
@@ -369,7 +391,7 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
 /// only interesting once a reader knows whether 80% is high or low for that game.
 fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
     let Some(share) = share else {
-        out.push_str("<td class=\"num\">\u{2014}</td>");
+        out.push_str("<td class=\"num\" data-value=\"-1\">\u{2014}</td>");
         return;
     };
     let tone = match baseline {
@@ -379,7 +401,7 @@ fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
     };
     let _ = write!(
         out,
-        "<td class=\"num verdict-share{tone}\">{}</td>",
+        "<td class=\"num verdict-share{tone}\" data-value=\"{share:.9}\">{}</td>",
         percent(share)
     );
 }

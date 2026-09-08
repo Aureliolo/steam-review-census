@@ -315,6 +315,46 @@ table.categories .num {
   white-space: nowrap;
 }
 
+button.sort {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.js button.sort {
+  cursor: pointer;
+}
+
+.js button.sort:hover {
+  color: var(--ink);
+}
+
+th[aria-sort='none'] .arrow {
+  visibility: hidden;
+}
+
+.arrow {
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid currentColor;
+}
+
+th[aria-sort='descending'] .arrow {
+  transform: rotate(180deg);
+}
+
+/* Nothing to click without scripting, so nothing should look clickable. */
+html:not(.js) .arrow {
+  display: none;
+}
+
 tr.row[role='button'] {
   cursor: pointer;
 }
