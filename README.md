@@ -1,5 +1,16 @@
 # Steam Review Lab
 
+> ## ⚠️ IN DEVELOPMENT — NOT USABLE YET
+>
+> **This does not work yet. There is nothing to install and nothing to run.**
+>
+> The repository currently contains a description of what is being built and nothing else.
+> No interface exists, no analysis runs, and none of the behaviour described below is
+> implemented. Everything here is subject to change, including the whole approach.
+>
+> Do not depend on this, do not report bugs against it, and do not expect any of it to
+> work. If you found this looking for a working tool, this is not one yet.
+
 A tool for finding out what players of a game actually think, rather than what the loudest
 reviews say.
 
@@ -79,5 +90,12 @@ from redistributing them here. Everything you pull stays on your machine.
 
 ## Status
 
-Early. The pipeline behind it has been run in anger against a corpus of 1.7 million reviews
-across 62 games, but the tool itself is being assembled from that work.
+**Nothing described above is implemented.** This repository holds a specification and a
+README, and that is all.
+
+What does exist is prior work this is being built from: the underlying approach has been
+run against a corpus of 1.7 million reviews across 62 games, which is where the numbers
+quoted at the top come from. That work lives elsewhere as a set of one-off scripts. The
+tool is the attempt to turn it into something anyone can point at a game.
+
+There is no release, no version, and no timeline.
