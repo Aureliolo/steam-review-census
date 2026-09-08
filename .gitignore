@@ -1,0 +1,45 @@
+# This repository is public and holds no review data. Anything pulled from Steam stays
+# local: it is large, it is reproducible from the app ID, and it is not ours to
+# redistribute.
+data/
+corpus/
+raw/
+analysis/
+output/
+*.db
+*.db-wal
+*.db-shm
+*.parquet
+*.jsonl
+*.csv
+
+# Credentials. Never commit any of these.
+.env
+.env.*
+*.key
+*_api_key
+.steam_api_key
+secrets.*
+credentials.*
+
+# Build and dependency artefacts
+dist/
+build/
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
