@@ -270,9 +270,10 @@ fn write_anchors(path: &Path) {
     anchors.save(path).unwrap();
 }
 
-#[test]
-fn a_capture_becomes_a_page_without_a_model_or_a_network() {
-    let root = std::env::temp_dir().join(format!("census-pipeline-{}", std::process::id()));
+/// A capture, its embeddings and an anchor set, all on disk and all real files.
+fn build_corpus(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    let root = std::env::temp_dir().join(format!("census-{name}-{}", std::process::id()));
+    std::fs::remove_dir_all(&root).ok();
     let snapshot = root.join("appid=1").join("snapshot=1700000000");
     std::fs::create_dir_all(&snapshot).unwrap();
     std::fs::write(
@@ -294,11 +295,30 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
     .unwrap();
     write_capture(&snapshot);
     write_embeddings(&snapshot);
+    write_anchors(&root.join("anchors.json"));
+    (root, snapshot)
+}
 
-    let anchors_path = root.join("anchors.json");
-    write_anchors(&anchors_path);
-    let anchors = Anchors::load(&anchors_path).unwrap();
+fn reporting(root: &Path) -> census_core::report::ReportOptions {
+    census_core::report::ReportOptions {
+        out_dir: root.to_path_buf(),
+        examples: 4,
+        seed: 1,
+    }
+}
 
+fn classifying(root: &Path) -> ClassifyOptions {
+    ClassifyOptions {
+        out_dir: root.to_path_buf(),
+        mention_margin: 0.05,
+        top_helpful: 2,
+    }
+}
+
+#[test]
+fn a_capture_becomes_a_page_without_a_model_or_a_network() {
+    let (root, _snapshot) = build_corpus("pipeline");
+    let anchors = Anchors::load(&root.join("anchors.json")).unwrap();
     let options = ClassifyOptions {
         out_dir: root.clone(),
         mention_margin: 0.05,
@@ -347,15 +367,7 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
     assert!(by_id("bugs").bias_factor(report.reviews, 2).unwrap() > 1.0);
 
     // Everything a report needs must now be on disk, written by the run above.
-    let rendered = census_core::report::build(
-        &[1],
-        &census_core::report::ReportOptions {
-            out_dir: root.clone(),
-            examples: 4,
-            seed: 1,
-        },
-    )
-    .unwrap();
+    let rendered = census_core::report::build(&[1], &reporting(&root)).unwrap();
     let page = census_core::html::render(&rendered);
 
     assert!(page.contains("Test Game"), "the game's name is missing");
@@ -369,23 +381,24 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
         "the link back to the source is missing or malformed"
     );
 
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn counts_the_corpus_no_longer_supports_are_refused_rather_than_drawn() {
     // Re-embedding without classifying again leaves counts describing vectors that are gone.
-    // They would render perfectly and be wrong, so the report refuses them.
+    // They would render perfectly and every one of them would be wrong.
+    let (root, snapshot) = build_corpus("stale");
+    let anchors = Anchors::load(&root.join("anchors.json")).unwrap();
+    census_core::classify_corpus(&anchors, 1, &classifying(&root), |_| {}).unwrap();
+
     let sidecar = snapshot.join("classification.json");
     let mut stored: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
     stored["model"] = serde_json::Value::String("some-other-encoder".to_owned());
     std::fs::write(&sidecar, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
 
-    let refused = census_core::report::build(
-        &[1],
-        &census_core::report::ReportOptions {
-            out_dir: root.clone(),
-            examples: 4,
-            seed: 1,
-        },
-    );
-    let message = refused
+    let message = census_core::report::build(&[1], &reporting(&root))
         .expect_err("a stale classification must not render")
         .to_string();
     assert!(
