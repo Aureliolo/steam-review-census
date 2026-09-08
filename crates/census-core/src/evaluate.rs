@@ -350,6 +350,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
     })
 }
 
+#[derive(Debug)]
 struct Prediction {
     primary: String,
     mentions: Vec<String>,
@@ -370,7 +371,12 @@ fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
         let ids = downcast::<StringArray>(&batch, "recommendationid")?;
         let primaries = downcast::<StringArray>(&batch, "primary_category")?;
         let mentions = downcast::<ListArray>(&batch, "mentions")?;
-        let anchors = downcast::<StringArray>(&batch, "anchors")?;
+        let anchors = downcast::<StringArray>(&batch, "anchors").map_err(|_| {
+            Error::StaleClassifications {
+                path: path.to_path_buf(),
+                field: "anchors",
+            }
+        })?;
         for row in 0..batch.num_rows() {
             let listed = mentions.value(row);
             let listed = listed
@@ -524,6 +530,86 @@ mod tests {
         // Corpus-weighted this would look near perfect; unweighted it does not.
         let macro_f1 = report.macro_f1().unwrap();
         assert!(macro_f1 < 0.55, "macro f1 was {macro_f1}");
+    }
+
+    #[test]
+    fn a_classification_file_from_an_older_build_names_the_fix_rather_than_reading_as_malformed() {
+        use std::sync::Arc;
+
+        use arrow::{
+            array::{Float32Builder, ListBuilder, StringBuilder, UInt32Builder},
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use parquet::arrow::ArrowWriter;
+
+        // The schema as it stood before runs recorded which anchors produced them.
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("recommendationid", DataType::Utf8, false),
+            Field::new("appid", DataType::UInt32, false),
+            Field::new("primary_category", DataType::Utf8, false),
+            Field::new("primary_score", DataType::Float32, false),
+            Field::new(
+                "mentions",
+                DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+                false,
+            ),
+            Field::new("spine_version", DataType::Utf8, false),
+        ]));
+
+        let mut ids = StringBuilder::new();
+        let mut appids = UInt32Builder::new();
+        let mut primaries = StringBuilder::new();
+        let mut scores = Float32Builder::new();
+        let mut mentions = ListBuilder::new(StringBuilder::new());
+        let mut spine = StringBuilder::new();
+        ids.append_value("1");
+        appids.append_value(296_970);
+        primaries.append_value("bugs");
+        scores.append_value(0.5);
+        mentions.values().append_value("bugs");
+        mentions.append(true);
+        spine.append_value("core-2");
+
+        let dir = std::env::temp_dir().join("census-stale-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("classifications.parquet");
+        let mut writer = ArrowWriter::try_new(
+            std::fs::File::create(&path).unwrap(),
+            Arc::clone(&schema),
+            None,
+        )
+        .unwrap();
+        writer
+            .write(
+                &RecordBatch::try_new(
+                    schema,
+                    vec![
+                        Arc::new(ids.finish()),
+                        Arc::new(appids.finish()),
+                        Arc::new(primaries.finish()),
+                        Arc::new(scores.finish()),
+                        Arc::new(mentions.finish()),
+                        Arc::new(spine.finish()),
+                    ],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        writer.close().unwrap();
+
+        let error = load_predictions(&path).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                Error::StaleClassifications {
+                    field: "anchors",
+                    ..
+                }
+            ),
+            "an older file should name the command that fixes it: {error}"
+        );
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

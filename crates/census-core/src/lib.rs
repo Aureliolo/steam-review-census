@@ -71,6 +71,17 @@ pub enum Error {
     #[error("no fitted anchors at {path}; run `census fit` first")]
     NoAnchors { path: std::path::PathBuf },
 
+    /// Written by a build that recorded less about a run than this one reads back. The
+    /// assignments inside predate whatever is missing, so they are refused rather than
+    /// partially interpreted.
+    #[error(
+        "{path} was written by an older build and is missing {field}; re-run `census classify`"
+    )]
+    StaleClassifications {
+        path: std::path::PathBuf,
+        field: &'static str,
+    },
+
     /// Anchors fitted against a different taxonomy or embedding model would shift every
     /// category boundary without anything appearing to go wrong, so they are refused.
     #[error("anchors were fitted for a different {field}: expected {expected}, got {actual}")]
