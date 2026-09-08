@@ -7,6 +7,7 @@ data/
 # which name reviews by id only. `census sample` regenerates these from the corpus and
 # the seed recorded in the manifest, so nothing is lost by keeping them out.
 reference/**/sample.json
+reference/**/batches/
 corpus/
 raw/
 analysis/

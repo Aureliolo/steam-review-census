@@ -135,6 +135,9 @@ enum Command {
         /// Also write the category sheet labellers should work from.
         #[arg(long)]
         brief: bool,
+        /// Split each sample into batches of this many reviews, ready to hand out.
+        #[arg(long, default_value_t = 35)]
+        batch_size: usize,
     },
 
     /// Compare stored classifications against a reference set.
@@ -233,6 +236,7 @@ async fn main() -> Result<()> {
             per_category,
             seed,
             brief,
+            batch_size,
         } => run_sample(
             &app_ids,
             &out,
@@ -242,6 +246,7 @@ async fn main() -> Result<()> {
                 seed,
             },
             brief,
+            batch_size,
         ),
         Command::Evaluate {
             app_id,
@@ -410,12 +415,14 @@ fn run_sample(
     out: &std::path::Path,
     options: &census_core::SampleOptions,
     brief: bool,
+    batch_size: usize,
 ) -> Result<()> {
     let (drawn, reports) = census_core::sample::draw(out, app_ids, options)?;
 
     for report in &reports {
         let dir = census_core::evaluate::default_reference_dir(report.app_id);
         census_core::sample::write_for_app(&dir, report.app_id, &drawn)?;
+        let batches = census_core::sample::write_batches(&dir, report.app_id, &drawn, batch_size)?;
 
         let thin: Vec<&str> = report
             .per_category
@@ -431,6 +438,9 @@ fn run_sample(
             report.stratified,
             dir.join("sample.json").display()
         );
+        if batches > 0 {
+            println!("    {batches} batches in {}", dir.join("batches").display());
+        }
         if !thin.is_empty() {
             println!("    supplies nothing for: {}", thin.join(", "));
         }

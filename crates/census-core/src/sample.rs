@@ -261,6 +261,54 @@ pub fn draw(
     Ok((chosen, reports))
 }
 
+/// One review as it is handed to a labeller.
+///
+/// Carries the id and the text and nothing else. The classifier's own guess is deliberately
+/// withheld: a labeller shown a proposed answer agrees with it far more often than one
+/// reading the review cold, and a reference set that inherits the classifier's mistakes
+/// cannot measure them.
+#[derive(Debug, Clone, Serialize)]
+pub struct LabellingItem<'a> {
+    pub id: &'a str,
+    pub review: &'a str,
+}
+
+/// Splits one app's sample into fixed-size batches ready to hand out.
+///
+/// # Errors
+///
+/// Fails if the directory cannot be created or a batch cannot be written.
+pub fn write_batches(
+    dir: &Path,
+    app_id: u32,
+    drawn: &[SampledReview],
+    batch_size: usize,
+) -> Result<usize> {
+    let mine: Vec<&SampledReview> = drawn.iter().filter(|r| r.app_id == app_id).collect();
+    if mine.is_empty() || batch_size == 0 {
+        return Ok(0);
+    }
+    let batches = dir.join("batches");
+    std::fs::create_dir_all(&batches)?;
+
+    let mut written = 0;
+    for (index, chunk) in mine.chunks(batch_size).enumerate() {
+        let items: Vec<LabellingItem<'_>> = chunk
+            .iter()
+            .map(|review| LabellingItem {
+                id: &review.id,
+                review: &review.review,
+            })
+            .collect();
+        std::fs::write(
+            batches.join(format!("batch-{index:03}.json")),
+            serde_json::to_vec_pretty(&items)?,
+        )?;
+        written += 1;
+    }
+    Ok(written)
+}
+
 /// Writes one app's drawn reviews to `sample.json` in its reference directory.
 ///
 /// # Errors
