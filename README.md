@@ -1,6 +1,6 @@
 # Steam Review Census
 
-> ## ⚠️ IN DEVELOPMENT — DO NOT TRUST THE NUMBERS YET
+> ## ⚠️ IN DEVELOPMENT: DO NOT TRUST THE NUMBERS YET
 >
 > There is a working command-line tool. There is no release, no installer and no interface.
 >
