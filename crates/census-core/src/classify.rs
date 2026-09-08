@@ -1,0 +1,547 @@
+//! Assigning categories to reviews, and the numbers that fall out of it.
+//!
+//! This is the zero-setup path: it compares each review's vector against the core spine's
+//! category descriptions, with no model call and no API key. Its accuracy is **not
+//! measured**. Nothing here corrects for classifier error, and every figure it produces
+//! should be read as provisional until a labelled gold set exists to measure it against.
+
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use arrow::{
+    array::{Array, ArrayRef, Float32Builder, ListBuilder, StringBuilder, UInt32Builder},
+    datatypes::{DataType, Field, Schema},
+    record_batch::RecordBatch,
+};
+use parquet::{
+    arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder},
+    basic::{Compression, ZstdLevel},
+    file::properties::WriterProperties,
+};
+
+use crate::{
+    Error, Result,
+    embed::Embedder,
+    model::MODEL_ID,
+    taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, embedding_text},
+};
+
+/// How close to the best-matching category another must score to count as mentioned.
+///
+/// A spread-based rule (say, everything more than one standard deviation above a review's
+/// own mean) sounds adaptive but is not: with a fixed number of categories it selects
+/// roughly a fixed number of them for every review, whatever the review says. Measured on a
+/// real corpus it gave 2.7 categories to nearly every review and a single category to only
+/// 5% of them, which invents the secondary topics it claims to detect.
+///
+/// Distance from the top does not have that failure. A review about one thing leaves a wide
+/// gap to the runner-up and keeps one category; a review about two things scores both
+/// closely and keeps both.
+///
+/// Swept against a 2,909-review corpus, the share of reviews keeping a single category ran
+/// 45.8% at 0.01, 59.5% at 0.02 and 96.1% at 0.04. The widest setting abolishes secondary
+/// topics altogether, so this sits at the end that still detects them. It is fitted to the
+/// shape of one small corpus, not to measured accuracy, and should be revisited against a
+/// labelled gold set.
+pub const DEFAULT_MENTION_MARGIN: f32 = 0.01;
+
+/// Reviews taken as "the top of the pile" when measuring helpfulness bias. Steam's own
+/// default view shows a page of this order, which is what most people actually read.
+pub const DEFAULT_TOP_HELPFUL: usize = 50;
+
+/// Beyond this many near-tied categories, a review is treated as being about its best match
+/// alone rather than about everything it happens to sit near.
+const MAX_MENTIONS: usize = 4;
+
+#[derive(Debug, Clone)]
+pub struct ClassifyOptions {
+    pub out_dir: PathBuf,
+    pub mention_margin: f32,
+    pub top_helpful: usize,
+}
+
+impl Default for ClassifyOptions {
+    fn default() -> Self {
+        Self {
+            out_dir: PathBuf::from("data"),
+            mention_margin: DEFAULT_MENTION_MARGIN,
+            top_helpful: DEFAULT_TOP_HELPFUL,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ClassifyProgress {
+    pub classified: u64,
+    pub total: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CategoryStats {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// Reviews whose single main subject is this category. These sum to the review count.
+    pub primary_count: u64,
+    /// Reviews that say anything about this category. These sum to more than the review
+    /// count, because a review can mention several things.
+    pub mention_count: u64,
+    /// Mentions among the most-upvoted reviews only.
+    pub top_mention_count: u64,
+}
+
+impl CategoryStats {
+    /// Share of all reviews that mention this category. The headline figure.
+    #[must_use]
+    pub fn mention_rate(&self, reviews: u64) -> f64 {
+        ratio(self.mention_count, reviews)
+    }
+
+    /// Share of all reviews whose main subject is this category.
+    #[must_use]
+    pub fn primary_share(&self, reviews: u64) -> f64 {
+        ratio(self.primary_count, reviews)
+    }
+
+    /// Share of the most-upvoted reviews that mention this category.
+    #[must_use]
+    pub fn top_mention_rate(&self, top_n: u64) -> f64 {
+        ratio(self.top_mention_count, top_n)
+    }
+
+    /// How much reading only the top of the pile overstates this category.
+    ///
+    /// This is the project's whole thesis expressed as a number: above 1.0 means the
+    /// most-upvoted reviews talk about this more than players in general do.
+    #[must_use]
+    pub fn bias_factor(&self, reviews: u64, top_n: u64) -> Option<f64> {
+        let overall = self.mention_rate(reviews);
+        (overall > 0.0).then(|| self.top_mention_rate(top_n) / overall)
+    }
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "review counts are far below 2^53"
+)]
+fn ratio(part: u64, whole: u64) -> f64 {
+    if whole == 0 {
+        return 0.0;
+    }
+    part as f64 / whole as f64
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassifyReport {
+    pub app_id: u32,
+    pub reviews: u64,
+    pub unmatched: u64,
+    pub top_helpful: u64,
+    pub categories: Vec<CategoryStats>,
+    pub spine_version: &'static str,
+    pub model: &'static str,
+    pub elapsed: Duration,
+    pub path: PathBuf,
+}
+
+/// Assigns core-spine categories to every review in the most recent capture.
+///
+/// # Errors
+///
+/// Fails if the capture or its embeddings are missing, or if reading or writing fails.
+pub fn classify_corpus(
+    embedder: &mut Embedder,
+    app_id: u32,
+    options: &ClassifyOptions,
+    mut on_progress: impl FnMut(ClassifyProgress),
+) -> Result<ClassifyReport> {
+    let started = Instant::now();
+    let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
+    let vectors = load_embeddings(&snapshot.join("embeddings.parquet"))?;
+
+    let spine: Vec<String> = CORE_SPINE.iter().map(embedding_text).collect();
+    let anchors = embedder.embed(&spine)?;
+
+    let mut stats: Vec<CategoryStats> = CORE_SPINE
+        .iter()
+        .map(|c| CategoryStats {
+            id: c.id,
+            label: c.label,
+            primary_count: 0,
+            mention_count: 0,
+            top_mention_count: 0,
+        })
+        .collect();
+
+    let path = snapshot.join("classifications.parquet");
+    let schema = classification_schema();
+    let mut writer = ArrowWriter::try_new(
+        std::fs::File::create(&path)?,
+        Arc::clone(&schema),
+        Some(
+            WriterProperties::builder()
+                .set_compression(Compression::ZSTD(ZstdLevel::default()))
+                .build(),
+        ),
+    )?;
+
+    let mut ranked: Vec<(f64, u32)> = Vec::new();
+    let mut reviews = 0_u64;
+    let mut unmatched = 0_u64;
+    let mut pending = Batch::default();
+
+    for review in read_reviews(&snapshot)? {
+        let review = review?;
+        reviews += 1;
+        let Some(vector) = vectors.get(&review.text_hash) else {
+            unmatched += 1;
+            continue;
+        };
+        let sims: Vec<f32> = anchors.iter().map(|a| dot(a, vector)).collect();
+        let (primary, mentions) = assign(&sims, options.mention_margin);
+
+        stats[primary].primary_count += 1;
+        for (index, stat) in stats.iter_mut().enumerate() {
+            if mentions & (1 << index) != 0 {
+                stat.mention_count += 1;
+            }
+        }
+        ranked.push((review.helpfulness, mentions));
+        pending.push(app_id, &review, primary, sims[primary], mentions);
+
+        if pending.len() >= 8192 {
+            writer.write(&pending.take(&schema)?)?;
+            on_progress(ClassifyProgress {
+                classified: reviews,
+                total: reviews,
+            });
+        }
+    }
+    if pending.len() > 0 {
+        writer.write(&pending.take(&schema)?)?;
+    }
+    writer.close()?;
+
+    tally_top_of_the_pile(&mut ranked, options.top_helpful, &mut stats);
+
+    Ok(ClassifyReport {
+        app_id,
+        reviews,
+        unmatched,
+        top_helpful: u64::try_from(ranked.len().min(options.top_helpful)).unwrap_or(0),
+        categories: stats,
+        spine_version: CORE_SPINE_VERSION,
+        model: MODEL_ID,
+        elapsed: started.elapsed(),
+        path,
+    })
+}
+
+/// Counts mentions among the most-upvoted reviews, which is what a reader who skims the
+/// first page actually sees.
+fn tally_top_of_the_pile(
+    ranked: &mut [(f64, u32)],
+    top_helpful: usize,
+    stats: &mut [CategoryStats],
+) {
+    ranked.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+    for (_, mentions) in ranked.iter().take(top_helpful) {
+        for (index, stat) in stats.iter_mut().enumerate() {
+            if mentions & (1 << index) != 0 {
+                stat.top_mention_count += 1;
+            }
+        }
+    }
+}
+
+/// Picks the main category and any other the review genuinely also covers.
+///
+/// A category counts only if it scores within `margin` of the best match, so how many a
+/// review gets depends on how close its scores are rather than on how many categories exist.
+fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
+    let (primary, best) = sims
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.total_cmp(b.1))
+        .map_or((0, 0.0), |(index, score)| (index, *score));
+
+    let cutoff = best - margin;
+    // The primary category is always a mention: a review is about whatever it is most about.
+    let mut mentions = 1_u32 << primary;
+    for (index, sim) in sims.iter().enumerate() {
+        if *sim >= cutoff {
+            mentions |= 1 << index;
+        }
+    }
+
+    // A review that scores near-identically against many categories is not about all of
+    // them; it is about none of them clearly. Claiming every one would be inventing topics,
+    // so diffuse evidence falls back to the single best match.
+    if mentions.count_ones() as usize > MAX_MENTIONS {
+        return (primary, 1_u32 << primary);
+    }
+    (primary, mentions)
+}
+
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+struct ReviewRow {
+    recommendationid: String,
+    text_hash: String,
+    helpfulness: f64,
+}
+
+#[derive(Default)]
+struct Batch {
+    ids: Vec<String>,
+    appids: Vec<u32>,
+    primaries: Vec<&'static str>,
+    scores: Vec<f32>,
+    mentions: Vec<u32>,
+}
+
+impl Batch {
+    fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    fn push(&mut self, app_id: u32, review: &ReviewRow, primary: usize, score: f32, mentions: u32) {
+        self.ids.push(review.recommendationid.clone());
+        self.appids.push(app_id);
+        self.primaries.push(CORE_SPINE[primary].id);
+        self.scores.push(score);
+        self.mentions.push(mentions);
+    }
+
+    fn take(&mut self, schema: &Arc<Schema>) -> Result<RecordBatch> {
+        let mut ids = StringBuilder::new();
+        let mut appids = UInt32Builder::new();
+        let mut primaries = StringBuilder::new();
+        let mut scores = Float32Builder::new();
+        let mut mentions = ListBuilder::new(StringBuilder::new());
+        let mut spine = StringBuilder::new();
+
+        for index in 0..self.len() {
+            ids.append_value(&self.ids[index]);
+            appids.append_value(self.appids[index]);
+            primaries.append_value(self.primaries[index]);
+            scores.append_value(self.scores[index]);
+            for (bit, category) in CORE_SPINE.iter().enumerate() {
+                if self.mentions[index] & (1 << bit) != 0 {
+                    mentions.values().append_value(category.id);
+                }
+            }
+            mentions.append(true);
+            spine.append_value(CORE_SPINE_VERSION);
+        }
+        self.ids.clear();
+        self.appids.clear();
+        self.primaries.clear();
+        self.scores.clear();
+        self.mentions.clear();
+
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(ids.finish()),
+            Arc::new(appids.finish()),
+            Arc::new(primaries.finish()),
+            Arc::new(scores.finish()),
+            Arc::new(mentions.finish()),
+            Arc::new(spine.finish()),
+        ];
+        Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
+    }
+}
+
+fn classification_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("recommendationid", DataType::Utf8, false),
+        Field::new("appid", DataType::UInt32, false),
+        Field::new("primary_category", DataType::Utf8, false),
+        Field::new("primary_score", DataType::Float32, false),
+        Field::new(
+            "mentions",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+            false,
+        ),
+        Field::new("spine_version", DataType::Utf8, false),
+    ]))
+}
+
+fn load_embeddings(path: &Path) -> Result<HashMap<String, Vec<f32>>> {
+    use arrow::array::{FixedSizeListArray, Float32Array, StringArray};
+
+    let file = std::fs::File::open(path).map_err(|_| Error::NoEmbeddings {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(4096)
+        .build()?;
+
+    let mut out = HashMap::new();
+    for batch in reader {
+        let batch = batch?;
+        let hashes = column::<StringArray>(&batch, "text_sha256")?;
+        let vectors = column::<FixedSizeListArray>(&batch, "embedding")?;
+        for row in 0..batch.num_rows() {
+            let values = vectors.value(row);
+            let floats = values
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .ok_or(Error::MalformedPayload { field: "embedding" })?;
+            out.insert(hashes.value(row).to_owned(), floats.values().to_vec());
+        }
+    }
+    Ok(out)
+}
+
+fn column<'a, T: 'static>(batch: &'a RecordBatch, name: &'static str) -> Result<&'a T> {
+    batch
+        .column_by_name(name)
+        .and_then(|c| c.as_any().downcast_ref::<T>())
+        .ok_or(Error::MalformedPayload { field: name })
+}
+
+/// Streams reviews out of every shard of a snapshot.
+fn read_reviews(snapshot: &Path) -> Result<impl Iterator<Item = Result<ReviewRow>> + use<>> {
+    use arrow::array::{Float64Array, StringArray};
+
+    let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
+        .filter_map(std::result::Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("shard-") && n.ends_with(".parquet"))
+        })
+        .collect();
+    shards.sort();
+
+    let mut rows: Vec<Result<ReviewRow>> = Vec::new();
+    for shard in shards {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let ids = column::<StringArray>(&batch, "recommendationid")?;
+            let texts = column::<StringArray>(&batch, "review")?;
+            let helpful = column::<Float64Array>(&batch, "weighted_vote_score")?;
+            for row in 0..batch.num_rows() {
+                if texts.is_null(row) {
+                    continue;
+                }
+                rows.push(Ok(ReviewRow {
+                    recommendationid: ids.value(row).to_owned(),
+                    text_hash: crate::embed::sha256_hex(texts.value(row)),
+                    helpfulness: if helpful.is_null(row) {
+                        0.0
+                    } else {
+                        helpful.value(row)
+                    },
+                }));
+            }
+        }
+    }
+    Ok(rows.into_iter())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_review_about_one_thing_gets_one_category() {
+        let mut sims = vec![0.70; CORE_SPINE.len()];
+        sims[3] = 0.95;
+        let (primary, mentions) = assign(&sims, 0.02);
+        assert_eq!(primary, 3);
+        assert_eq!(mentions.count_ones(), 1, "a secondary topic was invented");
+    }
+
+    #[test]
+    fn a_review_covering_two_things_records_both() {
+        let mut sims = vec![0.70; CORE_SPINE.len()];
+        sims[2] = 0.95;
+        sims[7] = 0.94;
+        let (primary, mentions) = assign(&sims, 0.02);
+        assert_eq!(primary, 2);
+        assert!(mentions & (1 << 7) != 0, "secondary topic was dropped");
+        assert_eq!(mentions.count_ones(), 2);
+    }
+
+    #[test]
+    fn a_near_miss_outside_the_margin_is_not_promoted() {
+        let mut sims = vec![0.70; CORE_SPINE.len()];
+        sims[2] = 0.95;
+        sims[7] = 0.92;
+        let (_, mentions) = assign(&sims, 0.02);
+        assert_eq!(mentions.count_ones(), 1);
+    }
+
+    #[test]
+    fn diffuse_evidence_falls_back_to_the_single_best_match() {
+        // Equally similar to everything means clearly about nothing, so claiming all
+        // sixteen categories would be inventing topics rather than detecting them.
+        let sims = vec![0.80; CORE_SPINE.len()];
+        let (_, mentions) = assign(&sims, 0.02);
+        assert_eq!(mentions.count_ones(), 1);
+    }
+
+    #[test]
+    fn bias_factor_expresses_how_much_the_top_of_the_pile_overstates() {
+        let stat = CategoryStats {
+            id: "bugs",
+            label: "Bugs and crashes",
+            primary_count: 100,
+            mention_count: 247,
+            top_mention_count: 32,
+        };
+        // 64% of the top 50 against 24.7% of all thousand: the README's own example.
+        assert!((stat.mention_rate(1000) - 0.247).abs() < 1e-9);
+        assert!((stat.top_mention_rate(50) - 0.64).abs() < 1e-9);
+        let factor = stat.bias_factor(1000, 50).unwrap();
+        assert!((factor - 2.591).abs() < 1e-3, "factor was {factor}");
+    }
+
+    #[test]
+    fn bias_factor_is_unknown_rather_than_infinite_when_nothing_mentions_it() {
+        let stat = CategoryStats {
+            id: "audio",
+            label: "Audio and music",
+            primary_count: 0,
+            mention_count: 0,
+            top_mention_count: 0,
+        };
+        assert_eq!(stat.bias_factor(1000, 50), None);
+    }
+
+    #[test]
+    fn primary_shares_are_exhaustive_while_mention_rates_need_not_be() {
+        // Two categories, every review assigned exactly one primary, some mentioning both.
+        let stats = [
+            CategoryStats {
+                id: "a",
+                label: "A",
+                primary_count: 60,
+                mention_count: 80,
+                top_mention_count: 0,
+            },
+            CategoryStats {
+                id: "b",
+                label: "B",
+                primary_count: 40,
+                mention_count: 55,
+                top_mention_count: 0,
+            },
+        ];
+        let primary: f64 = stats.iter().map(|s| s.primary_share(100)).sum();
+        let mentions: f64 = stats.iter().map(|s| s.mention_rate(100)).sum();
+        assert!((primary - 1.0).abs() < 1e-9, "primary shares must sum to 1");
+        assert!(mentions > 1.0, "mention rates are expected to exceed 1");
+    }
+}

@@ -6,7 +6,8 @@ use std::{
 
 use anyhow::Result;
 use census_core::{
-    CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET, SteamClient, crawl,
+    ClassifyOptions, CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET,
+    SteamClient, crawl,
 };
 use clap::{Parser, Subcommand};
 
@@ -66,6 +67,24 @@ enum Command {
         #[arg(long)]
         model_dir: Option<PathBuf>,
     },
+
+    /// Sort embedded reviews into the core-spine categories and report what players say.
+    Classify {
+        /// Steam app ID whose most recent capture should be classified.
+        app_id: u32,
+        /// Directory holding the capture and its embeddings.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// How close to the best match a category must score to count as mentioned.
+        #[arg(long, default_value_t = census_core::classify::DEFAULT_MENTION_MARGIN)]
+        mention_margin: f32,
+        /// How many of the most-upvoted reviews count as "the top of the pile".
+        #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
+        top_helpful: usize,
+        /// Where to cache the model. Defaults to the platform cache directory.
+        #[arg(long)]
+        model_dir: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -95,7 +114,86 @@ async fn main() -> Result<()> {
             batch_size,
             model_dir,
         } => run_embed(app_id, &out, batch_size, model_dir).await,
+        Command::Classify {
+            app_id,
+            out,
+            mention_margin,
+            top_helpful,
+            model_dir,
+        } => {
+            let options = ClassifyOptions {
+                out_dir: out,
+                mention_margin,
+                top_helpful,
+            };
+            run_classify(app_id, &options, model_dir).await
+        }
     }
+}
+
+async fn run_classify(
+    app_id: u32,
+    options: &ClassifyOptions,
+    model_dir: Option<PathBuf>,
+) -> Result<()> {
+    let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
+    census_core::model::ensure(&cache, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(&cache)?;
+
+    eprintln!("classifying app {app_id} on {}", embedder.device());
+    let report = census_core::classify_corpus(&mut embedder, app_id, options, |_| {})?;
+    print_classification(&report);
+    Ok(())
+}
+
+fn print_classification(report: &census_core::ClassifyReport) {
+    println!("app {}", report.app_id);
+    println!("  reviews      {}", thousands(report.reviews));
+    if report.unmatched > 0 {
+        println!(
+            "  unmatched    {} (no embedding; re-run `census embed`)",
+            thousands(report.unmatched)
+        );
+    }
+    println!("  taxonomy     {}", report.spine_version);
+    println!("  model        {}", report.model);
+    println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
+    println!("  assignments  {}", report.path.display());
+
+    let mut categories = report.categories.clone();
+    categories.sort_by(|a, b| {
+        b.mention_rate(report.reviews)
+            .total_cmp(&a.mention_rate(report.reviews))
+    });
+
+    println!(
+        "\n{:<26} {:>9} {:>9} {:>9} {:>7}",
+        "category", "mention%", "primary%", "top50%", "bias"
+    );
+    println!("{}", "-".repeat(64));
+    for stat in &categories {
+        let bias = stat
+            .bias_factor(report.reviews, report.top_helpful)
+            .map_or_else(|| "    -".to_owned(), |b| format!("{b:.2}x"));
+        println!(
+            "{:<26} {:>8.1}% {:>8.1}% {:>8.1}% {:>7}",
+            stat.label,
+            stat.mention_rate(report.reviews) * 100.0,
+            stat.primary_share(report.reviews) * 100.0,
+            stat.top_mention_rate(report.top_helpful) * 100.0,
+            bias
+        );
+    }
+    println!(
+        "\nmention% counts every review that says anything about a category, so it sums to \
+         more than 100%.\nprimary% counts each review once and sums to 100%.\nbias is how \
+         much the {} most-upvoted reviews overstate a category.",
+        report.top_helpful
+    );
+    println!(
+        "\nAccuracy of these assignments is UNMEASURED. No gold set exists yet, so treat \
+         every figure above as provisional."
+    );
 }
 
 async fn run_embed(
