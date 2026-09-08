@@ -5,6 +5,8 @@
 pub mod api;
 pub mod capture;
 pub mod crawl;
+pub mod embed;
+pub mod model;
 pub mod query;
 pub mod shard;
 pub mod state;
@@ -12,6 +14,8 @@ pub mod state;
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
 pub use capture::CaptureWriter;
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
+pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
+pub use model::{EMBEDDING_DIM, MODEL_ID};
 pub use query::{ReviewQuery, SortOrder};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
 pub use state::CrawlState;
@@ -37,6 +41,27 @@ pub enum Error {
     /// would claim coverage the corpus does not have.
     #[error("a shard task failed: {detail}")]
     ShardPanicked { detail: String },
+
+    /// A model file that does not match its pinned hash would change every number the tool
+    /// reports without anything appearing to go wrong, so it is refused rather than used.
+    #[error("model file {file} failed verification: expected {expected}, got {actual}")]
+    ModelChecksum {
+        file: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error("no capture found at {path}; run `census crawl` first")]
+    NoCapture { path: std::path::PathBuf },
+
+    #[error("tokenizer error: {0}")]
+    Tokenizer(String),
+
+    #[error(transparent)]
+    Ort(#[from] ort::Error),
+
+    #[error(transparent)]
+    Shape(#[from] ndarray::ShapeError),
 
     #[error(transparent)]
     Parquet(#[from] parquet::errors::ParquetError),
