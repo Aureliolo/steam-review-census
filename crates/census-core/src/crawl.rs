@@ -75,6 +75,9 @@ pub struct Progress {
 #[derive(Debug, Clone)]
 pub struct CrawlReport {
     pub app_id: u32,
+    /// The store's name for the app, where the store would give one. Empty otherwise, and
+    /// every caller falls back to the id rather than treating it as a failure.
+    pub name: String,
     pub shards: usize,
     pub pages: u32,
     pub unique: u64,
@@ -191,6 +194,7 @@ pub async fn crawl(
 
     let report = CrawlReport {
         app_id,
+        name: client.name(app_id).await.unwrap_or_default(),
         shards: shards_total,
         pages,
         unique,
@@ -474,6 +478,7 @@ async fn walk_shard(
 fn write_sidecar(report: &CrawlReport, snapshot: i64) -> Result<()> {
     let meta = json!({
         "app_id": report.app_id,
+        "name": report.name,
         "snapshot_unix": snapshot,
         "tool_version": env!("CARGO_PKG_VERSION"),
         "request_url_template": ReviewQuery::new(report.app_id).to_url(),
@@ -528,6 +533,7 @@ mod tests {
             valve_total: total,
             valve_positive: 0,
             valve_negative: 0,
+            name: String::new(),
             review_score_desc: String::new(),
             elapsed: Duration::from_secs(1),
             dir: PathBuf::new(),

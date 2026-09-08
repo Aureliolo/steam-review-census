@@ -562,6 +562,53 @@ pub fn for_each_prediction(path: &Path, mut visit: impl FnMut(&str, &str)) -> Re
     Ok(())
 }
 
+/// Streams every stored assignment, main subject and everything else it mentions.
+///
+/// Separate from [`for_each_prediction`] because reading the mention list costs an array
+/// downcast and a slice per row, which a caller that only wants the main subject should not
+/// pay for on a million reviews.
+///
+/// # Errors
+///
+/// Fails if the file is missing or was written by an older build.
+pub fn for_each_assignment(
+    path: &Path,
+    mut visit: impl FnMut(&str, &str, &[String]),
+) -> Result<()> {
+    let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(8192)
+        .build()?;
+
+    // The mention list is a slice inside a batch-owned array, so the names are copied out
+    // rather than borrowed: the array is dropped between rows and a borrow would not outlive
+    // the visit it was gathered for.
+    let mut named: Vec<String> = Vec::new();
+    for batch in reader {
+        let batch = batch?;
+        let ids = downcast::<StringArray>(&batch, "recommendationid")?;
+        let primaries = downcast::<StringArray>(&batch, "primary_category")?;
+        let mentions = downcast::<ListArray>(&batch, "mentions")?;
+        for row in 0..batch.num_rows() {
+            let listed = mentions.value(row);
+            let listed = listed
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or(Error::MalformedPayload { field: "mentions" })?;
+            named.clear();
+            for slot in 0..listed.len() {
+                if !listed.is_null(slot) {
+                    named.push(listed.value(slot).to_owned());
+                }
+            }
+            visit(ids.value(row), primaries.value(row), &named);
+        }
+    }
+    Ok(())
+}
+
 /// Where a reference set for an app is expected to live.
 #[must_use]
 pub fn default_reference_dir(app_id: u32) -> PathBuf {

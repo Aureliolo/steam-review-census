@@ -4,13 +4,16 @@
 
 pub mod anchors;
 pub mod api;
+mod bounded;
 pub mod capture;
 pub mod classify;
 pub mod crawl;
 pub mod embed;
 pub mod evaluate;
+pub mod html;
 pub mod model;
 pub mod query;
+pub mod report;
 pub mod sample;
 pub mod shard;
 pub mod state;
@@ -66,6 +69,9 @@ pub enum Error {
 
     #[error("no embeddings found at {path}; run `census embed` first")]
     NoEmbeddings { path: std::path::PathBuf },
+
+    #[error("no classifications found at {path}; run `census classify` first")]
+    NoClassifications { path: std::path::PathBuf },
 
     #[error("no reference set at {path}")]
     NoReferenceSet { path: std::path::PathBuf },

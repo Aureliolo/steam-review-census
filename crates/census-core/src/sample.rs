@@ -79,7 +79,8 @@ pub struct SampleReport {
 ///
 /// Hashing rather than shuffling means the choice depends only on the review, so a corpus
 /// that gains reviews does not renumber the ones already labelled.
-fn rank(seed: u64, purpose: &str, id: &str) -> [u8; 32] {
+#[must_use]
+pub fn rank(seed: u64, purpose: &str, id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(seed.to_le_bytes());
     hasher.update(purpose.as_bytes());
@@ -91,48 +92,11 @@ struct Candidate {
     id: String,
     app_id: u32,
     predicted: String,
-    key: [u8; 32],
 }
 
-/// Keeps the best-ranked candidates seen so far and forgets the rest.
-///
 /// Selection wants the few hundred reviews with the lowest hashes out of a corpus of
-/// millions, which is a bounded problem answered with a bounded amount of memory. Pruning on
-/// a doubling threshold costs an occasional sort of twice the limit rather than one sort of
-/// everything.
-struct BestByKey {
-    limit: usize,
-    kept: Vec<Candidate>,
-}
-
-impl BestByKey {
-    fn new(limit: usize) -> Self {
-        Self {
-            limit,
-            kept: Vec::new(),
-        }
-    }
-
-    fn offer(&mut self, candidate: Candidate) {
-        if self.limit == 0 {
-            return;
-        }
-        self.kept.push(candidate);
-        if self.kept.len() >= self.limit.saturating_mul(2) {
-            self.prune();
-        }
-    }
-
-    fn prune(&mut self) {
-        self.kept.sort_unstable_by_key(|candidate| candidate.key);
-        self.kept.truncate(self.limit);
-    }
-
-    fn take(mut self) -> Vec<Candidate> {
-        self.prune();
-        self.kept
-    }
-}
+/// millions, which [`crate::bounded::Smallest`] answers without holding the corpus.
+type BestByKey = crate::bounded::Smallest<[u8; 32], Candidate>;
 
 impl Candidate {
     fn into(self, subset: &str) -> SampledReview {
@@ -142,16 +106,6 @@ impl Candidate {
             subset: subset.to_owned(),
             predicted: self.predicted,
             review: String::new(),
-        }
-    }
-
-    #[cfg(test)]
-    fn clone_into_candidate(&self) -> Self {
-        Self {
-            id: self.id.clone(),
-            app_id: self.app_id,
-            predicted: self.predicted.clone(),
-            key: self.key,
         }
     }
 
@@ -177,7 +131,7 @@ pub fn draw(
     options: &SampleOptions,
 ) -> Result<(Vec<SampledReview>, Vec<SampleReport>)> {
     let mut chosen: Vec<SampledReview> = Vec::new();
-    let mut leftovers: Vec<Candidate> = Vec::new();
+    let mut leftovers: Vec<([u8; 32], Candidate)> = Vec::new();
     let mut reports: Vec<SampleReport> = Vec::new();
 
     // A category can hold at most this many candidates from one app before the worst of them
@@ -204,21 +158,25 @@ pub fn draw(
             let Some(category) = CORE_SPINE.iter().find(|c| c.id == predicted) else {
                 return;
             };
-            random.offer(Candidate {
-                key: rank(options.seed, "random", id),
-                id: id.to_owned(),
-                app_id,
-                predicted: category.id.to_owned(),
-            });
-            by_category
-                .entry(category.id)
-                .or_insert_with(|| BestByKey::new(per_app_slack))
-                .offer(Candidate {
-                    key: rank(options.seed, "stratified", id),
+            random.offer(
+                rank(options.seed, "random", id),
+                Candidate {
                     id: id.to_owned(),
                     app_id,
                     predicted: category.id.to_owned(),
-                });
+                },
+            );
+            by_category
+                .entry(category.id)
+                .or_insert_with(|| BestByKey::new(per_app_slack))
+                .offer(
+                    rank(options.seed, "stratified", id),
+                    Candidate {
+                        id: id.to_owned(),
+                        app_id,
+                        predicted: category.id.to_owned(),
+                    },
+                );
         })?;
 
         let drawn = random.take();
@@ -226,7 +184,11 @@ pub fn draw(
         let count = drawn.len();
         chosen.extend(drawn.into_iter().map(|candidate| candidate.into("random")));
         for keep in by_category.into_values() {
-            leftovers.extend(keep.take().into_iter().filter(|c| !taken.contains(&c.id)));
+            leftovers.extend(
+                keep.take_with_keys()
+                    .into_iter()
+                    .filter(|(_, c)| !taken.contains(&c.id)),
+            );
         }
 
         reports.push(SampleReport {
@@ -457,7 +419,7 @@ pub fn write_for_app(dir: &Path, app_id: u32, drawn: &[SampledReview]) -> Result
 /// candidate for a category, and a category anchored on a single game learns that game's
 /// vocabulary for it and nothing more general.
 fn stratify<'a>(
-    leftovers: &'a [Candidate],
+    leftovers: &'a [([u8; 32], Candidate)],
     target: usize,
     chosen: &mut Vec<SampledReview>,
 ) -> HashMap<(u32, &'a str), usize> {
@@ -465,12 +427,12 @@ fn stratify<'a>(
 
     for category in CORE_SPINE {
         let mut by_app: HashMap<u32, Vec<&Candidate>> = HashMap::new();
-        let mut candidates: Vec<&Candidate> = leftovers
+        let mut candidates: Vec<&([u8; 32], Candidate)> = leftovers
             .iter()
-            .filter(|c| c.predicted == category.id)
+            .filter(|(_, c)| c.predicted == category.id)
             .collect();
-        candidates.sort_unstable_by_key(|candidate| candidate.key);
-        for candidate in candidates {
+        candidates.sort_unstable_by_key(|(key, _)| *key);
+        for (_, candidate) in candidates {
             by_app.entry(candidate.app_id).or_default().push(candidate);
         }
         let mut apps: Vec<u32> = by_app.keys().copied().collect();
@@ -544,41 +506,6 @@ mod tests {
         let mut by_stratified: Vec<&String> = ids.iter().collect();
         by_stratified.sort_by_key(|id| rank(7, "stratified", id));
         assert_ne!(by_random, by_stratified);
-    }
-
-    #[test]
-    fn keeping_the_best_as_it_goes_picks_what_sorting_everything_would_have_picked() {
-        // The bounded form exists so a million-review corpus never becomes a million-element
-        // sort. It is only worth having if it chooses the same reviews, which is what a
-        // reader of a reference set is entitled to assume.
-        let all: Vec<Candidate> = (0..5_000)
-            .map(|index| {
-                let id = format!("review-{index}");
-                Candidate {
-                    key: rank(3, "stratified", &id),
-                    id,
-                    app_id: 1,
-                    predicted: "bugs".to_owned(),
-                }
-            })
-            .collect();
-
-        for limit in [1_usize, 7, 40, 100] {
-            let mut sorted: Vec<&Candidate> = all.iter().collect();
-            sorted.sort_unstable_by_key(|candidate| candidate.key);
-            let expected: Vec<&str> = sorted
-                .iter()
-                .take(limit)
-                .map(|candidate| candidate.id.as_str())
-                .collect();
-
-            let mut bounded = BestByKey::new(limit);
-            for candidate in &all {
-                bounded.offer(candidate.clone_into_candidate());
-            }
-            let got: Vec<String> = bounded.take().into_iter().map(|c| c.id).collect();
-            assert_eq!(got, expected, "limit {limit} disagreed with a full sort");
-        }
     }
 
     #[test]

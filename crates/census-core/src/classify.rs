@@ -155,8 +155,80 @@ pub struct ClassifyReport {
     pub model: String,
     /// Apps whose labels fitted the anchors. Empty when the written descriptions were used.
     pub anchors_fitted_from: Vec<u32>,
+    /// How close to the best match a category had to score to count as mentioned.
+    pub mention_margin: f32,
+    /// The most-upvoted reviews and what they were about, so a reader can be shown the top
+    /// of the pile rather than only told how far it differs from everyone else.
+    pub top_reviews: Vec<TopReview>,
     pub elapsed: Duration,
     pub path: PathBuf,
+}
+
+impl ClassifyReport {
+    /// Writes the counts beside the assignments they were computed from.
+    ///
+    /// These numbers are the point of the tool and used to exist only in whatever terminal
+    /// happened to be open. Storing them makes a run inspectable afterwards, lets `census
+    /// report` render without redoing the pass, and records which anchors and which encoder
+    /// produced them next to the counts rather than in a shell history.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file cannot be written.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let categories: Vec<serde_json::Value> = self
+            .categories
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "id": c.id,
+                    "label": c.label,
+                    "primary_count": c.primary_count,
+                    "mention_count": c.mention_count,
+                    "top_mention_count": c.top_mention_count,
+                })
+            })
+            .collect();
+        let top: Vec<serde_json::Value> = self
+            .top_reviews
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.id,
+                    "helpfulness": r.helpfulness,
+                    "votes_up": r.votes_up,
+                    "primary": CORE_SPINE[r.primary].id,
+                    "mentions": category_ids(r.mentions),
+                })
+            })
+            .collect();
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "app_id": self.app_id,
+                "reviews": self.reviews,
+                "unmatched": self.unmatched,
+                "top_helpful": self.top_helpful,
+                "mention_margin": self.mention_margin,
+                "spine_version": self.spine_version,
+                "model": self.model,
+                "anchors_fitted_from": self.anchors_fitted_from,
+                "categories": categories,
+                "top_reviews": top,
+            }))?,
+        )?;
+        Ok(())
+    }
+}
+
+/// The categories a mention bitmask names, in taxonomy order.
+fn category_ids(mentions: u32) -> Vec<&'static str> {
+    CORE_SPINE
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| mentions & (1 << index) != 0)
+        .map(|(_, category)| category.id)
+        .collect()
 }
 
 /// Assigns core-spine categories to every review in the most recent capture.
@@ -172,29 +244,8 @@ pub fn classify_corpus(
 ) -> Result<ClassifyReport> {
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
-
-    // Two encoders put the same review in different places, and nothing about a cosine
-    // between vectors from different spaces looks wrong. It would simply be meaningless.
-    let corpus_encoder = crate::embed::corpus_encoder(&options.out_dir, app_id)?;
-    if corpus_encoder != anchors.model {
-        return Err(Error::StaleAnchors {
-            field: "embedding model",
-            expected: corpus_encoder,
-            actual: anchors.model.clone(),
-        });
-    }
-
-    // The join runs review-side-in-memory, vector-side-streamed. A vector is a couple of
-    // kilobytes and a review a few dozen bytes, so holding the reviews costs a fraction of
-    // what holding the vectors would on a million-review corpus. Grouping by text also means each distinct
-    // review is compared against the anchors once however many people posted it.
-    let mut by_hash: HashMap<String, Vec<ReviewRow>> = HashMap::new();
-    let mut reviews = 0_u64;
-    for_each_review(&snapshot, |row| {
-        reviews += 1;
-        by_hash.entry(row.text_hash.clone()).or_default().push(row);
-        Ok(())
-    })?;
+    refuse_a_foreign_encoder(anchors, &options.out_dir, app_id)?;
+    let (by_hash, reviews) = group_reviews_by_text(&snapshot)?;
 
     let mut stats: Vec<CategoryStats> = CORE_SPINE
         .iter()
@@ -240,7 +291,13 @@ pub fn classify_corpus(
                     stat.mention_count += 1;
                 }
             }
-            top.offer(review.helpfulness, mentions);
+            top.offer(TopReview {
+                id: review.recommendationid.clone(),
+                helpfulness: review.helpfulness,
+                votes_up: review.votes_up,
+                primary,
+                mentions,
+            });
             pending.push(app_id, review, primary, sims[primary], mentions);
         }
 
@@ -258,26 +315,64 @@ pub fn classify_corpus(
     }
     writer.close()?;
 
-    for mentions in top.take() {
+    let top_reviews = top.take();
+    for review in &top_reviews {
         for (index, stat) in stats.iter_mut().enumerate() {
-            if mentions & (1 << index) != 0 {
+            if review.mentions & (1 << index) != 0 {
                 stat.top_mention_count += 1;
             }
         }
     }
 
-    Ok(ClassifyReport {
+    let report = ClassifyReport {
         app_id,
         reviews,
         unmatched: reviews.saturating_sub(classified),
         top_helpful: classified.min(u64::try_from(options.top_helpful).unwrap_or(u64::MAX)),
+        mention_margin: options.mention_margin,
         categories: stats,
+        top_reviews,
         spine_version: CORE_SPINE_VERSION,
         model: anchors.model.clone(),
         anchors_fitted_from: anchors.fitted_from.clone(),
         elapsed: started.elapsed(),
         path,
+    };
+    report.save(&snapshot.join("classification.json"))?;
+    Ok(report)
+}
+
+/// Refuses anchors built by an encoder other than the one behind the corpus.
+///
+/// Two encoders put the same review in different places, and nothing about a cosine between
+/// vectors from different spaces looks wrong. It would simply be meaningless.
+fn refuse_a_foreign_encoder(anchors: &Anchors, out_dir: &Path, app_id: u32) -> Result<()> {
+    let corpus_encoder = crate::embed::corpus_encoder(out_dir, app_id)?;
+    if corpus_encoder == anchors.model {
+        return Ok(());
+    }
+    Err(Error::StaleAnchors {
+        field: "embedding model",
+        expected: corpus_encoder,
+        actual: anchors.model.clone(),
     })
+}
+
+/// Reads the capture into memory, grouped by the hash of the review text.
+///
+/// The join runs review-side-in-memory and vector-side-streamed. A vector is a couple of
+/// kilobytes and a review a few dozen bytes, so holding the reviews costs a fraction of what
+/// holding the vectors would on a million-review corpus. Grouping by text also means each
+/// distinct review is compared against the anchors once however many people posted it.
+fn group_reviews_by_text(snapshot: &Path) -> Result<(HashMap<String, Vec<ReviewRow>>, u64)> {
+    let mut by_hash: HashMap<String, Vec<ReviewRow>> = HashMap::new();
+    let mut reviews = 0_u64;
+    for_each_review(snapshot, |row| {
+        reviews += 1;
+        by_hash.entry(row.text_hash.clone()).or_default().push(row);
+        Ok(())
+    })?;
+    Ok((by_hash, reviews))
 }
 
 /// Keeps the most-upvoted reviews seen so far, and no more than that.
@@ -288,7 +383,21 @@ pub fn classify_corpus(
 /// costs an occasional sort of a hundred items instead of one sort of the corpus.
 struct TopOfThePile {
     limit: usize,
-    kept: Vec<(f64, u32)>,
+    kept: Vec<TopReview>,
+}
+
+/// One of the most-upvoted reviews, kept so a reader can be shown what the top of the pile
+/// actually says rather than only how far it differs from the corpus.
+#[derive(Debug, Clone)]
+pub struct TopReview {
+    pub id: String,
+    /// Steam's own helpfulness score, which is what orders the page people read.
+    pub helpfulness: f64,
+    pub votes_up: u32,
+    /// Index into [`CORE_SPINE`].
+    pub primary: usize,
+    /// One bit per category, primary included.
+    pub mentions: u32,
 }
 
 impl TopOfThePile {
@@ -299,27 +408,25 @@ impl TopOfThePile {
         }
     }
 
-    fn offer(&mut self, helpfulness: f64, mentions: u32) {
+    fn offer(&mut self, review: TopReview) {
         if self.limit == 0 {
             return;
         }
-        self.kept.push((helpfulness, mentions));
+        self.kept.push(review);
         if self.kept.len() >= self.limit.saturating_mul(2) {
             self.prune();
         }
     }
 
     fn prune(&mut self) {
-        self.kept.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        self.kept
+            .sort_unstable_by(|a, b| b.helpfulness.total_cmp(&a.helpfulness));
         self.kept.truncate(self.limit);
     }
 
-    fn take(mut self) -> Vec<u32> {
+    fn take(mut self) -> Vec<TopReview> {
         self.prune();
         self.kept
-            .into_iter()
-            .map(|(_, mentions)| mentions)
-            .collect()
     }
 }
 
@@ -356,6 +463,7 @@ pub(crate) struct ReviewRow {
     pub(crate) recommendationid: String,
     pub(crate) text_hash: String,
     pub(crate) helpfulness: f64,
+    pub(crate) votes_up: u32,
 }
 
 #[derive(Default)]
@@ -467,7 +575,7 @@ pub(crate) fn for_each_review(
     snapshot: &Path,
     mut visit: impl FnMut(ReviewRow) -> Result<()>,
 ) -> Result<()> {
-    use arrow::array::{Float64Array, StringArray};
+    use arrow::array::{Float64Array, StringArray, UInt32Array};
 
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
         .filter_map(std::result::Result::ok)
@@ -489,6 +597,7 @@ pub(crate) fn for_each_review(
             let ids = column::<StringArray>(&batch, "recommendationid")?;
             let texts = column::<StringArray>(&batch, "review")?;
             let helpful = column::<Float64Array>(&batch, "weighted_vote_score")?;
+            let votes = column::<UInt32Array>(&batch, "votes_up")?;
             for row in 0..batch.num_rows() {
                 if texts.is_null(row) || texts.value(row).trim().is_empty() {
                     continue;
@@ -500,6 +609,11 @@ pub(crate) fn for_each_review(
                         0.0
                     } else {
                         helpful.value(row)
+                    },
+                    votes_up: if votes.is_null(row) {
+                        0
+                    } else {
+                        votes.value(row)
                     },
                 })?;
             }

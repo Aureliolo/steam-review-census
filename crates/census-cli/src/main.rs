@@ -186,6 +186,25 @@ enum Command {
         allow_incomplete: bool,
     },
 
+    /// Render a self-contained page from what a classification found.
+    Report {
+        /// Steam app IDs to report on. Several become one page, a section each.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their classifications.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Where to write the page.
+        #[arg(long, default_value = "census-report.html")]
+        to: PathBuf,
+        /// Reviews quoted per category, as the evidence behind its rate.
+        #[arg(long, default_value_t = census_core::report::DEFAULT_EXAMPLES)]
+        examples: usize,
+        /// Changing this quotes different reviews. The same seed always quotes the same ones.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+
     /// Compare stored classifications against a reference set.
     Evaluate {
         /// Steam app IDs to evaluate. Several are reported one by one and then pooled,
@@ -348,12 +367,53 @@ async fn main() -> Result<()> {
             brief,
             batch_size,
         ),
+        Command::Report {
+            app_ids,
+            out,
+            to,
+            examples,
+            seed,
+        } => run_report(&app_ids, &out, &to, examples, seed),
         Command::Evaluate {
             app_ids,
             out,
             reference,
         } => run_evaluate(&app_ids, &out, reference.as_ref()),
     }
+}
+
+fn run_report(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    to: &std::path::Path,
+    examples: usize,
+    seed: u64,
+) -> Result<()> {
+    let options = census_core::report::ReportOptions {
+        out_dir: out.to_path_buf(),
+        examples,
+        seed,
+    };
+    let report = census_core::report::build(app_ids, &options)?;
+    let page = census_core::html::render(&report);
+    std::fs::write(to, page.as_bytes())?;
+
+    println!("report      {}", to.display());
+    println!("  games      {}", report.apps.len());
+    println!("  size       {} KB", page.len() / 1024);
+    for app in &report.apps {
+        let quoted: usize = app.examples.iter().map(|(_, e)| e.len()).sum();
+        println!(
+            "  {:<10} {} reviews, {quoted} quoted",
+            app.app_id(),
+            thousands(app.classification.reviews)
+        );
+    }
+    println!(
+        "\nSelf-contained: open it from disk, send it as one file, print it. Nothing in it is\n\
+         fetched from anywhere, and no review left this machine to produce it."
+    );
+    Ok(())
 }
 
 fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathBuf>) -> Result<()> {

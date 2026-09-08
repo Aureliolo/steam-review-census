@@ -94,6 +94,25 @@ impl SteamClient {
         Ok(page.query_summary.map_or(0, |s| s.total_reviews))
     }
 
+    /// The store's name for an app, so a report can say "Helldivers 2" rather than 553850.
+    ///
+    /// Best effort by design: a delisted or region-locked app answers with no name, and a
+    /// missing name is not a reason to refuse a crawl of reviews that are being served
+    /// perfectly well. The caller falls back to the id.
+    pub async fn name(&self, app_id: u32) -> Option<String> {
+        self.wait_turn().await;
+        let url =
+            format!("https://store.steampowered.com/api/appdetails?appids={app_id}&filters=basic");
+        let body: serde_json::Value = self.http.get(&url).send().await.ok()?.json().await.ok()?;
+        let name = body
+            .get(app_id.to_string())?
+            .get("data")?
+            .get("name")?
+            .as_str()?
+            .trim();
+        (!name.is_empty()).then(|| name.to_owned())
+    }
+
     /// Fetches one page, retrying on throttling and transient server errors.
     ///
     /// # Errors
