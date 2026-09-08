@@ -2,6 +2,7 @@
 //!
 //! Nothing here is stable yet. See the repository README for what is being built.
 
+pub mod anchors;
 pub mod api;
 pub mod capture;
 pub mod classify;
@@ -14,12 +15,13 @@ pub mod shard;
 pub mod state;
 pub mod taxonomy;
 
+pub use anchors::{Anchors, FitOutcome, FitParams};
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
 pub use capture::CaptureWriter;
 pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corpus};
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
-pub use evaluate::{AgreementReport, ReferenceSet, compare};
+pub use evaluate::{AgreementReport, ReferenceSet, Slice, compare};
 pub use model::{EMBEDDING_DIM, MODEL_ID};
 pub use query::{ReviewQuery, SortOrder};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
@@ -65,6 +67,33 @@ pub enum Error {
 
     #[error("no reference set at {path}")]
     NoReferenceSet { path: std::path::PathBuf },
+
+    #[error("no fitted anchors at {path}; run `census fit` first")]
+    NoAnchors { path: std::path::PathBuf },
+
+    /// Written by a build that recorded less about a run than this one reads back. The
+    /// assignments inside predate whatever is missing, so they are refused rather than
+    /// partially interpreted.
+    #[error(
+        "{path} was written by an older build and is missing {field}; re-run `census classify`"
+    )]
+    StaleClassifications {
+        path: std::path::PathBuf,
+        field: &'static str,
+    },
+
+    /// Anchors fitted against a different taxonomy or embedding model would shift every
+    /// category boundary without anything appearing to go wrong, so they are refused.
+    #[error("anchors were fitted for a different {field}: expected {expected}, got {actual}")]
+    StaleAnchors {
+        field: &'static str,
+        expected: String,
+        actual: String,
+    },
+
+    /// Fitting needs the labelled reviews to be present in the corpus that was embedded.
+    #[error("no reference label matched the embedded corpus; re-crawl app {app_id} first")]
+    NoTrainingExamples { app_id: u32 },
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),

@@ -1,14 +1,15 @@
 # Steam Review Census
 
-> ## ⚠️ IN DEVELOPMENT — DO NOT TRUST THE NUMBERS YET
+> ## ⚠️ IN DEVELOPMENT: DO NOT TRUST THE NUMBERS YET
 >
 > There is a working command-line tool. There is no release, no installer and no interface.
 >
 > The pipeline runs end to end: it downloads every review Valve will serve, embeds them
-> locally, sorts them into categories and reports what it found. **What it does not yet have
-> is any measure of how often it is right.** No labelled reference set exists, so no figure
-> it produces carries an error bar, and the categories are assigned by comparing text
-> similarity rather than by reading.
+> locally, sorts them into categories and reports what it found. How often the sorting is
+> right is now measured, on **one game**, against labels **written by a language model
+> rather than a person**: it agrees with those labels on 72% of held-out reviews the
+> labeller called clear-cut, and on 31% of the ones it called contested. That is a real
+> number with a real error bar, and it is not accuracy.
 >
 > Everything is subject to change, including the whole approach. Do not depend on this, and
 > do not quote its output as fact.
@@ -125,6 +126,19 @@ silently miscounted.
   deleted after the fact, and vote counts drift, so a top-up is periodically followed by a
   full re-crawl.
 
+- **A category has to be described to a machine before it can be counted, and describing it
+  is not enough.** Comparing each review against a written description of a category is the
+  version that needs no setup, and on the one game measured it agreed with the reference
+  labels on 51% of the clear-cut reviews. Descriptions are prose about a topic; reviews
+  about that topic are not. Rebuilding each category out of reviews people actually wrote
+  took the same measurement to 72%. It also needs labelled examples, which is why the
+  description path remains the default for any game that has none.
+
+- **Fitted categories are fitted to a game.** The anchors in this repository were built from
+  one title's reviews and measured on held-back reviews of that same title. Whether they
+  carry to a different game, a different genre or a different language is **not measured**,
+  and the tool says so out loud when you point them at another app.
+
 - **Counting words is not understanding them.** A category assignment is a useful summary
   and a starting point for reading, never a substitute for it. That is why drilling down to
   the underlying reviews is a first-class feature and not an afterthought.
@@ -151,25 +165,32 @@ de-identification.
 
 ## Status
 
-Three commands work, from a checkout, with no account and no API key:
+Five commands work, from a checkout, with no account and no API key:
 
 ```sh
 census crawl 296970      # every review Valve will serve, into Parquet
 census embed 296970      # vectors, computed locally
+census fit 296970        # category anchors, rebuilt from labelled reviews
 census classify 296970   # categories, mention rates and bias factors
+census evaluate 296970   # agreement against a reference set, with intervals
 ```
 
 **What works.** Crawling is sharded by date, resumable after an interruption, and can top up
 an existing corpus rather than rebuilding it. Each crawl reports the share of Valve's own
 stated total it actually retrieved. Embedding runs on the machine, on the GPU where one is
-available, at roughly 280 reviews a second. Categories come from a fixed sixteen-item core
-spine, and every percentage says which denominator it uses.
+available, at roughly 280 reviews a second. Categories come from a fixed seventeen-item core
+spine, and every percentage says which denominator it uses. `fit` rebuilds those categories
+from labelled reviews, choosing how far to trust them by cross-validation, and leaves a
+category with no labels exactly as written. `evaluate` reports agreement split by how the
+reviews were sampled and by whether the labeller found the call contested, each with a 95%
+interval, because the subsets are small enough that bare percentages mislead.
 
-**What does not.** There is no graphical interface, no installer and no release. Categories
-are assigned by text similarity alone; the game-specific categories, the written summaries
-and the flag for reviews whose rating disagrees with their text all need a model and are not
-built. Most importantly, **nothing measures how often the categories are right**, so no
-figure has an error bar and none should be quoted as fact.
+**What does not.** There is no graphical interface, no installer and no release. The
+game-specific categories, the written summaries and the flag for reviews whose rating
+disagrees with their text all need a model and are not built. Agreement is measured against
+**one** game and against labels a model wrote, so it is consistency between two models
+rather than correctness; until a person checks part of that set, no figure here should be
+called accuracy.
 
 Prior work sits behind this: the approach has been run against 1.7 million reviews across 62
 games, which is where the 64% and 24.7% figures above come from. That work predates the

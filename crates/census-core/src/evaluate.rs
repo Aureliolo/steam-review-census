@@ -149,6 +149,57 @@ fn rate(part: u64, whole: u64) -> Option<f64> {
     (whole > 0).then(|| part as f64 / whole as f64)
 }
 
+/// Agreement over one slice of the reference set.
+///
+/// Sliced by sampling subset first and only then by contestedness, because the two cuts are
+/// not independent and a contested-versus-clear split taken across the whole set would
+/// average a randomly drawn sample together with one deliberately enriched for categories
+/// the classifier rarely picks. Once anchors are fitted the nesting matters more still: the
+/// stratified subset is training data, and any figure computed over it says what the
+/// anchors memorised rather than what they know.
+#[derive(Debug, Clone)]
+pub struct Slice {
+    pub subset: String,
+    /// `None` for the subset taken whole, otherwise whether the labeller called the reviews
+    /// in this slice contested.
+    pub contested: Option<bool>,
+    pub compared: u64,
+    pub agreed: u64,
+}
+
+impl Slice {
+    #[must_use]
+    pub fn agreement(&self) -> Option<f64> {
+        rate(self.agreed, self.compared)
+    }
+
+    /// 95% Wilson score interval for the agreement rate.
+    ///
+    /// Reference sets are small: the randomly drawn subset of the only set that exists is
+    /// sixty reviews, where six reviews changing hands moves the headline ten points. A bare
+    /// percentage invites reading such a swing as an improvement, so every rate reported
+    /// here carries the range it is actually entitled to claim. Wilson rather than the
+    /// textbook normal interval, which misbehaves badly at these counts and happily returns
+    /// bounds outside zero to one.
+    #[must_use]
+    pub fn interval(&self) -> Option<(f64, f64)> {
+        const Z: f64 = 1.959_963_985;
+        let hits = self.agreement()?;
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "reference sets are a few hundred reviews"
+        )]
+        let n = self.compared as f64;
+        let denominator = Z.mul_add(Z / n, 1.0);
+        let centre = hits + Z * Z / (2.0 * n);
+        let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
+        Some((
+            ((centre - spread) / denominator).max(0.0),
+            ((centre + spread) / denominator).min(1.0),
+        ))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AgreementReport {
     pub app_id: u32,
@@ -158,10 +209,11 @@ pub struct AgreementReport {
     /// re-crawled or classified under a different taxonomy.
     pub unmatched: u64,
     pub primary_agreement: Option<f64>,
-    /// Agreement within each sampling subset, with how many reviews each contributed.
-    pub by_subset: Vec<(String, u64, Option<f64>)>,
-    /// Agreement split by whether the reference labeller called the review contested.
-    pub by_ambiguity: Vec<(String, u64, Option<f64>)>,
+    /// Which anchors produced the classifications being compared, as recorded when they were
+    /// written. More than one value means the file mixes runs and none of it can be trusted.
+    pub anchors: Vec<String>,
+    /// Each sampling subset whole, followed by its clear and contested slices.
+    pub slices: Vec<Slice>,
     pub categories: Vec<CategoryAgreement>,
 }
 
@@ -218,8 +270,8 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
     let mut compared = 0_u64;
     let mut unmatched = 0_u64;
     let mut primary_agreed = 0_u64;
-    let mut subsets: HashMap<String, (u64, u64)> = HashMap::new();
-    let mut ambiguity: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut slices: HashMap<(String, Option<bool>), (u64, u64)> = HashMap::new();
+    let mut anchors: HashSet<String> = HashSet::new();
 
     for label in &reference.labels {
         let Some(predicted) = predictions.get(&label.id) else {
@@ -234,19 +286,15 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         if let Some(&slot) = index.get(predicted.primary.as_str()) {
             stats[slot].predicted_primary += 1;
         }
-        let entry = subsets.entry(label.subset.clone()).or_insert((0, 0));
-        entry.0 += 1;
-        let contested = if label.ambiguous {
-            "contested"
-        } else {
-            "clear"
-        };
-        let flagged = ambiguity.entry(contested.to_owned()).or_insert((0, 0));
-        flagged.0 += 1;
-        if label.primary == predicted.primary {
+        anchors.insert(predicted.anchors.clone());
+        let agreed = label.primary == predicted.primary;
+        for cut in [None, Some(label.ambiguous)] {
+            let slice = slices.entry((label.subset.clone(), cut)).or_insert((0, 0));
+            slice.0 += 1;
+            slice.1 += u64::from(agreed);
+        }
+        if agreed {
             primary_agreed += 1;
-            entry.1 += 1;
-            flagged.1 += 1;
             if let Some(&slot) = index.get(label.primary.as_str()) {
                 stats[slot].primary_agreed += 1;
             }
@@ -271,16 +319,24 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         }
     }
 
-    let mut by_subset: Vec<(String, u64, Option<f64>)> = subsets
+    let mut slices: Vec<Slice> = slices
         .into_iter()
-        .map(|(name, (n, hit))| (name, n, rate(hit, n)))
+        .map(|((subset, contested), (compared, agreed))| Slice {
+            subset,
+            contested,
+            compared,
+            agreed,
+        })
         .collect();
-    by_subset.sort_by(|a, b| a.0.cmp(&b.0));
-    let mut by_ambiguity: Vec<(String, u64, Option<f64>)> = ambiguity
-        .into_iter()
-        .map(|(name, (n, hit))| (name, n, rate(hit, n)))
-        .collect();
-    by_ambiguity.sort_by(|a, b| a.0.cmp(&b.0));
+    slices.sort_by(|a, b| {
+        a.subset
+            .cmp(&b.subset)
+            .then(a.contested.is_some().cmp(&b.contested.is_some()))
+            .then(a.contested.cmp(&b.contested))
+    });
+
+    let mut anchors: Vec<String> = anchors.into_iter().collect();
+    anchors.sort_unstable();
 
     Ok(AgreementReport {
         app_id,
@@ -288,15 +344,17 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         compared,
         unmatched,
         primary_agreement: rate(primary_agreed, compared),
-        by_subset,
-        by_ambiguity,
+        anchors,
+        slices,
         categories: stats,
     })
 }
 
+#[derive(Debug)]
 struct Prediction {
     primary: String,
     mentions: Vec<String>,
+    anchors: String,
 }
 
 fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
@@ -313,6 +371,12 @@ fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
         let ids = downcast::<StringArray>(&batch, "recommendationid")?;
         let primaries = downcast::<StringArray>(&batch, "primary_category")?;
         let mentions = downcast::<ListArray>(&batch, "mentions")?;
+        let anchors = downcast::<StringArray>(&batch, "anchors").map_err(|_| {
+            Error::StaleClassifications {
+                path: path.to_path_buf(),
+                field: "anchors",
+            }
+        })?;
         for row in 0..batch.num_rows() {
             let listed = mentions.value(row);
             let listed = listed
@@ -326,6 +390,7 @@ fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
                     mentions: (0..listed.len())
                         .map(|i| listed.value(i).to_owned())
                         .collect(),
+                    anchors: anchors.value(row).to_owned(),
                 },
             );
         }
@@ -352,6 +417,54 @@ pub fn default_reference_dir(app_id: u32) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn slice(compared: u64, agreed: u64) -> Slice {
+        Slice {
+            subset: "random".to_owned(),
+            contested: Some(false),
+            compared,
+            agreed,
+        }
+    }
+
+    #[test]
+    fn forty_seven_reviews_pin_agreement_no_better_than_a_twenty_seven_point_band() {
+        // The measured baseline: 24 of 47 clear calls on the random subset, which reads as
+        // 51.1% and means somewhere in [37, 65]. Any claim that a change moved this has to
+        // clear a band that wide.
+        let (low, high) = slice(47, 24).interval().unwrap();
+        assert!((slice(47, 24).agreement().unwrap() - 0.510_638).abs() < 1e-5);
+        assert!((low - 0.372).abs() < 0.002, "lower bound was {low}");
+        assert!((high - 0.647).abs() < 0.002, "upper bound was {high}");
+        assert!(high - low > 0.27, "the band should be this wide at n=47");
+    }
+
+    #[test]
+    fn intervals_stay_inside_zero_and_one_even_when_every_review_agrees() {
+        let (low, high) = slice(12, 12).interval().unwrap();
+        assert!(high <= 1.0, "upper bound escaped: {high}");
+        assert!(low > 0.7, "twelve for twelve should not admit a low rate");
+
+        let (low, high) = slice(12, 0).interval().unwrap();
+        assert!(low >= 0.0, "lower bound escaped: {low}");
+        assert!(high < 0.3, "nought for twelve should not admit a high rate");
+    }
+
+    #[test]
+    fn more_reviews_narrow_the_interval_at_the_same_rate() {
+        let narrow = slice(600, 300).interval().unwrap();
+        let wide = slice(60, 30).interval().unwrap();
+        assert!(
+            narrow.1 - narrow.0 < wide.1 - wide.0,
+            "ten times the reviews did not buy any precision"
+        );
+    }
+
+    #[test]
+    fn an_empty_slice_has_no_agreement_rather_than_a_zero_one() {
+        assert_eq!(slice(0, 0).agreement(), None);
+        assert_eq!(slice(0, 0).interval(), None);
+    }
 
     fn agreement(pred: u64, refr: u64, hit: u64) -> CategoryAgreement {
         CategoryAgreement {
@@ -410,13 +523,93 @@ mod tests {
             compared: 100,
             unmatched: 0,
             primary_agreement: Some(0.5),
-            by_subset: Vec::new(),
-            by_ambiguity: Vec::new(),
+            anchors: Vec::new(),
+            slices: Vec::new(),
             categories: vec![agreement(100, 100, 100), agreement(1, 10, 0)],
         };
         // Corpus-weighted this would look near perfect; unweighted it does not.
         let macro_f1 = report.macro_f1().unwrap();
         assert!(macro_f1 < 0.55, "macro f1 was {macro_f1}");
+    }
+
+    #[test]
+    fn a_classification_file_from_an_older_build_names_the_fix_rather_than_reading_as_malformed() {
+        use std::sync::Arc;
+
+        use arrow::{
+            array::{Float32Builder, ListBuilder, StringBuilder, UInt32Builder},
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use parquet::arrow::ArrowWriter;
+
+        // The schema as it stood before runs recorded which anchors produced them.
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("recommendationid", DataType::Utf8, false),
+            Field::new("appid", DataType::UInt32, false),
+            Field::new("primary_category", DataType::Utf8, false),
+            Field::new("primary_score", DataType::Float32, false),
+            Field::new(
+                "mentions",
+                DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+                false,
+            ),
+            Field::new("spine_version", DataType::Utf8, false),
+        ]));
+
+        let mut ids = StringBuilder::new();
+        let mut appids = UInt32Builder::new();
+        let mut primaries = StringBuilder::new();
+        let mut scores = Float32Builder::new();
+        let mut mentions = ListBuilder::new(StringBuilder::new());
+        let mut spine = StringBuilder::new();
+        ids.append_value("1");
+        appids.append_value(296_970);
+        primaries.append_value("bugs");
+        scores.append_value(0.5);
+        mentions.values().append_value("bugs");
+        mentions.append(true);
+        spine.append_value("core-2");
+
+        let dir = std::env::temp_dir().join("census-stale-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("classifications.parquet");
+        let mut writer = ArrowWriter::try_new(
+            std::fs::File::create(&path).unwrap(),
+            Arc::clone(&schema),
+            None,
+        )
+        .unwrap();
+        writer
+            .write(
+                &RecordBatch::try_new(
+                    schema,
+                    vec![
+                        Arc::new(ids.finish()),
+                        Arc::new(appids.finish()),
+                        Arc::new(primaries.finish()),
+                        Arc::new(scores.finish()),
+                        Arc::new(mentions.finish()),
+                        Arc::new(spine.finish()),
+                    ],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        writer.close().unwrap();
+
+        let error = load_predictions(&path).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                Error::StaleClassifications {
+                    field: "anchors",
+                    ..
+                }
+            ),
+            "an older file should name the command that fixes it: {error}"
+        );
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

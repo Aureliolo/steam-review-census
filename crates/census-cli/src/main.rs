@@ -9,7 +9,24 @@ use census_core::{
     ClassifyOptions, CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET,
     SteamClient, crawl,
 };
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Calibrate {
+    Search,
+    On,
+    Off,
+}
+
+impl From<Calibrate> for census_core::anchors::Calibration {
+    fn from(value: Calibrate) -> Self {
+        match value {
+            Calibrate::Search => Self::Search,
+            Calibrate::On => Self::Always,
+            Calibrate::Off => Self::Never,
+        }
+    }
+}
 
 /// How often to emit a progress line when stderr is not a terminal.
 const PROGRESS_EVERY_SHARDS: usize = 5;
@@ -76,15 +93,26 @@ enum Command {
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
         /// How close to the best match a category must score to count as mentioned.
-        #[arg(long, default_value_t = census_core::classify::DEFAULT_MENTION_MARGIN)]
-        mention_margin: f32,
+        /// Defaults to the margin the anchors were fitted with.
+        #[arg(long)]
+        mention_margin: Option<f32>,
         /// How many of the most-upvoted reviews count as "the top of the pile".
         #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
         top_helpful: usize,
+        /// Anchors fitted by `census fit`. Falls back to the written category descriptions.
+        #[arg(long)]
+        anchors: Option<PathBuf>,
+        /// Ignore any fitted anchors and use the written category descriptions.
+        #[arg(long, conflicts_with = "anchors")]
+        descriptions: bool,
         /// Where to cache the model. Defaults to the platform cache directory.
         #[arg(long)]
         model_dir: Option<PathBuf>,
     },
+
+    /// Fit category anchors from a reference set, so categories are represented by reviews
+    /// people wrote rather than by descriptions of the topic.
+    Fit(FitArgs),
 
     /// Compare stored classifications against a reference set.
     Evaluate {
@@ -97,6 +125,34 @@ enum Command {
         #[arg(long)]
         reference: Option<PathBuf>,
     },
+}
+
+#[derive(clap::Args, Debug)]
+struct FitArgs {
+    /// Steam app ID whose reference labels should be fitted.
+    app_id: u32,
+    /// Directory holding the capture and its embeddings.
+    #[arg(short, long, default_value = "data")]
+    out: PathBuf,
+    /// Reference set directory, holding manifest.json and labels.json.
+    #[arg(long)]
+    reference: Option<PathBuf>,
+    /// Subset held back from fitting entirely, so it can still measure the result.
+    #[arg(long, default_value = "random")]
+    holdout: String,
+    /// Cross-validation folds used to choose the blend and the mention margin.
+    #[arg(long, default_value_t = 5)]
+    folds: usize,
+    /// Score categories by how far above their own corpus average a review sits.
+    /// `search` lets cross-validation decide, which favours the largest categories.
+    #[arg(long, default_value = "search")]
+    calibrate: Calibrate,
+    /// Where to write the fitted anchors. Defaults to the reference directory.
+    #[arg(long)]
+    anchors_out: Option<PathBuf>,
+    /// Where to cache the model. Defaults to the platform cache directory.
+    #[arg(long)]
+    model_dir: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -131,15 +187,22 @@ async fn main() -> Result<()> {
             out,
             mention_margin,
             top_helpful,
+            anchors,
+            descriptions,
             model_dir,
         } => {
-            let options = ClassifyOptions {
-                out_dir: out,
+            run_classify(
+                app_id,
+                out,
                 mention_margin,
                 top_helpful,
-            };
-            run_classify(app_id, &options, model_dir).await
+                anchors,
+                descriptions,
+                model_dir,
+            )
+            .await
         }
+        Command::Fit(args) => run_fit(args).await,
         Command::Evaluate {
             app_id,
             out,
@@ -196,33 +259,27 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
             .macro_f1()
             .map_or_else(|| "n/a".to_owned(), |f| format!("{f:.3}"))
     );
-    // A set stratified by predicted category over-represents categories the classifier
-    // rarely picks, so only the random draw estimates the corpus.
-    print_split(
-        "by sampling",
-        &report.by_subset,
-        "random",
-        "corpus-representative",
-    );
-    // Disagreement on contested reviews indicts the taxonomy as much as the classifier.
-    print_split(
-        "by reference certainty",
-        &report.by_ambiguity,
-        "clear",
-        "reference labeller found the call clear-cut",
-    );
+    match report.anchors.as_slice() {
+        [] => {}
+        [one] => println!("  anchors      {one}"),
+        many => println!(
+            "  anchors      {} (MIXED; re-run `census classify`)",
+            many.join(", ")
+        ),
+    }
+    print_slices(&report.slices, measure);
 
     let mut categories = report.categories.clone();
     categories.sort_by_key(|c| std::cmp::Reverse(c.reference_mentions));
     println!(
-        "\n{:<26} {:>8} {:>10} {:>8} {:>7}",
+        "\n{:<30} {:>8} {:>10} {:>8} {:>7}",
         "category", "in ref", "precision", "recall", "F1"
     );
-    println!("{}", "-".repeat(64));
+    println!("{}", "-".repeat(68));
     for stat in &categories {
         let fmt = |v: Option<f64>| v.map_or_else(|| "    -".to_owned(), |x| format!("{x:.2}"));
         println!(
-            "{:<26} {:>8} {:>10} {:>8} {:>7}",
+            "{:<30} {:>8} {:>10} {:>8} {:>7}",
             stat.label,
             stat.reference_mentions,
             fmt(stat.precision()),
@@ -242,19 +299,206 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     );
 }
 
-async fn run_classify(
+/// Where `census fit` writes its result, and where `census classify` looks for it.
+fn default_anchor_path(app_id: u32) -> PathBuf {
+    census_core::evaluate::default_reference_dir(app_id).join("anchors.json")
+}
+
+/// Loads fitted anchors if there are any, falling back to embedding the descriptions.
+///
+/// Only the fallback needs the embedding model, so classifying with a fitted set never
+/// downloads one.
+async fn load_anchors(
     app_id: u32,
-    options: &ClassifyOptions,
+    explicit: Option<PathBuf>,
+    force_descriptions: bool,
     model_dir: Option<PathBuf>,
-) -> Result<()> {
+) -> Result<census_core::Anchors> {
+    let path = explicit
+        .clone()
+        .unwrap_or_else(|| default_anchor_path(app_id));
+    if !force_descriptions && (explicit.is_some() || path.exists()) {
+        let anchors = census_core::Anchors::load(&path)?;
+        if anchors.fitted_from != Some(app_id) {
+            eprintln!(
+                "warning: these anchors were fitted on app {}, not {app_id}. Categories carry \
+                 the vocabulary of the game they were fitted on, and whether that transfers \
+                 has not been measured.",
+                anchors
+                    .fitted_from
+                    .map_or_else(|| "nothing".to_owned(), |id| id.to_string())
+            );
+        }
+        eprintln!("anchors      {}", path.display());
+        return Ok(anchors);
+    }
+
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     census_core::model::ensure(&cache, |_| {}).await?;
     let mut embedder = census_core::Embedder::load(&cache)?;
+    eprintln!(
+        "anchors      written descriptions, on {}",
+        embedder.device()
+    );
+    Ok(census_core::Anchors::from_descriptions(&mut embedder)?)
+}
 
-    eprintln!("classifying app {app_id} on {}", embedder.device());
-    let report = census_core::classify_corpus(&mut embedder, app_id, options, |_| {})?;
+async fn run_classify(
+    app_id: u32,
+    out: PathBuf,
+    mention_margin: Option<f32>,
+    top_helpful: usize,
+    anchors: Option<PathBuf>,
+    descriptions: bool,
+    model_dir: Option<PathBuf>,
+) -> Result<()> {
+    let anchors = load_anchors(app_id, anchors, descriptions, model_dir).await?;
+    let options = ClassifyOptions {
+        out_dir: out,
+        mention_margin: mention_margin.unwrap_or_else(|| anchors.mention_margin()),
+        top_helpful,
+    };
+
+    eprintln!("classifying app {app_id}");
+    let report = census_core::classify_corpus(&anchors, app_id, &options, |_| {})?;
     print_classification(&report);
     Ok(())
+}
+
+async fn run_fit(args: FitArgs) -> Result<()> {
+    let FitArgs {
+        app_id,
+        out,
+        reference,
+        holdout,
+        folds,
+        calibrate,
+        anchors_out,
+        model_dir,
+    } = args;
+    let holdout = holdout.as_str();
+    let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
+    let set = census_core::ReferenceSet::load(&dir)?;
+    if set.spine_version != census_core::CORE_SPINE_VERSION {
+        anyhow::bail!(
+            "reference set was labelled against taxonomy {} but this build is {}; fitting \
+             anchors from it would move every category boundary towards a taxonomy that no \
+             longer exists.",
+            set.spine_version,
+            census_core::CORE_SPINE_VERSION
+        );
+    }
+
+    let vectors = census_core::anchors::corpus_vectors(&out, app_id)?;
+    let training: Vec<census_core::evaluate::ReferenceLabel> = set
+        .labels
+        .iter()
+        .filter(|label| label.subset != holdout)
+        .cloned()
+        .collect();
+    let examples = census_core::anchors::to_examples(&training, &vectors);
+    if examples.is_empty() {
+        anyhow::bail!(census_core::Error::NoTrainingExamples { app_id });
+    }
+    // Calibration reads review vectors and no labels, so the whole corpus is fair game and
+    // is also what the classifier will actually be run over.
+    let corpus: Vec<Vec<f32>> = vectors.into_values().collect();
+
+    let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
+    census_core::model::ensure(&cache, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(&cache)?;
+    let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
+
+    eprintln!(
+        "fitting {} labels from app {app_id} against {} reviews, holding back the {holdout} subset",
+        examples.len(),
+        corpus.len()
+    );
+    let outcome =
+        census_core::anchors::search(&descriptions, &examples, &corpus, folds, calibrate.into());
+    let mut fitted = descriptions.fit(&examples, app_id, outcome.params);
+    if outcome.params.calibrate {
+        fitted.calibrate(&corpus);
+    }
+
+    let path = anchors_out.unwrap_or_else(|| dir.join("anchors.json"));
+    fitted.save(&path)?;
+    print_fit(
+        &fitted,
+        &outcome,
+        &path,
+        holdout,
+        set.labels.len() - training.len(),
+    );
+    Ok(())
+}
+
+fn print_fit(
+    anchors: &census_core::Anchors,
+    outcome: &census_core::FitOutcome,
+    path: &std::path::Path,
+    holdout: &str,
+    held_back: usize,
+) {
+    println!("app {}", anchors.fitted_from.unwrap_or_default());
+    println!("  fitted from  {} labels", outcome.examples);
+    println!("  held back    {held_back} ({holdout} subset, never seen by the fit)");
+    println!("  smoothing    {}", outcome.params.smoothing);
+    println!("  secondary    {}", outcome.params.secondary_weight);
+    println!("  margin       {}", outcome.params.mention_margin);
+    println!(
+        "  calibration  {}",
+        if outcome.params.calibrate {
+            "on"
+        } else {
+            "off"
+        }
+    );
+    println!("  anchors      {}", path.display());
+    println!(
+        "\n  {}-fold cross-validation, on training reviews each fold did not see:",
+        outcome.folds
+    );
+    let baseline_note = if outcome.baseline_calibrated {
+        "descriptions alone, also calibrated"
+    } else {
+        "descriptions alone"
+    };
+    println!(
+        "    primary agreement  {:.1}%  ({baseline_note}: {:.1}%)",
+        outcome.primary_agreement * 100.0,
+        outcome.baseline_agreement * 100.0
+    );
+    println!(
+        "    mention macro F1   {:.3}   ({baseline_note}: {:.3})",
+        outcome.mention_macro_f1, outcome.baseline_macro_f1
+    );
+
+    println!(
+        "\n{:<30} {:>10} {:>16}",
+        "category", "evidence", "learned share"
+    );
+    println!("{}", "-".repeat(58));
+    for anchor in &anchors.categories {
+        let label =
+            census_core::taxonomy::by_id(&anchor.id).map_or(anchor.id.as_str(), |c| c.label);
+        println!(
+            "{label:<30} {:>10.1} {:>15.0}%",
+            anchor.evidence,
+            anchor.learned_share * 100.0
+        );
+    }
+    println!(
+        "\nEvidence is labelled reviews behind an anchor, secondary mentions counted at {}.\n\
+         Learned share is how far the anchor moved off its written description; a category\n\
+         with no labels keeps its description exactly and is unchanged by fitting.",
+        outcome.params.secondary_weight
+    );
+    println!(
+        "\nCross-validated figures are measured on the fitting data and are optimistic: the\n\
+         blend and the margin were both chosen against them. Classify with these anchors and\n\
+         run `census evaluate` to read the held-out {holdout} subset, which is the honest number."
+    );
 }
 
 fn print_classification(report: &census_core::ClassifyReport) {
@@ -268,6 +512,13 @@ fn print_classification(report: &census_core::ClassifyReport) {
     }
     println!("  taxonomy     {}", report.spine_version);
     println!("  model        {}", report.model);
+    println!(
+        "  anchors      {}",
+        report.anchors_fitted_from.map_or_else(
+            || "written descriptions (unfitted)".to_owned(),
+            |id| format!("fitted on app {id}")
+        )
+    );
     println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
     println!("  assignments  {}", report.path.display());
 
@@ -278,16 +529,16 @@ fn print_classification(report: &census_core::ClassifyReport) {
     });
 
     println!(
-        "\n{:<26} {:>9} {:>9} {:>9} {:>7}",
+        "\n{:<30} {:>9} {:>9} {:>9} {:>7}",
         "category", "mention%", "primary%", "top50%", "bias"
     );
-    println!("{}", "-".repeat(64));
+    println!("{}", "-".repeat(68));
     for stat in &categories {
         let bias = stat
             .bias_factor(report.reviews, report.top_helpful)
             .map_or_else(|| "    -".to_owned(), |b| format!("{b:.2}x"));
         println!(
-            "{:<26} {:>8.1}% {:>8.1}% {:>8.1}% {:>7}",
+            "{:<30} {:>8.1}% {:>8.1}% {:>8.1}% {:>7}",
             stat.label,
             stat.mention_rate(report.reviews) * 100.0,
             stat.primary_share(report.reviews) * 100.0,
@@ -452,20 +703,35 @@ fn print_report(report: &CrawlReport) {
     }
 }
 
-fn print_split(heading: &str, rows: &[(String, u64, Option<f64>)], highlight: &str, note: &str) {
-    if rows.is_empty() {
+/// Prints each sampling subset with its contested and clear-cut slices indented beneath it.
+///
+/// Every rate carries a 95% interval, because the subsets are small enough that the naked
+/// percentages invite conclusions the counts do not support.
+fn print_slices(slices: &[census_core::Slice], measure: &str) {
+    if slices.is_empty() {
         return;
     }
-    println!("  {heading}:");
-    for (name, n, agreed) in rows {
-        let marker = if name == highlight {
-            format!("  <- {note}")
-        } else {
-            String::new()
+    println!("\n  primary {measure} by slice, with 95% intervals:");
+    for slice in slices {
+        let name = match slice.contested {
+            None => slice.subset.clone(),
+            Some(true) => "  contested".to_owned(),
+            Some(false) => "  clear-cut".to_owned(),
+        };
+        let rate = slice
+            .agreement()
+            .map_or_else(|| "  n/a".to_owned(), |a| format!("{:.1}%", a * 100.0));
+        let interval = slice.interval().map_or_else(String::new, |(low, high)| {
+            format!("  [{:.1}, {:.1}]", low * 100.0, high * 100.0)
+        });
+        let note = match (slice.subset.as_str(), slice.contested) {
+            ("random", None) => "  <- the only corpus-representative figure",
+            ("stratified", None) => "  <- enriched for rare categories; also fitting data",
+            _ => "",
         };
         println!(
-            "    {name:<12} n={n:<5} {}{marker}",
-            agreed.map_or_else(|| "n/a".to_owned(), |a| format!("{:.1}%", a * 100.0))
+            "    {name:<14} n={:<5} {rate:>6}{interval:<16}{note}",
+            slice.compared
         );
     }
 }

@@ -1,9 +1,12 @@
 //! Assigning categories to reviews, and the numbers that fall out of it.
 //!
-//! This is the zero-setup path: it compares each review's vector against the core spine's
-//! category descriptions, with no model call and no API key. Its accuracy is **not
-//! measured**. Nothing here corrects for classifier error, and every figure it produces
-//! should be read as provisional until a labelled gold set exists to measure it against.
+//! Every review is compared against one vector per category and keeps the categories it
+//! sits nearest. Where those vectors come from is [`crate::anchors`]: either the written
+//! category descriptions, which need no labels and no setup, or a set fitted from labelled
+//! reviews, which is measurably better and needs a reference set to exist first.
+//!
+//! Nothing here corrects for classifier error. What the error is, on the one corpus where
+//! it has been measured, is what `census evaluate` reports.
 
 use std::{
     collections::HashMap,
@@ -25,9 +28,9 @@ use parquet::{
 
 use crate::{
     Error, Result,
-    embed::Embedder,
+    anchors::Anchors,
     model::MODEL_ID,
-    taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, embedding_text},
+    taxonomy::{CORE_SPINE, CORE_SPINE_VERSION},
 };
 
 /// How close to the best-matching category another must score to count as mentioned.
@@ -44,9 +47,12 @@ use crate::{
 ///
 /// Swept against a 2,909-review corpus, the share of reviews keeping a single category ran
 /// 45.8% at 0.01, 59.5% at 0.02 and 96.1% at 0.04. The widest setting abolishes secondary
-/// topics altogether, so this sits at the end that still detects them. It is fitted to the
-/// shape of one small corpus, not to measured accuracy, and should be revisited against a
-/// labelled gold set.
+/// topics altogether, so this sits at the end that still detects them.
+///
+/// This is the fallback for description anchors, fitted to the shape of one small corpus
+/// rather than to measured agreement. A fitted anchor set carries its own margin, chosen by
+/// cross-validation against labels, and [`Anchors::mention_margin`] should be preferred
+/// whenever one exists.
 pub const DEFAULT_MENTION_MARGIN: f32 = 0.01;
 
 /// Reviews taken as "the top of the pile" when measuring helpfulness bias. Steam's own
@@ -143,6 +149,8 @@ pub struct ClassifyReport {
     pub categories: Vec<CategoryStats>,
     pub spine_version: &'static str,
     pub model: &'static str,
+    /// App whose labels fitted the anchors, or `None` if the written descriptions were used.
+    pub anchors_fitted_from: Option<u32>,
     pub elapsed: Duration,
     pub path: PathBuf,
 }
@@ -153,7 +161,7 @@ pub struct ClassifyReport {
 ///
 /// Fails if the capture or its embeddings are missing, or if reading or writing fails.
 pub fn classify_corpus(
-    embedder: &mut Embedder,
+    anchors: &Anchors,
     app_id: u32,
     options: &ClassifyOptions,
     mut on_progress: impl FnMut(ClassifyProgress),
@@ -161,9 +169,6 @@ pub fn classify_corpus(
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
     let vectors = load_embeddings(&snapshot.join("embeddings.parquet"))?;
-
-    let spine: Vec<String> = CORE_SPINE.iter().map(embedding_text).collect();
-    let anchors = embedder.embed(&spine)?;
 
     let mut stats: Vec<CategoryStats> = CORE_SPINE
         .iter()
@@ -176,6 +181,7 @@ pub fn classify_corpus(
         })
         .collect();
 
+    let provenance = anchor_provenance(anchors);
     let path = snapshot.join("classifications.parquet");
     let schema = classification_schema();
     let mut writer = ArrowWriter::try_new(
@@ -200,7 +206,7 @@ pub fn classify_corpus(
             unmatched += 1;
             continue;
         };
-        let sims: Vec<f32> = anchors.iter().map(|a| dot(a, vector)).collect();
+        let sims = anchors.similarities(vector);
         let (primary, mentions) = assign(&sims, options.mention_margin);
 
         stats[primary].primary_count += 1;
@@ -213,7 +219,7 @@ pub fn classify_corpus(
         pending.push(app_id, &review, primary, sims[primary], mentions);
 
         if pending.len() >= 8192 {
-            writer.write(&pending.take(&schema)?)?;
+            writer.write(&pending.take(&schema, &provenance)?)?;
             on_progress(ClassifyProgress {
                 classified: reviews,
                 total: reviews,
@@ -221,7 +227,7 @@ pub fn classify_corpus(
         }
     }
     if pending.len() > 0 {
-        writer.write(&pending.take(&schema)?)?;
+        writer.write(&pending.take(&schema, &provenance)?)?;
     }
     writer.close()?;
 
@@ -235,6 +241,7 @@ pub fn classify_corpus(
         categories: stats,
         spine_version: CORE_SPINE_VERSION,
         model: MODEL_ID,
+        anchors_fitted_from: anchors.fitted_from,
         elapsed: started.elapsed(),
         path,
     })
@@ -261,7 +268,7 @@ fn tally_top_of_the_pile(
 ///
 /// A category counts only if it scores within `margin` of the best match, so how many a
 /// review gets depends on how close its scores are rather than on how many categories exist.
-fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
+pub(crate) fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
     let (primary, best) = sims
         .iter()
         .enumerate()
@@ -286,14 +293,10 @@ fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
     (primary, mentions)
 }
 
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
-}
-
-struct ReviewRow {
-    recommendationid: String,
-    text_hash: String,
-    helpfulness: f64,
+pub(crate) struct ReviewRow {
+    pub(crate) recommendationid: String,
+    pub(crate) text_hash: String,
+    pub(crate) helpfulness: f64,
 }
 
 #[derive(Default)]
@@ -303,6 +306,14 @@ struct Batch {
     primaries: Vec<&'static str>,
     scores: Vec<f32>,
     mentions: Vec<u32>,
+}
+
+/// How the anchors used for a run are named in the output, so a later reader can tell a
+/// zero-shot classification from a fitted one without being told which it is looking at.
+fn anchor_provenance(anchors: &Anchors) -> String {
+    anchors
+        .fitted_from
+        .map_or_else(|| "descriptions".to_owned(), |app| format!("fitted:{app}"))
 }
 
 impl Batch {
@@ -318,13 +329,14 @@ impl Batch {
         self.mentions.push(mentions);
     }
 
-    fn take(&mut self, schema: &Arc<Schema>) -> Result<RecordBatch> {
+    fn take(&mut self, schema: &Arc<Schema>, anchors: &str) -> Result<RecordBatch> {
         let mut ids = StringBuilder::new();
         let mut appids = UInt32Builder::new();
         let mut primaries = StringBuilder::new();
         let mut scores = Float32Builder::new();
         let mut mentions = ListBuilder::new(StringBuilder::new());
         let mut spine = StringBuilder::new();
+        let mut source = StringBuilder::new();
 
         for index in 0..self.len() {
             ids.append_value(&self.ids[index]);
@@ -338,6 +350,7 @@ impl Batch {
             }
             mentions.append(true);
             spine.append_value(CORE_SPINE_VERSION);
+            source.append_value(anchors);
         }
         self.ids.clear();
         self.appids.clear();
@@ -352,6 +365,7 @@ impl Batch {
             Arc::new(scores.finish()),
             Arc::new(mentions.finish()),
             Arc::new(spine.finish()),
+            Arc::new(source.finish()),
         ];
         Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
     }
@@ -369,10 +383,11 @@ fn classification_schema() -> Arc<Schema> {
             false,
         ),
         Field::new("spine_version", DataType::Utf8, false),
+        Field::new("anchors", DataType::Utf8, false),
     ]))
 }
 
-fn load_embeddings(path: &Path) -> Result<HashMap<String, Vec<f32>>> {
+pub(crate) fn load_embeddings(path: &Path) -> Result<HashMap<String, Vec<f32>>> {
     use arrow::array::{FixedSizeListArray, Float32Array, StringArray};
 
     let file = std::fs::File::open(path).map_err(|_| Error::NoEmbeddings {
@@ -407,7 +422,9 @@ fn column<'a, T: 'static>(batch: &'a RecordBatch, name: &'static str) -> Result<
 }
 
 /// Streams reviews out of every shard of a snapshot.
-fn read_reviews(snapshot: &Path) -> Result<impl Iterator<Item = Result<ReviewRow>> + use<>> {
+pub(crate) fn read_reviews(
+    snapshot: &Path,
+) -> Result<impl Iterator<Item = Result<ReviewRow>> + use<>> {
     use arrow::array::{Float64Array, StringArray};
 
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
