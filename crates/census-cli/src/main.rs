@@ -196,19 +196,21 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
             .macro_f1()
             .map_or_else(|| "n/a".to_owned(), |f| format!("{f:.3}"))
     );
-    for (subset, n, agreed) in &report.by_subset {
-        // A set stratified by predicted category over-represents categories the classifier
-        // rarely picks, so only the random draw estimates the corpus.
-        let note = if subset == "random" {
-            "  <- corpus-representative"
-        } else {
-            ""
-        };
-        println!(
-            "    {subset:<12} n={n:<5} {}{note}",
-            agreed.map_or_else(|| "n/a".to_owned(), |a| format!("{:.1}%", a * 100.0))
-        );
-    }
+    // A set stratified by predicted category over-represents categories the classifier
+    // rarely picks, so only the random draw estimates the corpus.
+    print_split(
+        "by sampling",
+        &report.by_subset,
+        "random",
+        "corpus-representative",
+    );
+    // Disagreement on contested reviews indicts the taxonomy as much as the classifier.
+    print_split(
+        "by reference certainty",
+        &report.by_ambiguity,
+        "clear",
+        "reference labeller found the call clear-cut",
+    );
 
     let mut categories = report.categories.clone();
     categories.sort_by_key(|c| std::cmp::Reverse(c.reference_mentions));
@@ -446,6 +448,24 @@ fn print_report(report: &CrawlReport) {
         eprintln!(
             "\nwarning: some shards did not finish. Completed shards are on disk; \
              run the same command again to continue."
+        );
+    }
+}
+
+fn print_split(heading: &str, rows: &[(String, u64, Option<f64>)], highlight: &str, note: &str) {
+    if rows.is_empty() {
+        return;
+    }
+    println!("  {heading}:");
+    for (name, n, agreed) in rows {
+        let marker = if name == highlight {
+            format!("  <- {note}")
+        } else {
+            String::new()
+        };
+        println!(
+            "    {name:<12} n={n:<5} {}{marker}",
+            agreed.map_or_else(|| "n/a".to_owned(), |a| format!("{:.1}%", a * 100.0))
         );
     }
 }
