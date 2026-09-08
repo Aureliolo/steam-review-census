@@ -168,7 +168,18 @@ pub fn classify_corpus(
 ) -> Result<ClassifyReport> {
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
-    let vectors = load_embeddings(&snapshot.join("embeddings.parquet"))?;
+
+    // The join runs review-side-in-memory, vector-side-streamed. Vectors are 1.5 KB each and
+    // reviews a few dozen bytes, so holding the reviews costs a tenth of what holding the
+    // vectors would on a million-review corpus. Grouping by text also means each distinct
+    // review is compared against the anchors once however many people posted it.
+    let mut by_hash: HashMap<String, Vec<ReviewRow>> = HashMap::new();
+    let mut reviews = 0_u64;
+    for_each_review(&snapshot, |row| {
+        reviews += 1;
+        by_hash.entry(row.text_hash.clone()).or_default().push(row);
+        Ok(())
+    })?;
 
     let mut stats: Vec<CategoryStats> = CORE_SPINE
         .iter()
@@ -194,50 +205,56 @@ pub fn classify_corpus(
         ),
     )?;
 
-    let mut ranked: Vec<(f64, u32)> = Vec::new();
-    let mut reviews = 0_u64;
-    let mut unmatched = 0_u64;
+    let mut top = TopOfThePile::new(options.top_helpful);
+    let mut classified = 0_u64;
     let mut pending = Batch::default();
 
-    for review in read_reviews(&snapshot)? {
-        let review = review?;
-        reviews += 1;
-        let Some(vector) = vectors.get(&review.text_hash) else {
-            unmatched += 1;
-            continue;
+    crate::embed::for_each_vector(&snapshot, |hash, vector| {
+        let Some(group) = by_hash.get(hash) else {
+            return Ok(());
         };
         let sims = anchors.similarities(vector);
         let (primary, mentions) = assign(&sims, options.mention_margin);
 
-        stats[primary].primary_count += 1;
-        for (index, stat) in stats.iter_mut().enumerate() {
-            if mentions & (1 << index) != 0 {
-                stat.mention_count += 1;
+        for review in group {
+            classified += 1;
+            stats[primary].primary_count += 1;
+            for (index, stat) in stats.iter_mut().enumerate() {
+                if mentions & (1 << index) != 0 {
+                    stat.mention_count += 1;
+                }
             }
+            top.offer(review.helpfulness, mentions);
+            pending.push(app_id, review, primary, sims[primary], mentions);
         }
-        ranked.push((review.helpfulness, mentions));
-        pending.push(app_id, &review, primary, sims[primary], mentions);
 
         if pending.len() >= 8192 {
             writer.write(&pending.take(&schema, &provenance)?)?;
             on_progress(ClassifyProgress {
-                classified: reviews,
+                classified,
                 total: reviews,
             });
         }
-    }
+        Ok(())
+    })?;
     if pending.len() > 0 {
         writer.write(&pending.take(&schema, &provenance)?)?;
     }
     writer.close()?;
 
-    tally_top_of_the_pile(&mut ranked, options.top_helpful, &mut stats);
+    for mentions in top.take() {
+        for (index, stat) in stats.iter_mut().enumerate() {
+            if mentions & (1 << index) != 0 {
+                stat.top_mention_count += 1;
+            }
+        }
+    }
 
     Ok(ClassifyReport {
         app_id,
         reviews,
-        unmatched,
-        top_helpful: u64::try_from(ranked.len().min(options.top_helpful)).unwrap_or(0),
+        unmatched: reviews.saturating_sub(classified),
+        top_helpful: classified.min(u64::try_from(options.top_helpful).unwrap_or(u64::MAX)),
         categories: stats,
         spine_version: CORE_SPINE_VERSION,
         model: MODEL_ID,
@@ -247,20 +264,46 @@ pub fn classify_corpus(
     })
 }
 
-/// Counts mentions among the most-upvoted reviews, which is what a reader who skims the
-/// first page actually sees.
-fn tally_top_of_the_pile(
-    ranked: &mut [(f64, u32)],
-    top_helpful: usize,
-    stats: &mut [CategoryStats],
-) {
-    ranked.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
-    for (_, mentions) in ranked.iter().take(top_helpful) {
-        for (index, stat) in stats.iter_mut().enumerate() {
-            if mentions & (1 << index) != 0 {
-                stat.top_mention_count += 1;
-            }
+/// Keeps the most-upvoted reviews seen so far, and no more than that.
+///
+/// What a reader skimming the first page actually sees is a few dozen reviews, so sorting a
+/// million of them to find fifty wastes the memory the streaming join was built to save.
+/// This holds a small buffer and prunes it whenever it grows past twice the limit, which
+/// costs an occasional sort of a hundred items instead of one sort of the corpus.
+struct TopOfThePile {
+    limit: usize,
+    kept: Vec<(f64, u32)>,
+}
+
+impl TopOfThePile {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            kept: Vec::with_capacity(limit.saturating_mul(2).min(4096)),
         }
+    }
+
+    fn offer(&mut self, helpfulness: f64, mentions: u32) {
+        if self.limit == 0 {
+            return;
+        }
+        self.kept.push((helpfulness, mentions));
+        if self.kept.len() >= self.limit.saturating_mul(2) {
+            self.prune();
+        }
+    }
+
+    fn prune(&mut self) {
+        self.kept.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        self.kept.truncate(self.limit);
+    }
+
+    fn take(mut self) -> Vec<u32> {
+        self.prune();
+        self.kept
+            .into_iter()
+            .map(|(_, mentions)| mentions)
+            .collect()
     }
 }
 
@@ -387,33 +430,6 @@ fn classification_schema() -> Arc<Schema> {
     ]))
 }
 
-pub(crate) fn load_embeddings(path: &Path) -> Result<HashMap<String, Vec<f32>>> {
-    use arrow::array::{FixedSizeListArray, Float32Array, StringArray};
-
-    let file = std::fs::File::open(path).map_err(|_| Error::NoEmbeddings {
-        path: path.to_path_buf(),
-    })?;
-    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
-        .with_batch_size(4096)
-        .build()?;
-
-    let mut out = HashMap::new();
-    for batch in reader {
-        let batch = batch?;
-        let hashes = column::<StringArray>(&batch, "text_sha256")?;
-        let vectors = column::<FixedSizeListArray>(&batch, "embedding")?;
-        for row in 0..batch.num_rows() {
-            let values = vectors.value(row);
-            let floats = values
-                .as_any()
-                .downcast_ref::<Float32Array>()
-                .ok_or(Error::MalformedPayload { field: "embedding" })?;
-            out.insert(hashes.value(row).to_owned(), floats.values().to_vec());
-        }
-    }
-    Ok(out)
-}
-
 fn column<'a, T: 'static>(batch: &'a RecordBatch, name: &'static str) -> Result<&'a T> {
     batch
         .column_by_name(name)
@@ -421,10 +437,14 @@ fn column<'a, T: 'static>(batch: &'a RecordBatch, name: &'static str) -> Result<
         .ok_or(Error::MalformedPayload { field: name })
 }
 
-/// Streams reviews out of every shard of a snapshot.
-pub(crate) fn read_reviews(
+/// Visits every review in a snapshot, one at a time.
+///
+/// A visitor rather than an iterator because the iterator this replaced built the whole
+/// corpus in a `Vec` before yielding its first item, which reads as streaming and is not.
+pub(crate) fn for_each_review(
     snapshot: &Path,
-) -> Result<impl Iterator<Item = Result<ReviewRow>> + use<>> {
+    mut visit: impl FnMut(ReviewRow) -> Result<()>,
+) -> Result<()> {
     use arrow::array::{Float64Array, StringArray};
 
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
@@ -438,7 +458,6 @@ pub(crate) fn read_reviews(
         .collect();
     shards.sort();
 
-    let mut rows: Vec<Result<ReviewRow>> = Vec::new();
     for shard in shards {
         let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&shard)?)?
             .with_batch_size(8192)
@@ -452,7 +471,7 @@ pub(crate) fn read_reviews(
                 if texts.is_null(row) {
                     continue;
                 }
-                rows.push(Ok(ReviewRow {
+                visit(ReviewRow {
                     recommendationid: ids.value(row).to_owned(),
                     text_hash: crate::embed::sha256_hex(texts.value(row)),
                     helpfulness: if helpful.is_null(row) {
@@ -460,11 +479,11 @@ pub(crate) fn read_reviews(
                     } else {
                         helpful.value(row)
                     },
-                }));
+                })?;
             }
         }
     }
-    Ok(rows.into_iter())
+    Ok(())
 }
 
 #[cfg(test)]

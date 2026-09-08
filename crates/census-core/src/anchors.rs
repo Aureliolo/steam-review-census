@@ -215,21 +215,19 @@ impl Anchors {
     /// within a category. Only review vectors are used and no labels, so held-out reviews
     /// may contribute: this is the same corpus the classifier is about to be run over, not
     /// information about the answers.
-    pub fn calibrate(&mut self, corpus: &[Vec<f32>]) {
-        if corpus.is_empty() {
+    /// Takes the corpus centroid rather than the corpus itself. A dot product is linear in
+    /// its second argument, so the mean of an anchor's similarity to every review *is* its
+    /// similarity to the mean review. The two are equal rather than approximately equal, and
+    /// the second costs 384 multiplications instead of a walk over a million vectors. That
+    /// matters because fitting calibrates once per fold per parameter combination tried:
+    /// against six corpora the old form was several hundred passes over three million
+    /// vectors, and this form is a few thousand multiplications.
+    pub fn calibrate(&mut self, centroid: &[f32]) {
+        if centroid.len() != EMBEDDING_DIM {
             return;
         }
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "corpora are millions of reviews at most"
-        )]
-        let count = corpus.len() as f32;
         for anchor in &mut self.categories {
-            let total: f32 = corpus
-                .iter()
-                .map(|review| dot(&anchor.vector, review))
-                .sum();
-            anchor.bias = total / count;
+            anchor.bias = dot(&anchor.vector, centroid);
         }
     }
 
@@ -313,29 +311,6 @@ impl Anchors {
         }
         Ok(anchors)
     }
-}
-
-/// Looks up the stored vector of every review in the most recent capture, by review id.
-///
-/// Reference labels name reviews by id while embeddings are keyed by the hash of the text,
-/// so fitting needs the capture as well as the vectors: the same text posted twice is
-/// embedded once, and two ids legitimately share a vector.
-///
-/// # Errors
-///
-/// Fails if the capture or its embeddings are missing.
-pub fn corpus_vectors(out_dir: &Path, app_id: u32) -> Result<HashMap<String, Vec<f32>>> {
-    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let by_hash = crate::classify::load_embeddings(&snapshot.join("embeddings.parquet"))?;
-
-    let mut by_id = HashMap::new();
-    for review in crate::classify::read_reviews(&snapshot)? {
-        let review = review?;
-        if let Some(vector) = by_hash.get(&review.text_hash) {
-            by_id.insert(review.recommendationid, vector.clone());
-        }
-    }
-    Ok(by_id)
 }
 
 /// Turns reference labels into fitting examples, dropping any the corpus cannot supply.
@@ -428,13 +403,13 @@ pub struct FitOutcome {
 pub fn search(
     descriptions: &Anchors,
     examples: &[Example],
-    corpus: &[Vec<f32>],
+    centroid: &[f32],
     folds: usize,
     calibration: Calibration,
 ) -> FitOutcome {
     let folds = folds.max(2).min(examples.len().max(2));
     let score = |params, objective| {
-        cross_validate(descriptions, examples, corpus, folds, params, objective)
+        cross_validate(descriptions, examples, centroid, folds, params, objective)
     };
 
     let mut best = (f64::NEG_INFINITY, FitParams::default());
@@ -524,7 +499,7 @@ pub enum Objective {
 fn cross_validate(
     descriptions: &Anchors,
     examples: &[Example],
-    corpus: &[Vec<f32>],
+    centroid: &[f32],
     folds: usize,
     params: FitParams,
     objective: Objective,
@@ -542,7 +517,7 @@ fn cross_validate(
             .collect();
         let mut fitted = descriptions.fit(&train, 0, params);
         if params.calibrate {
-            fitted.calibrate(corpus);
+            fitted.calibrate(centroid);
         }
 
         for example in examples.iter().skip(fold).step_by(folds) {
@@ -793,6 +768,51 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// The mean of a set of vectors, which is all calibration needs of a corpus.
+    fn centroid_of(corpus: &[Vec<f32>]) -> Vec<f32> {
+        let mut total = vec![0.0_f32; EMBEDDING_DIM];
+        for review in corpus {
+            accumulate(&mut total, review, 1.0);
+        }
+        #[expect(clippy::cast_precision_loss, reason = "test corpora are tiny")]
+        let count = corpus.len() as f32;
+        for value in &mut total {
+            *value /= count;
+        }
+        total
+    }
+
+    #[test]
+    fn calibrating_on_the_centroid_is_the_same_as_averaging_over_every_review() {
+        // The whole reason a million-review corpus collapses to 384 floats. If these ever
+        // disagreed, calibration would be an approximation rather than the identity it
+        // claims to be, and the speed would have been bought with accuracy.
+        let corpus: Vec<Vec<f32>> = (0..64)
+            .map(|index| {
+                let mut review = unit(index % 7);
+                review[300] = 0.5;
+                review[index % EMBEDDING_DIM] += 0.25;
+                normalise(&mut review);
+                review
+            })
+            .collect();
+
+        let mut anchors = descriptions();
+        anchors.calibrate(&centroid_of(&corpus));
+
+        #[expect(clippy::cast_precision_loss, reason = "test corpora are tiny")]
+        let count = corpus.len() as f32;
+        for (slot, anchor) in anchors.categories.iter().enumerate() {
+            let naive: f32 = corpus.iter().map(|r| dot(&unit(slot), r)).sum::<f32>() / count;
+            assert!(
+                (anchor.bias - naive).abs() < 1e-5,
+                "{} calibrated to {} but averages {naive}",
+                anchor.id,
+                anchor.bias
+            );
+        }
+    }
+
     #[test]
     fn calibration_stops_a_fitted_anchor_outbidding_a_description_on_reviews_that_are_not_its_own()
     {
@@ -818,7 +838,7 @@ mod tests {
         let raw = anchors.similarities(&belongs_to_second);
         assert!(raw[0] > raw[1], "this test needs the mismatch it is about");
 
-        anchors.calibrate(&corpus);
+        anchors.calibrate(&centroid_of(&corpus));
         let calibrated = anchors.similarities(&belongs_to_second);
         assert!(
             calibrated[1] > calibrated[0],
@@ -837,7 +857,7 @@ mod tests {
             anchors.similarities(&near)[2],
             anchors.similarities(&far)[2],
         );
-        anchors.calibrate(&corpus);
+        anchors.calibrate(&centroid_of(&corpus));
         let after = (
             anchors.similarities(&near)[2],
             anchors.similarities(&far)[2],
@@ -868,7 +888,13 @@ mod tests {
             })
             .collect();
         let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
-        let outcome = search(&descriptions(), &examples, &corpus, 5, Calibration::Search);
+        let outcome = search(
+            &descriptions(),
+            &examples,
+            &centroid_of(&corpus),
+            5,
+            Calibration::Search,
+        );
         assert!(SMOOTHING_GRID.contains(&outcome.params.smoothing));
         assert!(SECONDARY_GRID.contains(&outcome.params.secondary_weight));
         assert!(MARGIN_GRID.contains(&outcome.params.mention_margin));

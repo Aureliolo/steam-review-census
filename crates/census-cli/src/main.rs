@@ -488,20 +488,24 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         );
     }
 
-    let vectors = census_core::anchors::corpus_vectors(&out, app_id)?;
     let training: Vec<census_core::evaluate::ReferenceLabel> = set
         .labels
         .iter()
         .filter(|label| label.subset != holdout)
         .cloned()
         .collect();
+    // Only the labelled reviews are fetched. Pulling every vector in the corpus to use a few
+    // hundred of them costs gigabytes on a million-review game and buys nothing.
+    let wanted: std::collections::HashSet<String> =
+        training.iter().map(|label| label.id.clone()).collect();
+    let vectors = census_core::embed::vectors_for(&out, app_id, &wanted)?;
     let examples = census_core::anchors::to_examples(&training, &vectors);
     if examples.is_empty() {
         anyhow::bail!(census_core::Error::NoTrainingExamples { app_id });
     }
     // Calibration reads review vectors and no labels, so the whole corpus is fair game and
-    // is also what the classifier will actually be run over.
-    let corpus: Vec<Vec<f32>> = vectors.into_values().collect();
+    // is also what the classifier will be run over. It reduces to the corpus centroid.
+    let centroid = census_core::embed::corpus_centroid(&out, app_id)?;
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     census_core::model::ensure(&cache, |_| {}).await?;
@@ -509,15 +513,14 @@ async fn run_fit(args: FitArgs) -> Result<()> {
     let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
 
     eprintln!(
-        "fitting {} labels from app {app_id} against {} reviews, holding back the {holdout} subset",
-        examples.len(),
-        corpus.len()
+        "fitting {} labels from app {app_id}, holding back the {holdout} subset",
+        examples.len()
     );
     let outcome =
-        census_core::anchors::search(&descriptions, &examples, &corpus, folds, calibrate.into());
+        census_core::anchors::search(&descriptions, &examples, &centroid, folds, calibrate.into());
     let mut fitted = descriptions.fit(&examples, app_id, outcome.params);
     if outcome.params.calibrate {
-        fitted.calibrate(&corpus);
+        fitted.calibrate(&centroid);
     }
 
     let path = anchors_out.unwrap_or_else(|| dir.join("anchors.json"));

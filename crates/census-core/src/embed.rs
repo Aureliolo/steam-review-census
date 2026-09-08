@@ -4,7 +4,7 @@
 //! reviews cost nothing to embed twice. Rows join back to the capture on `sha256(review)`.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -382,6 +382,131 @@ fn distinct_texts(snapshot: &Path) -> Result<(HashMap<String, u32>, u64)> {
         });
     }
     Ok((counts, reviews))
+}
+
+/// Streams every stored vector, one at a time.
+///
+/// A corpus of a million reviews holds roughly 1.8 GB of vectors, so anything that reads
+/// them all into a map costs more memory than the rest of the tool put together. Everything
+/// that needs the vectors either reduces them to something small or joins them against
+/// something small, and both are streaming operations.
+///
+/// # Errors
+///
+/// Fails if the embeddings are missing or malformed.
+pub(crate) fn for_each_vector(
+    snapshot: &Path,
+    mut visit: impl FnMut(&str, &[f32]) -> Result<()>,
+) -> Result<()> {
+    use arrow::array::{FixedSizeListArray, Float32Array, StringArray};
+
+    let path = snapshot.join("embeddings.parquet");
+    let file = std::fs::File::open(&path).map_err(|_| Error::NoEmbeddings { path })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(4096)
+        .build()?;
+
+    for batch in reader {
+        let batch = batch?;
+        let hashes = batch
+            .column_by_name("text_sha256")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            .ok_or(Error::MalformedPayload {
+                field: "text_sha256",
+            })?;
+        let vectors = batch
+            .column_by_name("embedding")
+            .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>())
+            .ok_or(Error::MalformedPayload { field: "embedding" })?;
+        for row in 0..batch.num_rows() {
+            let values = vectors.value(row);
+            let floats = values
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .ok_or(Error::MalformedPayload { field: "embedding" })?;
+            visit(hashes.value(row), floats.values())?;
+        }
+    }
+    Ok(())
+}
+
+/// The mean of every distinct review vector in a corpus.
+///
+/// This is all that calibration ever needed from a corpus. The mean of an anchor's
+/// similarity to every review is the anchor's similarity to the mean review, because a dot
+/// product is linear in its second argument, so a million vectors reduce to 384 floats
+/// computed once instead of being walked again for every anchor, fold and parameter tried.
+///
+/// Distinct texts rather than reviews, so that a copypasta posted five hundred times counts
+/// as one thing the corpus says rather than five hundred.
+///
+/// # Errors
+///
+/// Fails if the embeddings are missing or malformed.
+pub fn corpus_centroid(out_dir: &Path, app_id: u32) -> Result<Vec<f32>> {
+    let snapshot = latest_snapshot(out_dir, app_id)?;
+    let mut total = vec![0.0_f64; crate::model::EMBEDDING_DIM];
+    let mut seen = 0_u64;
+
+    for_each_vector(&snapshot, |_, vector| {
+        for (slot, value) in total.iter_mut().zip(vector) {
+            *slot += f64::from(*value);
+        }
+        seen += 1;
+        Ok(())
+    })?;
+
+    if seen == 0 {
+        return Err(Error::NoEmbeddings {
+            path: snapshot.join("embeddings.parquet"),
+        });
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "a mean of unit vectors is far inside f32 range"
+    )]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "corpora are millions of reviews, not quadrillions"
+    )]
+    Ok(total
+        .into_iter()
+        .map(|sum| (sum / seen as f64) as f32)
+        .collect())
+}
+
+/// The stored vectors for a named set of reviews, and nothing else.
+///
+/// Reference labels name reviews by id while vectors are keyed by the hash of the text, so
+/// this walks the capture for the wanted ids first and then streams the vectors, keeping
+/// only the few hundred that were asked for.
+///
+/// # Errors
+///
+/// Fails if the capture or the embeddings cannot be read.
+pub fn vectors_for<S: std::hash::BuildHasher>(
+    out_dir: &Path,
+    app_id: u32,
+    ids: &HashSet<String, S>,
+) -> Result<HashMap<String, Vec<f32>>> {
+    let snapshot = latest_snapshot(out_dir, app_id)?;
+    let texts = crate::capture::texts_for(&snapshot, ids)?;
+
+    let mut wanted: HashMap<String, Vec<String>> = HashMap::new();
+    for (id, text) in texts {
+        wanted.entry(sha256_hex(&text)).or_default().push(id);
+    }
+
+    let mut found = HashMap::new();
+    for_each_vector(&snapshot, |hash, vector| {
+        if let Some(ids) = wanted.get(hash) {
+            for id in ids {
+                found.insert(id.clone(), vector.to_vec());
+            }
+        }
+        Ok(())
+    })?;
+    Ok(found)
 }
 
 /// The newest snapshot directory for an app.
