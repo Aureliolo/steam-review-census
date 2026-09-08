@@ -296,12 +296,12 @@ pub fn embed_corpus(
     let partial = snapshot.join("embeddings.parquet.partial");
     let schema = embedding_schema(embedder.dimensions());
     // A row group is buffered whole before it reaches the disk, and the default holds a
-    // million rows. At 1.5 KB a vector that is the entire file in memory for any corpus
-    // smaller than that, which is most of them, and it is why embedding a million-review
-    // game was killed for memory even after the text itself stopped being held.
+    // million rows, which for any corpus smaller than that is the entire file in memory. It
+    // is why embedding a million-review game was killed even after the text itself stopped
+    // being held.
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
-        .set_max_row_group_row_count(Some(VECTORS_PER_ROW_GROUP))
+        .set_max_row_group_row_count(Some(vectors_per_row_group(embedder.dimensions())))
         .build();
     let mut writer = ArrowWriter::try_new(
         std::fs::File::create(&partial)?,
@@ -379,11 +379,19 @@ pub fn embed_corpus(
     })
 }
 
-/// Vectors per Parquet row group, which is what the writer buffers before flushing.
+/// Memory a Parquet row group is allowed to occupy before it is flushed.
 ///
-/// At 768 floats a row that is roughly 200 MB held at a time, which is a sensible row group
-/// for readers and a bounded amount of memory for writers.
-const VECTORS_PER_ROW_GROUP: usize = 65_536;
+/// A budget in bytes rather than a count of rows, because the rows are vectors and how wide
+/// a vector is depends on the encoder. A fixed row count silently doubled this the day the
+/// default encoder went from 384 dimensions to 768, which is exactly the kind of change that
+/// should cost nothing and instead cost a million-review corpus halfway through embedding.
+const ROW_GROUP_BUDGET: usize = 64 << 20;
+
+/// Vectors per row group under that budget, never fewer than a batch's worth.
+fn vectors_per_row_group(dimensions: usize) -> usize {
+    let bytes = dimensions.max(1) * std::mem::size_of::<f32>();
+    (ROW_GROUP_BUDGET / bytes).max(DEFAULT_BATCH_SIZE)
+}
 
 /// Distinct texts buffered before they are sorted by length and embedded.
 ///
@@ -844,6 +852,21 @@ mod tests {
             sha256_hex(""),
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
+    }
+
+    #[test]
+    fn a_row_group_is_a_memory_budget_rather_than_a_row_count() {
+        // The same budget however wide the vectors are: doubling the dimensions must halve
+        // the rows, not double what is held in memory.
+        let narrow = vectors_per_row_group(384);
+        let wide = vectors_per_row_group(768);
+        assert_eq!(narrow, wide * 2);
+        assert!(narrow * 384 * 4 <= ROW_GROUP_BUDGET);
+        assert!(wide * 768 * 4 <= ROW_GROUP_BUDGET);
+
+        // An absurd encoder still gets a row group it can write a batch into.
+        assert_eq!(vectors_per_row_group(1 << 30), DEFAULT_BATCH_SIZE);
+        assert_eq!(vectors_per_row_group(0), vectors_per_row_group(1));
     }
 
     #[test]
