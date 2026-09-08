@@ -669,13 +669,19 @@ pub(crate) fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
         .ok_or(Error::NoCapture { path: app_dir })
 }
 
+/// Whether a snapshot holds a shard with anything in it.
+///
+/// The file has to be non-empty, not merely present. A crawl creates each shard's file
+/// before it fetches the first page, so an interrupted one leaves a directory of zero-byte
+/// shards, and a check on the name alone would take that for a corpus.
 fn holds_a_shard(snapshot: &Path) -> bool {
     std::fs::read_dir(snapshot).is_ok_and(|entries| {
         entries.filter_map(std::result::Result::ok).any(|entry| {
-            entry
+            let named_like_a_shard = entry
                 .file_name()
                 .to_str()
-                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"))
+                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"));
+            named_like_a_shard && entry.metadata().is_ok_and(|meta| meta.len() > 0)
         })
     })
 }
@@ -772,7 +778,12 @@ mod tests {
 
         assert_eq!(latest_snapshot(&root, 1).unwrap(), complete);
 
-        // Once the restart writes a shard, it is the newer corpus and does take precedence.
+        // A crawl opens each shard's file before it fetches anything, so an interrupted one
+        // leaves empty shards behind. Those are not a corpus either.
+        std::fs::write(abandoned.join("shard-0000.parquet"), b"").unwrap();
+        assert_eq!(latest_snapshot(&root, 1).unwrap(), complete);
+
+        // Once the restart writes a shard with something in it, it does take precedence.
         std::fs::write(abandoned.join("shard-0000.parquet"), b"not really parquet").unwrap();
         assert_eq!(latest_snapshot(&root, 1).unwrap(), abandoned);
 

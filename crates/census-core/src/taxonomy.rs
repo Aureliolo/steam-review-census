@@ -107,8 +107,9 @@ pub const CORE_SPINE: &[Category] = &[
                       the publisher did elsewhere.",
         boundary: Some(
             "A joke that still makes a point about the game belongs to whatever it is joking \
-             about, most often gameplay or difficulty. This is only for reviews from which a \
-             reader would learn nothing about the game at all.",
+             about, most often gameplay or difficulty, and a protest that names something the \
+             publisher requires belongs to policy. This is only for reviews from which a \
+             reader would learn nothing at all.",
         ),
     },
     Category {
@@ -214,7 +215,27 @@ pub const CORE_SPINE: &[Category] = &[
         description: "What the developers do after release. Patches, roadmaps, early access \
                       progress, communication with players, whether promises were kept, and \
                       whether the game is abandoned.",
-        boundary: None,
+        boundary: Some(
+            "What the developers do to the game belongs here. What the publisher or the \
+             platform requires of the player belongs to policy.",
+        ),
+    },
+    // Review bombs over publisher decisions are the reviews Steam's own default filter hides,
+    // and this tool exists partly to count them. On one corpus measured they are 16% of
+    // 1.16 million reviews, with nowhere to go: offtopic means a reader learns nothing about
+    // the game, and "you need a second account to play" is not nothing.
+    Category {
+        id: "policy",
+        label: "Publisher and platform policy",
+        description: "Decisions taken by the publisher or the platform rather than by the \
+                      game. Needing a second account to play, region locks and delistings, \
+                      DRM and kernel-level anti-cheat, launcher requirements, price rises, \
+                      and terms that changed after people had bought it.",
+        boundary: Some(
+            "A requirement or restriction placed on the player belongs here even when the \
+             review is angry and brief. A protest that names no requirement at all, and would \
+             tell a reader nothing, is offtopic.",
+        ),
     },
     Category {
         id: "compatibility",

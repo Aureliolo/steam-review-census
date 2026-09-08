@@ -21,7 +21,7 @@ Overall verdict only (verdict)
 
 Says nothing about the game (offtopic)
   The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
-  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty. This is only for reviews from which a reader would learn nothing about the game at all.
+  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest that names something the publisher requires belongs to policy. This is only for reviews from which a reader would learn nothing at all.
 
 Story and writing (story)
   The story, plot and characters. The writing, the dialogue, the humour, the ending, the world and its lore, the characters players grew fond of, and whether the narrative is worth following.
@@ -62,6 +62,11 @@ Community and players (community)
 
 Updates and developer support (updates)
   What the developers do after release. Patches, roadmaps, early access progress, communication with players, whether promises were kept, and whether the game is abandoned.
+  RULE: What the developers do to the game belongs here. What the publisher or the platform requires of the player belongs to policy.
+
+Publisher and platform policy (policy)
+  Decisions taken by the publisher or the platform rather than by the game. Needing a second account to play, region locks and delistings, DRM and kernel-level anti-cheat, launcher requirements, price rises, and terms that changed after people had bought it.
+  RULE: A requirement or restriction placed on the player belongs here even when the review is angry and brief. A protest that names no requirement at all, and would tell a reader nothing, is offtopic.
 
 Hardware and compatibility (compatibility)
   Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
