@@ -32,6 +32,11 @@ The only way to remove the argument is to hold every review and count.
 - Build an overall picture of the game from those category summaries.
 - Click through from any number, anywhere, to the actual reviews behind it.
 
+Results come out as one self-contained page: every rate, the reviews behind it, and what the
+classifier is measured to get wrong, in a single file you can open from disk, send to someone,
+or print. It fetches nothing, because a corpus that never left your machine should not start
+leaving it the moment somebody looks at it.
+
 You choose which model does the sorting, and how closely it reads.
 
 ### What a percentage means here
@@ -180,7 +185,9 @@ redistributing them here.
 
 By default nothing you pull leaves your machine. The crawler talks to Valve, and
 categorisation runs on a local embedding model, so a complete census is possible with no
-account, no key and no network beyond Steam itself.
+account, no key and no network beyond Steam itself. Reports are the same: one file with no
+fonts, scripts or stylesheets fetched from anywhere, so reading a result is not a way of
+publishing it.
 
 Configuring a hosted model changes that in a specific and bounded way: the text of a sampled
 subset of reviews is sent to that provider to induce categories, label examples and write
