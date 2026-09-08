@@ -369,5 +369,29 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
         "the link back to the source is missing or malformed"
     );
 
+    // Re-embedding without classifying again leaves counts describing vectors that are gone.
+    // They would render perfectly and be wrong, so the report refuses them.
+    let sidecar = snapshot.join("classification.json");
+    let mut stored: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
+    stored["model"] = serde_json::Value::String("some-other-encoder".to_owned());
+    std::fs::write(&sidecar, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
+
+    let refused = census_core::report::build(
+        &[1],
+        &census_core::report::ReportOptions {
+            out_dir: root.clone(),
+            examples: 4,
+            seed: 1,
+        },
+    );
+    let message = refused
+        .expect_err("a stale classification must not render")
+        .to_string();
+    assert!(
+        message.contains("embedding model"),
+        "the refusal should name what disagrees, got: {message}"
+    );
+
     std::fs::remove_dir_all(&root).ok();
 }

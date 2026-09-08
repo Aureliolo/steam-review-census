@@ -276,6 +276,17 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let classification: Classification = read_json(&snapshot.join("classification.json"))?;
     let crawl: CrawlFacts = read_json(&snapshot.join("crawl.json"))?;
 
+    // Re-embedding a corpus and forgetting to classify it again leaves counts that describe
+    // vectors nothing here holds any more. They would render perfectly and be wrong.
+    let corpus_encoder = crate::embed::corpus_encoder(&options.out_dir, app_id)?;
+    if corpus_encoder != classification.model {
+        return Err(crate::Error::StaleAnchors {
+            field: "embedding model",
+            expected: corpus_encoder,
+            actual: classification.model,
+        });
+    }
+
     let wanted_per_category = shortlist(&snapshot, options)?;
     let mut wanted: HashSet<String> = wanted_per_category
         .values()
