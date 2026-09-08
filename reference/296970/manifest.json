@@ -1,0 +1,12 @@
+{
+  "app_id": 296970,
+  "produced_by": "claude-fable-5-1, ten parallel labellers over a stratified sample; spot-checked by claude-opus-5 on low-confidence labels and on disagreements with the classifier",
+  "spine_version": "core-2",
+  "human_verified": false,
+  "notes": [
+    "374 reviews: 20 per predicted category plus a random tail, so per-category figures are possible without the sample being purely the classifier's own view.",
+    "Because no person has checked these labels, results measured against this set are AGREEMENT WITH A MODEL and must never be reported as accuracy. Two language models agreeing can be wrong together, and the sarcasm and category-boundary cases where this classifier is weakest are exactly where that correlation is strongest.",
+    "Spot check found the reference labels better than the classifier on roughly nine of ten disagreements: 'good' was classified as price, 'amauzing' as audio, and a Chinese review about exploration and skills as bugs. One review of 374 received seven secondary categories, which edges towards over-assignment on long text.",
+    "Set human_verified to true only once a person has labelled a subset independently, and record how large that subset was."
+  ]
+}

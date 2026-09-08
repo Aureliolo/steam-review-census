@@ -85,6 +85,18 @@ enum Command {
         #[arg(long)]
         model_dir: Option<PathBuf>,
     },
+
+    /// Compare stored classifications against a reference set.
+    Evaluate {
+        /// Steam app ID to evaluate.
+        app_id: u32,
+        /// Directory holding the capture and its classifications.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Reference set directory, holding manifest.json and labels.json.
+        #[arg(long)]
+        reference: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -128,7 +140,104 @@ async fn main() -> Result<()> {
             };
             run_classify(app_id, &options, model_dir).await
         }
+        Command::Evaluate {
+            app_id,
+            out,
+            reference,
+        } => run_evaluate(app_id, &out, reference),
     }
+}
+
+fn run_evaluate(app_id: u32, out: &std::path::Path, reference: Option<PathBuf>) -> Result<()> {
+    let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
+    let set = census_core::ReferenceSet::load(&dir)?;
+
+    let unknown = set.unknown_categories();
+    if !unknown.is_empty() {
+        eprintln!(
+            "warning: reference set names categories the taxonomy does not have: {unknown:?}"
+        );
+    }
+    if set.spine_version != census_core::CORE_SPINE_VERSION {
+        eprintln!(
+            "warning: reference set was labelled against taxonomy {} but this build is {}; \
+             the comparison is not meaningful.",
+            set.spine_version,
+            census_core::CORE_SPINE_VERSION
+        );
+    }
+
+    let report = census_core::compare(&set, out, app_id)?;
+    print_agreement(&report, set.human_verified);
+    Ok(())
+}
+
+fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) {
+    let measure = if human_verified {
+        "accuracy"
+    } else {
+        "agreement"
+    };
+    println!("app {}", report.app_id);
+    println!("  reference    {}", report.produced_by);
+    println!("  compared     {}", thousands(report.compared));
+    if report.unmatched > 0 {
+        println!("  unmatched    {}", thousands(report.unmatched));
+    }
+    println!(
+        "  primary {measure:<4} {}",
+        report
+            .primary_agreement
+            .map_or_else(|| "n/a".to_owned(), |a| format!("{:.1}%", a * 100.0))
+    );
+    println!(
+        "  macro F1     {}",
+        report
+            .macro_f1()
+            .map_or_else(|| "n/a".to_owned(), |f| format!("{f:.3}"))
+    );
+    for (subset, n, agreed) in &report.by_subset {
+        // A set stratified by predicted category over-represents categories the classifier
+        // rarely picks, so only the random draw estimates the corpus.
+        let note = if subset == "random" {
+            "  <- corpus-representative"
+        } else {
+            ""
+        };
+        println!(
+            "    {subset:<12} n={n:<5} {}{note}",
+            agreed.map_or_else(|| "n/a".to_owned(), |a| format!("{:.1}%", a * 100.0))
+        );
+    }
+
+    let mut categories = report.categories.clone();
+    categories.sort_by_key(|c| std::cmp::Reverse(c.reference_mentions));
+    println!(
+        "\n{:<26} {:>8} {:>10} {:>8} {:>7}",
+        "category", "in ref", "precision", "recall", "F1"
+    );
+    println!("{}", "-".repeat(64));
+    for stat in &categories {
+        let fmt = |v: Option<f64>| v.map_or_else(|| "    -".to_owned(), |x| format!("{x:.2}"));
+        println!(
+            "{:<26} {:>8} {:>10} {:>8} {:>7}",
+            stat.label,
+            stat.reference_mentions,
+            fmt(stat.precision()),
+            fmt(stat.recall()),
+            fmt(stat.f1())
+        );
+    }
+
+    if human_verified {
+        return;
+    }
+    println!(
+        "\nThese are AGREEMENT figures, not accuracy. The reference labels were produced by a\n\
+         model, so this measures consistency between two models rather than correctness.\n\
+         Two models can agree and both be wrong, most likely on sarcasm and on reviews that\n\
+         sit between categories, which is exactly where this classifier is weakest."
+    );
 }
 
 async fn run_classify(
