@@ -385,7 +385,7 @@ fn distinct_texts(snapshot: &Path) -> Result<(HashMap<String, u32>, u64)> {
 }
 
 /// The newest snapshot directory for an app.
-fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
+pub(crate) fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
     let app_dir = out_dir.join(format!("appid={app_id}"));
     let mut best: Option<(i64, PathBuf)> = None;
 
@@ -409,7 +409,7 @@ fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
         .ok_or(Error::NoCapture { path: app_dir })
 }
 
-fn sha256_hex(text: &str) -> String {
+pub(crate) fn sha256_hex(text: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
     let digest = hasher.finalize();

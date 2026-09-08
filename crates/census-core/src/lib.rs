@@ -4,21 +4,25 @@
 
 pub mod api;
 pub mod capture;
+pub mod classify;
 pub mod crawl;
 pub mod embed;
 pub mod model;
 pub mod query;
 pub mod shard;
 pub mod state;
+pub mod taxonomy;
 
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
 pub use capture::CaptureWriter;
+pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corpus};
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
 pub use model::{EMBEDDING_DIM, MODEL_ID};
 pub use query::{ReviewQuery, SortOrder};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
 pub use state::CrawlState;
+pub use taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, Category};
 
 /// Anything that can go wrong while building a corpus.
 #[derive(Debug, thiserror::Error)]
@@ -53,6 +57,9 @@ pub enum Error {
 
     #[error("no capture found at {path}; run `census crawl` first")]
     NoCapture { path: std::path::PathBuf },
+
+    #[error("no embeddings found at {path}; run `census embed` first")]
+    NoEmbeddings { path: std::path::PathBuf },
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),
