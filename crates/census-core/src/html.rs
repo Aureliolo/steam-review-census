@@ -513,6 +513,32 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
     out.push_str("</div>\n</li>\n");
 }
 
+/// Where the categories came from, and in particular whether this game was one of them.
+///
+/// Anchors fitted on other games and never on this one still work, and how well is the one
+/// thing `census fit --leave-one-out` measures. A reader is entitled to know which of the two
+/// they are looking at without going and reading a file.
+fn built_from(app: &AppReport) -> String {
+    let games = app.classification.anchors_fitted_from.len();
+    if games == 0 {
+        return "written category descriptions, fitted to no labels".to_owned();
+    }
+    let of_them = if games == 1 {
+        "one game".to_owned()
+    } else {
+        format!("{games} games")
+    };
+    if app
+        .classification
+        .anchors_fitted_from
+        .contains(&app.app_id())
+    {
+        format!("labelled reviews from {of_them}, this one among them")
+    } else {
+        format!("labelled reviews from {of_them}, none of them this one")
+    }
+}
+
 /// What the reader is entitled to conclude, next to the numbers rather than in a footnote.
 /// What language the corpus is in, which Steam's own page cannot show a reader at all.
 fn languages(out: &mut String, app: &AppReport) {
@@ -586,20 +612,7 @@ fn trust(out: &mut String, app: &AppReport) {
     out.push_str("<h3>How far to trust this</h3>\n");
     out.push_str("<dl class=\"facts wide\">\n");
 
-    let anchors = if app.classification.anchors_fitted_from.is_empty() {
-        "written category descriptions, fitted to no labels".to_owned()
-    } else {
-        format!(
-            "fitted on labelled reviews from {}",
-            app.classification
-                .anchors_fitted_from
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-    fact(out, "Categories built from", &anchors);
+    fact(out, "Categories built from", &built_from(app));
     fact(out, "Encoder", &app.classification.model);
     fact(out, "Taxonomy", &app.classification.spine_version);
     if app.classification.unmatched > 0 {
