@@ -63,6 +63,9 @@ pub const DEFAULT_TOP_HELPFUL: usize = 50;
 /// alone rather than about everything it happens to sit near.
 const MAX_MENTIONS: usize = 4;
 
+/// Rows per Parquet row group, which is what the writer buffers before flushing.
+const ROWS_PER_ROW_GROUP: usize = 262_144;
+
 #[derive(Debug, Clone)]
 pub struct ClassifyOptions {
     pub out_dir: PathBuf,
@@ -201,6 +204,7 @@ pub fn classify_corpus(
         Some(
             WriterProperties::builder()
                 .set_compression(Compression::ZSTD(ZstdLevel::default()))
+                .set_max_row_group_row_count(Some(ROWS_PER_ROW_GROUP))
                 .build(),
         ),
     )?;

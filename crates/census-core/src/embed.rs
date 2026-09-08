@@ -275,8 +275,13 @@ pub fn embed_corpus(
     // everywhere downstream; a partial file under its own name cannot be mistaken for one.
     let partial = snapshot.join("embeddings.parquet.partial");
     let schema = embedding_schema();
+    // A row group is buffered whole before it reaches the disk, and the default holds a
+    // million rows. At 1.5 KB a vector that is the entire file in memory for any corpus
+    // smaller than that, which is most of them, and it is why embedding a million-review
+    // game was killed for memory even after the text itself stopped being held.
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .set_max_row_group_row_count(Some(VECTORS_PER_ROW_GROUP))
         .build();
     let mut writer = ArrowWriter::try_new(
         std::fs::File::create(&partial)?,
@@ -353,6 +358,12 @@ pub fn embed_corpus(
         path,
     })
 }
+
+/// Vectors per Parquet row group, which is what the writer buffers before flushing.
+///
+/// At 384 floats a row that is roughly 100 MB held at a time, which is a sensible row group
+/// for readers and a bounded amount of memory for writers.
+const VECTORS_PER_ROW_GROUP: usize = 65_536;
 
 /// Distinct texts buffered before they are sorted by length and embedded.
 ///

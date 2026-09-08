@@ -21,6 +21,9 @@ use serde_json::Value;
 
 use crate::{Error, Result};
 
+/// Reviews per Parquet row group, which is what the writer buffers before flushing.
+const REVIEWS_PER_ROW_GROUP: usize = 65_536;
+
 #[must_use]
 pub fn schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
@@ -70,8 +73,11 @@ impl CaptureWriter {
             std::fs::create_dir_all(parent)?;
         }
         let schema = schema();
+        // Buffered whole before it reaches the disk, so this bounds what a shard holding
+        // tens of thousands of reviews costs in memory.
         let props = WriterProperties::builder()
             .set_compression(Compression::ZSTD(ZstdLevel::default()))
+            .set_max_row_group_row_count(Some(REVIEWS_PER_ROW_GROUP))
             .build();
         let writer = ArrowWriter::try_new(File::create(path)?, Arc::clone(&schema), Some(props))?;
         Ok(Self {
