@@ -11,6 +11,27 @@ use census_core::{
 };
 use clap::{Parser, Subcommand, ValueEnum};
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum Precision {
+    /// Smallest download, 112 MB. Slowest on a GPU, and its vectors shift with batching.
+    Int8,
+    /// 224 MB. Indistinguishable from fp32 and the fastest where a GPU exists.
+    #[default]
+    Fp16,
+    /// 448 MB. The graph as exported, and the fastest of the three on CPU.
+    Fp32,
+}
+
+impl From<Precision> for census_core::model::Precision {
+    fn from(value: Precision) -> Self {
+        match value {
+            Precision::Int8 => Self::Int8,
+            Precision::Fp16 => Self::Float16,
+            Precision::Fp32 => Self::Float32,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Calibrate {
     Search,
@@ -80,35 +101,17 @@ enum Command {
         /// Reviews per forward pass.
         #[arg(long, default_value_t = DEFAULT_BATCH_SIZE)]
         batch_size: usize,
+        /// Which build of the model to run. fp16 matches the full graph and is fastest on
+        /// a GPU; int8 is the smallest download but its vectors shift with batching.
+        #[arg(long, default_value = "fp16")]
+        precision: Precision,
         /// Where to cache the model. Defaults to the platform cache directory.
         #[arg(long)]
         model_dir: Option<PathBuf>,
     },
 
     /// Sort embedded reviews into the core-spine categories and report what players say.
-    Classify {
-        /// Steam app ID whose most recent capture should be classified.
-        app_id: u32,
-        /// Directory holding the capture and its embeddings.
-        #[arg(short, long, default_value = "data")]
-        out: PathBuf,
-        /// How close to the best match a category must score to count as mentioned.
-        /// Defaults to the margin the anchors were fitted with.
-        #[arg(long)]
-        mention_margin: Option<f32>,
-        /// How many of the most-upvoted reviews count as "the top of the pile".
-        #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
-        top_helpful: usize,
-        /// Anchors fitted by `census fit`. Falls back to the written category descriptions.
-        #[arg(long)]
-        anchors: Option<PathBuf>,
-        /// Ignore any fitted anchors and use the written category descriptions.
-        #[arg(long, conflicts_with = "anchors")]
-        descriptions: bool,
-        /// Where to cache the model. Defaults to the platform cache directory.
-        #[arg(long)]
-        model_dir: Option<PathBuf>,
-    },
+    Classify(ClassifyArgs),
 
     /// Fit category anchors from a reference set, so categories are represented by reviews
     /// people wrote rather than by descriptions of the topic.
@@ -154,6 +157,34 @@ enum Command {
 }
 
 #[derive(clap::Args, Debug)]
+struct ClassifyArgs {
+    /// Steam app ID whose most recent capture should be classified.
+    app_id: u32,
+    /// Directory holding the capture and its embeddings.
+    #[arg(short, long, default_value = "data")]
+    out: PathBuf,
+    /// How close to the best match a category must score to count as mentioned.
+    /// Defaults to the margin the anchors were fitted with.
+    #[arg(long)]
+    mention_margin: Option<f32>,
+    /// How many of the most-upvoted reviews count as "the top of the pile".
+    #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
+    top_helpful: usize,
+    /// Anchors fitted by `census fit`. Falls back to the written category descriptions.
+    #[arg(long)]
+    anchors: Option<PathBuf>,
+    /// Ignore any fitted anchors and use the written category descriptions.
+    #[arg(long, conflicts_with = "anchors")]
+    descriptions: bool,
+    /// Which build of the model to run when descriptions must be embedded.
+    #[arg(long, default_value = "fp16")]
+    precision: Precision,
+    /// Where to cache the model. Defaults to the platform cache directory.
+    #[arg(long)]
+    model_dir: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug)]
 struct FitArgs {
     /// Steam app ID whose reference labels should be fitted.
     app_id: u32,
@@ -179,6 +210,9 @@ struct FitArgs {
     /// Where to cache the model. Defaults to the platform cache directory.
     #[arg(long)]
     model_dir: Option<PathBuf>,
+    /// Which build of the model to run when descriptions must be embedded.
+    #[arg(long, default_value = "fp16")]
+    precision: Precision,
 }
 
 #[tokio::main]
@@ -207,27 +241,9 @@ async fn main() -> Result<()> {
             out,
             batch_size,
             model_dir,
-        } => run_embed(app_id, &out, batch_size, model_dir).await,
-        Command::Classify {
-            app_id,
-            out,
-            mention_margin,
-            top_helpful,
-            anchors,
-            descriptions,
-            model_dir,
-        } => {
-            run_classify(
-                app_id,
-                out,
-                mention_margin,
-                top_helpful,
-                anchors,
-                descriptions,
-                model_dir,
-            )
-            .await
-        }
+            precision,
+        } => run_embed(app_id, &out, batch_size, model_dir, precision.into()).await,
+        Command::Classify(args) => run_classify(args).await,
         Command::Fit(args) => run_fit(args).await,
         Command::Sample {
             app_ids,
@@ -358,6 +374,7 @@ async fn load_anchors(
     explicit: Option<PathBuf>,
     force_descriptions: bool,
     model_dir: Option<PathBuf>,
+    precision: census_core::model::Precision,
 ) -> Result<census_core::Anchors> {
     let path = explicit
         .clone()
@@ -379,8 +396,8 @@ async fn load_anchors(
     }
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
-    census_core::model::ensure(&cache, |_| {}).await?;
-    let mut embedder = census_core::Embedder::load(&cache)?;
+    census_core::model::ensure(&cache, precision, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(&cache, precision)?;
     eprintln!(
         "anchors      written descriptions, on {}",
         embedder.device()
@@ -388,16 +405,18 @@ async fn load_anchors(
     Ok(census_core::Anchors::from_descriptions(&mut embedder)?)
 }
 
-async fn run_classify(
-    app_id: u32,
-    out: PathBuf,
-    mention_margin: Option<f32>,
-    top_helpful: usize,
-    anchors: Option<PathBuf>,
-    descriptions: bool,
-    model_dir: Option<PathBuf>,
-) -> Result<()> {
-    let anchors = load_anchors(app_id, anchors, descriptions, model_dir).await?;
+async fn run_classify(args: ClassifyArgs) -> Result<()> {
+    let ClassifyArgs {
+        app_id,
+        out,
+        mention_margin,
+        top_helpful,
+        anchors,
+        descriptions,
+        precision,
+        model_dir,
+    } = args;
+    let anchors = load_anchors(app_id, anchors, descriptions, model_dir, precision.into()).await?;
     let options = ClassifyOptions {
         out_dir: out,
         mention_margin: mention_margin.unwrap_or_else(|| anchors.mention_margin()),
@@ -484,6 +503,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         calibrate,
         anchors_out,
         model_dir,
+        precision,
     } = args;
     let holdout = holdout.as_str();
     let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
@@ -518,8 +538,9 @@ async fn run_fit(args: FitArgs) -> Result<()> {
     let centroid = census_core::embed::corpus_centroid(&out, app_id)?;
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
-    census_core::model::ensure(&cache, |_| {}).await?;
-    let mut embedder = census_core::Embedder::load(&cache)?;
+    let precision = precision.into();
+    census_core::model::ensure(&cache, precision, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(&cache, precision)?;
     let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
 
     eprintln!(
@@ -675,13 +696,14 @@ async fn run_embed(
     out: &std::path::Path,
     batch_size: usize,
     model_dir: Option<PathBuf>,
+    precision: census_core::model::Precision,
 ) -> Result<()> {
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     let interactive = std::io::stderr().is_terminal();
 
     eprintln!("model cache: {}", cache.display());
     let mut announced = String::new();
-    census_core::model::ensure(&cache, |progress| {
+    census_core::model::ensure(&cache, precision, |progress| {
         if announced != progress.file {
             progress.file.clone_into(&mut announced);
             eprintln!("  downloading {}", progress.file);
@@ -704,7 +726,7 @@ async fn run_embed(
         eprintln!();
     }
 
-    let mut embedder = census_core::Embedder::load(&cache)?;
+    let mut embedder = census_core::Embedder::load(&cache, precision)?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
     let report = census_core::embed_corpus(&mut embedder, out, app_id, batch_size, |progress| {

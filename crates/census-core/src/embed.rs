@@ -35,6 +35,7 @@ pub const DEFAULT_BATCH_SIZE: usize = 64;
 pub struct Embedder {
     session: Session,
     tokenizer: Tokenizer,
+    precision: model::Precision,
     device_name: &'static str,
     output_name: String,
     wants_token_type_ids: bool,
@@ -56,11 +57,17 @@ impl Embedder {
         self.device_name
     }
 
+    /// Which build of the graph is loaded. Part of a corpus's provenance.
+    #[must_use]
+    pub fn precision(&self) -> model::Precision {
+        self.precision
+    }
+
     /// # Errors
     ///
     /// Fails if the model files are missing, corrupt, or cannot be loaded on any backend.
-    pub fn load(cache_dir: &Path) -> Result<Self> {
-        let (session, device_name) = model::session(cache_dir)?;
+    pub fn load(cache_dir: &Path, precision: model::Precision) -> Result<Self> {
+        let (session, device_name) = model::session(cache_dir, precision)?;
         let mut tokenizer = Tokenizer::from_file(model::tokenizer_path(cache_dir))
             .map_err(|e| Error::Tokenizer(e.to_string()))?;
         tokenizer.with_padding(Some(PaddingParams {
@@ -92,6 +99,7 @@ impl Embedder {
         Ok(Self {
             session,
             tokenizer,
+            precision,
             device_name,
             output_name,
             wants_token_type_ids,
@@ -100,19 +108,19 @@ impl Embedder {
 
     /// Embeds a batch, mean-pooled over real tokens and L2-normalised.
     ///
-    /// **A review's vector depends on which reviews were embedded alongside it.** The model
-    /// this project ships is int8, and dynamic quantisation derives its activation scales
-    /// per tensor, which spans the whole batch: the extremes of the batch set the scale
-    /// everything in it is rounded to. Measured on a 2,909-review corpus, batches of 64
-    /// against batches of one gave a mean cosine of 0.997 and put 12.5% of reviews in a
-    /// different category. It is not padding, which grouping by exact token length removes
-    /// without closing the gap, and it is not the execution provider, which reproduces it on
-    /// CPU to three decimal places.
+    /// Under [`Precision::Int8`] a review's vector depends on which reviews were embedded
+    /// alongside it: dynamic quantisation derives its activation scales per tensor, and a
+    /// tensor spans the batch, so the extremes of a batch set the rounding for everything in
+    /// it. Batches of 64 against batches of one gave a mean cosine of 0.997 and put 12.5% of
+    /// reviews in a different category. It is not padding, which grouping by exact token
+    /// length removes without closing the gap, and it is not the execution provider, which
+    /// reproduces it on CPU. The float builds do not have the problem at all, which is why
+    /// one of them is the default.
     ///
-    /// What survives is the aggregate: mention rates across a corpus moved at most 1.6
-    /// percentage points and 0.31 on average, because per-review disagreements largely
-    /// cancel. Batch size is therefore part of the provenance of a corpus rather than a
-    /// tuning knob, and it is recorded alongside the vectors.
+    /// Even under int8 the aggregate survives: mention rates across a corpus moved at most
+    /// 1.6 percentage points and 0.31 on average, because per-review disagreements largely
+    /// cancel. Batch size is recorded alongside the vectors either way, so two corpora can
+    /// be compared knowingly.
     ///
     /// # Errors
     ///
@@ -320,14 +328,15 @@ pub fn embed_corpus(
         snapshot.join("embeddings.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
             "model": MODEL_ID,
+            "precision": embedder.precision().as_str(),
             "dimensions": EMBEDDING_DIM,
             "batch_size": batch_size,
             "device": embedder.device(),
             "reviews": reviews,
             "unique_texts": unique_texts,
-            "note": "Vectors from the int8 model depend on batch size: dynamic quantisation \
+            "note": "Vectors from the int8 build depend on batch size: dynamic quantisation \
                      takes its activation scales per tensor, and a tensor spans the batch. \
-                     Compare corpora embedded at the same batch size.",
+                     The float builds do not. Compare corpora built the same way.",
         }))?,
     )?;
 
