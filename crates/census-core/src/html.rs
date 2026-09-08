@@ -603,11 +603,13 @@ fn trust(out: &mut String, app: &AppReport) {
     fact(out, "Encoder", &app.classification.model);
     fact(out, "Taxonomy", &app.classification.spine_version);
     if app.classification.unmatched > 0 {
+        // Not the blank reviews: those never enter a count at all. These are reviews whose
+        // text has no vector, which means the corpus was embedded before they arrived.
         fact(
             out,
-            "Reviews with no text",
+            "Reviews with no vector",
             &format!(
-                "{} (counted in no rate)",
+                "{} (embed again to include them)",
                 thousands(app.classification.unmatched)
             ),
         );
