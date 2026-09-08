@@ -466,6 +466,47 @@ button.more:hover {
   color: var(--accent);
 }
 
+.verdict-share.warmer {
+  color: var(--under);
+}
+
+.verdict-share.colder {
+  color: var(--over);
+}
+
+ul.languages {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-width: 34rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+ul.languages li {
+  display: grid;
+  grid-template-columns: 8rem 1fr 5rem;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+}
+
+ul.languages .bar {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+ul.languages .lang-count {
+  text-align: right;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 footer.page {
   padding: 2.5rem 0 4rem;
   color: var(--ink-soft);

@@ -20,6 +20,9 @@ use crate::{
 /// Characters of a review shown before it is folded away behind a control.
 const PREVIEW_CHARS: usize = 320;
 
+/// Languages listed before the tail is summarised as a count.
+const LANGUAGES_SHOWN: usize = 12;
+
 /// Renders the whole report.
 #[must_use]
 pub fn render(report: &Report) -> String {
@@ -75,6 +78,7 @@ fn game(out: &mut String, app: &AppReport) {
     headline(out, app);
     categories(out, app);
     top_of_the_pile(out, app);
+    languages(out, app);
     trust(out, app);
     out.push_str("</div>\n</section>\n");
 }
@@ -137,9 +141,22 @@ fn headline(out: &mut String, app: &AppReport) {
 
 fn categories(out: &mut String, app: &AppReport) {
     out.push_str("<h3>What players talk about</h3>\n");
+    if let Some(baseline) = app.positive_baseline() {
+        let _ = writeln!(
+            out,
+            "<p class=\"note baseline\">{} of all {} reviews recommend this game. Every figure \
+             in the last column is worth reading against that.</p>",
+            percent(baseline),
+            thousands(app.classification.reviews)
+        );
+    }
     out.push_str(
-        "<p class=\"note\">A review counts towards every category it says something about, \
-         so these add up to more than 100%. Select a row to read the reviews behind it.</p>\n",
+        "<p class=\"note\">A review counts towards every category it says something about, so \
+         these add up to more than 100%. <strong>Bias</strong> is how much the top of the pile \
+         overstates a category: 0\u{d7} means none of those few dozen reviews raised it, which \
+         is weak evidence rather than proof of absence. <strong>Recommended</strong> is the \
+         share of the reviews raising a category that still recommended the game, against \
+         this game's own baseline. Select a row to read the reviews behind it.</p>\n",
     );
 
     let mut rows: Vec<&CategoryCount> = app.classification.categories.iter().collect();
@@ -152,6 +169,7 @@ fn categories(out: &mut String, app: &AppReport) {
     out.push_str("<th scope=\"col\" class=\"num\">Main subject</th>");
     out.push_str("<th scope=\"col\" class=\"num\">Top of the pile</th>");
     out.push_str("<th scope=\"col\" class=\"num\">Bias</th>");
+    out.push_str("<th scope=\"col\" class=\"num\">Recommended</th>");
     out.push_str("</tr></thead>\n<tbody>\n");
 
     for category in rows {
@@ -218,10 +236,11 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
             .map_or("—".to_owned(), percent)
     );
     bias_cell(out, app.bias(category));
+    verdict_cell(out, category.positive_share(), app.positive_baseline());
     out.push_str("</tr>\n");
 
     if has_examples {
-        let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"5\">");
+        let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"6\">");
         reviews(out, app, examples);
         out.push_str("</td></tr>");
     }
@@ -242,6 +261,27 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
         "<td class=\"num bias\"><span class=\"gauge {side}\" style=\"--offset:{:.4}\"></span>\
          <span class=\"value\">{factor:.1}\u{d7}</span></td>",
         offset.abs()
+    );
+}
+
+/// Whether a topic is raised by people recommending the game or refusing to.
+///
+/// Shown against the corpus baseline, because a category where 80% recommend the game is
+/// only interesting once a reader knows whether 80% is high or low for that game.
+fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
+    let Some(share) = share else {
+        out.push_str("<td class=\"num\">\u{2014}</td>");
+        return;
+    };
+    let tone = match baseline {
+        Some(baseline) if share > baseline + 0.05 => " warmer",
+        Some(baseline) if share < baseline - 0.05 => " colder",
+        _ => "",
+    };
+    let _ = write!(
+        out,
+        "<td class=\"num verdict-share{tone}\">{}</td>",
+        percent(share)
     );
 }
 
@@ -345,6 +385,74 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
 }
 
 /// What the reader is entitled to conclude, next to the numbers rather than in a footnote.
+/// What language the corpus is in, which Steam's own page cannot show a reader at all.
+fn languages(out: &mut String, app: &AppReport) {
+    if app.classification.languages.is_empty() {
+        return;
+    }
+    let total: u64 = app.classification.languages.iter().map(|(_, n)| n).sum();
+    let english = app
+        .classification
+        .languages
+        .iter()
+        .find(|(name, _)| name == "english")
+        .map_or(0, |(_, count)| *count);
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    let not_english = if total > 0 {
+        (total - english) as f64 / total as f64
+    } else {
+        0.0
+    };
+
+    out.push_str("<h3>What language it was said in</h3>\n");
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">{} of these reviews are not in English. Steam shows a reader their \
+         own language by default, so most of this argument is one they never see.</p>",
+        percent(not_english)
+    );
+
+    let widest = app
+        .classification
+        .languages
+        .first()
+        .map_or(1, |(_, count)| *count)
+        .max(1);
+    out.push_str("<ul class=\"languages\">\n");
+    for (name, count) in app.classification.languages.iter().take(LANGUAGES_SHOWN) {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "review counts are far below 2^53"
+        )]
+        let fill = *count as f64 / widest as f64;
+        let _ = writeln!(
+            out,
+            "<li><span class=\"lang-name\">{}</span>\
+             <span class=\"bar\" style=\"--fill:{fill:.4}\"></span>\
+             <span class=\"lang-count\">{}</span></li>",
+            escape(name),
+            thousands(*count)
+        );
+    }
+    out.push_str("</ul>\n");
+
+    let rest = app
+        .classification
+        .languages
+        .len()
+        .saturating_sub(LANGUAGES_SHOWN);
+    if rest > 0 {
+        let _ = writeln!(
+            out,
+            "<p class=\"note\">and {rest} more languages with fewer reviews each.</p>"
+        );
+    }
+}
+
 fn trust(out: &mut String, app: &AppReport) {
     out.push_str("<h3>How far to trust this</h3>\n");
     out.push_str("<dl class=\"facts wide\">\n");

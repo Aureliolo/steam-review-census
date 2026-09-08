@@ -50,6 +50,10 @@ impl Default for ReportOptions {
 pub struct Classification {
     pub app_id: u32,
     pub reviews: u64,
+    /// Classified reviews that recommended the game. Absent from sidecars written before
+    /// the classifier counted it.
+    #[serde(default)]
+    pub positive: u64,
     pub unmatched: u64,
     pub top_helpful: u64,
     pub mention_margin: f32,
@@ -58,6 +62,9 @@ pub struct Classification {
     #[serde(default)]
     pub anchors_fitted_from: Vec<u32>,
     pub categories: Vec<CategoryCount>,
+    /// Reviews per language, most common first.
+    #[serde(default)]
+    pub languages: Vec<(String, u64)>,
     #[serde(default)]
     pub top_reviews: Vec<TopRow>,
 }
@@ -69,6 +76,22 @@ pub struct CategoryCount {
     pub primary_count: u64,
     pub mention_count: u64,
     pub top_mention_count: u64,
+    /// Of the reviews mentioning this, how many still recommended the game. Absent from
+    /// sidecars written before the classifier counted it.
+    #[serde(default)]
+    pub positive_mentions: u64,
+}
+
+impl CategoryCount {
+    /// Share of the reviews mentioning this category that recommended the game.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn positive_share(&self) -> Option<f64> {
+        (self.mention_count > 0).then(|| self.positive_mentions as f64 / self.mention_count as f64)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -152,6 +175,23 @@ pub struct AppReport {
     pub top: Vec<Example>,
     /// Measured agreement against a reference set, where one exists for this game.
     pub agreement: Option<crate::AgreementReport>,
+}
+
+impl AppReport {
+    /// Share of the whole corpus that recommended the game, which is the line every
+    /// category's own share should be read against.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn positive_baseline(&self) -> Option<f64> {
+        // Counted over the classified reviews rather than over Valve's own totals, which
+        // include reviews with no text at all. A baseline drawn from a different population
+        // than the shares it is compared against is worse than no baseline.
+        (self.classification.reviews > 0)
+            .then(|| self.classification.positive as f64 / self.classification.reviews as f64)
+    }
 }
 
 impl AppReport {
@@ -383,6 +423,7 @@ mod tests {
             classification: Classification {
                 app_id: 1,
                 reviews: 100_000,
+                positive: 70_000,
                 unmatched: 0,
                 top_helpful,
                 mention_margin: 0.01,
@@ -397,8 +438,10 @@ mod tests {
                         primary_count: mentions,
                         mention_count: mentions,
                         top_mention_count: top,
+                        positive_mentions: mentions / 2,
                     })
                     .collect(),
+                languages: Vec::new(),
                 top_reviews: Vec::new(),
             },
             examples: Vec::new(),

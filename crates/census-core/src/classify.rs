@@ -99,9 +99,20 @@ pub struct CategoryStats {
     pub mention_count: u64,
     /// Mentions among the most-upvoted reviews only.
     pub top_mention_count: u64,
+    /// Of the reviews mentioning this category, how many recommended the game.
+    ///
+    /// A topic people raise while recommending a game is a different thing from one they
+    /// raise while refusing to, and a mention rate alone cannot tell the two apart.
+    pub positive_mentions: u64,
 }
 
 impl CategoryStats {
+    /// Share of the reviews mentioning this category that still recommended the game.
+    #[must_use]
+    pub fn positive_share(&self) -> Option<f64> {
+        (self.mention_count > 0).then(|| ratio(self.positive_mentions, self.mention_count))
+    }
+
     /// Share of all reviews that mention this category. The headline figure.
     #[must_use]
     pub fn mention_rate(&self, reviews: u64) -> f64 {
@@ -146,6 +157,9 @@ fn ratio(part: u64, whole: u64) -> f64 {
 pub struct ClassifyReport {
     pub app_id: u32,
     pub reviews: u64,
+    /// Classified reviews that recommended the game. The line every category's own share is
+    /// read against, counted over exactly the reviews the categories were counted over.
+    pub positive: u64,
     pub unmatched: u64,
     pub top_helpful: u64,
     pub categories: Vec<CategoryStats>,
@@ -157,6 +171,8 @@ pub struct ClassifyReport {
     pub anchors_fitted_from: Vec<u32>,
     /// How close to the best match a category had to score to count as mentioned.
     pub mention_margin: f32,
+    /// Reviews per language, most common first. Empty strings are grouped as unknown.
+    pub languages: Vec<(String, u64)>,
     /// The most-upvoted reviews and what they were about, so a reader can be shown the top
     /// of the pile rather than only told how far it differs from everyone else.
     pub top_reviews: Vec<TopReview>,
@@ -186,6 +202,7 @@ impl ClassifyReport {
                     "primary_count": c.primary_count,
                     "mention_count": c.mention_count,
                     "top_mention_count": c.top_mention_count,
+                    "positive_mentions": c.positive_mentions,
                 })
             })
             .collect();
@@ -207,6 +224,7 @@ impl ClassifyReport {
             serde_json::to_vec_pretty(&serde_json::json!({
                 "app_id": self.app_id,
                 "reviews": self.reviews,
+                "positive": self.positive,
                 "unmatched": self.unmatched,
                 "top_helpful": self.top_helpful,
                 "mention_margin": self.mention_margin,
@@ -214,11 +232,31 @@ impl ClassifyReport {
                 "model": self.model,
                 "anchors_fitted_from": self.anchors_fitted_from,
                 "categories": categories,
+                "languages": self.languages,
                 "top_reviews": top,
             }))?,
         )?;
         Ok(())
     }
+}
+
+/// Languages by how many reviews are written in them, most first.
+fn ranked(counts: HashMap<String, u64>) -> Vec<(String, u64)> {
+    let mut ranked: Vec<(String, u64)> = counts
+        .into_iter()
+        .map(|(language, count)| {
+            let named = if language.is_empty() {
+                "unknown".to_owned()
+            } else {
+                language
+            };
+            (named, count)
+        })
+        .collect();
+    ranked.sort_by(|(left_name, left), (right_name, right)| {
+        right.cmp(left).then_with(|| left_name.cmp(right_name))
+    });
+    ranked
 }
 
 /// The categories a mention bitmask names, in taxonomy order.
@@ -247,17 +285,13 @@ pub fn classify_corpus(
     refuse_a_foreign_encoder(anchors, &options.out_dir, app_id)?;
     let (by_hash, reviews) = group_reviews_by_text(&snapshot)?;
 
-    let mut stats: Vec<CategoryStats> = CORE_SPINE
-        .iter()
-        .map(|c| CategoryStats {
-            id: c.id,
-            label: c.label,
-            primary_count: 0,
-            mention_count: 0,
-            top_mention_count: 0,
-        })
-        .collect();
+    let mut stats = empty_stats();
 
+    // What language a review is written in is not decoration. Steam's own default shows a
+    // reader only their own language, so a corpus that keeps every language is measuring
+    // something the store's own page cannot.
+    let mut languages: HashMap<String, u64> = HashMap::new();
+    let mut positive = 0_u64;
     let provenance = anchor_provenance(anchors);
     let path = snapshot.join("classifications.parquet");
     let schema = classification_schema();
@@ -285,12 +319,19 @@ pub fn classify_corpus(
 
         for review in group {
             classified += 1;
+            if review.voted_up {
+                positive += 1;
+            }
             stats[primary].primary_count += 1;
             for (index, stat) in stats.iter_mut().enumerate() {
                 if mentions & (1 << index) != 0 {
                     stat.mention_count += 1;
+                    if review.voted_up {
+                        stat.positive_mentions += 1;
+                    }
                 }
             }
+            *languages.entry(review.language.clone()).or_default() += 1;
             top.offer(TopReview {
                 id: review.recommendationid.clone(),
                 helpfulness: review.helpfulness,
@@ -327,10 +368,12 @@ pub fn classify_corpus(
     let report = ClassifyReport {
         app_id,
         reviews,
+        positive,
         unmatched: reviews.saturating_sub(classified),
         top_helpful: classified.min(u64::try_from(options.top_helpful).unwrap_or(u64::MAX)),
         mention_margin: options.mention_margin,
         categories: stats,
+        languages: ranked(languages),
         top_reviews,
         spine_version: CORE_SPINE_VERSION,
         model: anchors.model.clone(),
@@ -340,6 +383,21 @@ pub fn classify_corpus(
     };
     report.save(&snapshot.join("classification.json"))?;
     Ok(report)
+}
+
+/// One zeroed counter per category, in taxonomy order.
+fn empty_stats() -> Vec<CategoryStats> {
+    CORE_SPINE
+        .iter()
+        .map(|c| CategoryStats {
+            id: c.id,
+            label: c.label,
+            primary_count: 0,
+            mention_count: 0,
+            top_mention_count: 0,
+            positive_mentions: 0,
+        })
+        .collect()
 }
 
 /// Refuses anchors built by an encoder other than the one behind the corpus.
@@ -464,6 +522,8 @@ pub(crate) struct ReviewRow {
     pub(crate) text_hash: String,
     pub(crate) helpfulness: f64,
     pub(crate) votes_up: u32,
+    pub(crate) voted_up: bool,
+    pub(crate) language: String,
 }
 
 #[derive(Default)]
@@ -575,7 +635,7 @@ pub(crate) fn for_each_review(
     snapshot: &Path,
     mut visit: impl FnMut(ReviewRow) -> Result<()>,
 ) -> Result<()> {
-    use arrow::array::{Float64Array, StringArray, UInt32Array};
+    use arrow::array::{BooleanArray, Float64Array, StringArray, UInt32Array};
 
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
         .filter_map(std::result::Result::ok)
@@ -598,6 +658,8 @@ pub(crate) fn for_each_review(
             let texts = column::<StringArray>(&batch, "review")?;
             let helpful = column::<Float64Array>(&batch, "weighted_vote_score")?;
             let votes = column::<UInt32Array>(&batch, "votes_up")?;
+            let languages = column::<StringArray>(&batch, "language")?;
+            let recommended = column::<BooleanArray>(&batch, "voted_up")?;
             for row in 0..batch.num_rows() {
                 if texts.is_null(row) || texts.value(row).trim().is_empty() {
                     continue;
@@ -614,6 +676,12 @@ pub(crate) fn for_each_review(
                         0
                     } else {
                         votes.value(row)
+                    },
+                    voted_up: !recommended.is_null(row) && recommended.value(row),
+                    language: if languages.is_null(row) {
+                        String::new()
+                    } else {
+                        languages.value(row).to_owned()
                     },
                 })?;
             }
@@ -703,12 +771,20 @@ mod tests {
             primary_count: 100,
             mention_count: 247,
             top_mention_count: 32,
+            positive_mentions: 61,
         };
         // 64% of the top 50 against 24.7% of all thousand: the README's own example.
         assert!((stat.mention_rate(1000) - 0.247).abs() < 1e-9);
         assert!((stat.top_mention_rate(50) - 0.64).abs() < 1e-9);
         let factor = stat.bias_factor(1000, 50).unwrap();
         assert!((factor - 2.591).abs() < 1e-3, "factor was {factor}");
+        // Bugs are raised as often by people recommending the game as refusing to, which a
+        // mention rate on its own cannot say either way.
+        let positive = stat.positive_share().unwrap();
+        assert!(
+            (positive - 0.247).abs() < 1e-3,
+            "positive share was {positive}"
+        );
     }
 
     #[test]
@@ -719,6 +795,7 @@ mod tests {
             primary_count: 0,
             mention_count: 0,
             top_mention_count: 0,
+            positive_mentions: 0,
         };
         assert_eq!(stat.bias_factor(1000, 50), None);
     }
@@ -733,6 +810,7 @@ mod tests {
                 primary_count: 60,
                 mention_count: 80,
                 top_mention_count: 0,
+                positive_mentions: 0,
             },
             CategoryStats {
                 id: "b",
@@ -740,6 +818,7 @@ mod tests {
                 primary_count: 40,
                 mention_count: 55,
                 top_mention_count: 0,
+                positive_mentions: 0,
             },
         ];
         let primary: f64 = stats.iter().map(|s| s.primary_share(100)).sum();
