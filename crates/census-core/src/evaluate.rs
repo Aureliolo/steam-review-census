@@ -246,7 +246,11 @@ impl AgreementReport {
 /// Fails if the reference set or the classifications cannot be read.
 pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<AgreementReport> {
     let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let predictions = load_predictions(&snapshot.join("classifications.parquet"))?;
+    // Only the labelled reviews are kept. A reference set names a few hundred reviews, and
+    // holding a million predictions to look up four hundred of them costs a hundred times
+    // more memory than the answer.
+    let wanted: HashSet<&str> = reference.labels.iter().map(|l| l.id.as_str()).collect();
+    let predictions = load_predictions(&snapshot.join("classifications.parquet"), &wanted)?;
 
     let mut stats: Vec<CategoryAgreement> = CORE_SPINE
         .iter()
@@ -357,7 +361,7 @@ struct Prediction {
     anchors: String,
 }
 
-fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
+fn load_predictions(path: &Path, wanted: &HashSet<&str>) -> Result<HashMap<String, Prediction>> {
     let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
         path: path.to_path_buf(),
     })?;
@@ -378,6 +382,9 @@ fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
             }
         })?;
         for row in 0..batch.num_rows() {
+            if !wanted.contains(ids.value(row)) {
+                continue;
+            }
             let listed = mentions.value(row);
             let listed = listed
                 .as_any()
@@ -408,12 +415,12 @@ fn downcast<'a, T: 'static>(
         .ok_or(Error::MalformedPayload { field: name })
 }
 
-/// Every review's primary category, for callers that do not need its other mentions.
+/// Visits every review's primary category, one at a time.
 ///
 /// # Errors
 ///
 /// Fails if the classifications are missing or were written by an older build.
-pub fn primary_categories(path: &Path) -> Result<Vec<(String, String)>> {
+pub fn for_each_prediction(path: &Path, mut visit: impl FnMut(&str, &str)) -> Result<()> {
     let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
         path: path.to_path_buf(),
     })?;
@@ -421,16 +428,15 @@ pub fn primary_categories(path: &Path) -> Result<Vec<(String, String)>> {
         .with_batch_size(8192)
         .build()?;
 
-    let mut out = Vec::new();
     for batch in reader {
         let batch = batch?;
         let ids = downcast::<StringArray>(&batch, "recommendationid")?;
         let primaries = downcast::<StringArray>(&batch, "primary_category")?;
         for row in 0..batch.num_rows() {
-            out.push((ids.value(row).to_owned(), primaries.value(row).to_owned()));
+            visit(ids.value(row), primaries.value(row));
         }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Where a reference set for an app is expected to live.
@@ -623,7 +629,7 @@ mod tests {
             .unwrap();
         writer.close().unwrap();
 
-        let error = load_predictions(&path).unwrap_err();
+        let error = load_predictions(&path, &HashSet::from(["1"])).unwrap_err();
         assert!(
             matches!(
                 error,

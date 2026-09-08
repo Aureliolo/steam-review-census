@@ -94,6 +94,46 @@ struct Candidate {
     key: [u8; 32],
 }
 
+/// Keeps the best-ranked candidates seen so far and forgets the rest.
+///
+/// Selection wants the few hundred reviews with the lowest hashes out of a corpus of
+/// millions, which is a bounded problem answered with a bounded amount of memory. Pruning on
+/// a doubling threshold costs an occasional sort of twice the limit rather than one sort of
+/// everything.
+struct BestByKey {
+    limit: usize,
+    kept: Vec<Candidate>,
+}
+
+impl BestByKey {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            kept: Vec::new(),
+        }
+    }
+
+    fn offer(&mut self, candidate: Candidate) {
+        if self.limit == 0 {
+            return;
+        }
+        self.kept.push(candidate);
+        if self.kept.len() >= self.limit.saturating_mul(2) {
+            self.prune();
+        }
+    }
+
+    fn prune(&mut self) {
+        self.kept.sort_unstable_by_key(|candidate| candidate.key);
+        self.kept.truncate(self.limit);
+    }
+
+    fn take(mut self) -> Vec<Candidate> {
+        self.prune();
+        self.kept
+    }
+}
+
 impl Candidate {
     fn into(self, subset: &str) -> SampledReview {
         SampledReview {
@@ -102,6 +142,16 @@ impl Candidate {
             subset: subset.to_owned(),
             predicted: self.predicted,
             review: String::new(),
+        }
+    }
+
+    #[cfg(test)]
+    fn clone_into_candidate(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            app_id: self.app_id,
+            predicted: self.predicted.clone(),
+            key: self.key,
         }
     }
 
@@ -130,35 +180,59 @@ pub fn draw(
     let mut leftovers: Vec<Candidate> = Vec::new();
     let mut reports: Vec<SampleReport> = Vec::new();
 
+    // A category can hold at most this many candidates from one app before the worst of them
+    // can no longer matter. The random subset is drawn first and removed from the stratified
+    // pool afterwards, so carrying that much slack guarantees enough survivors to fill the
+    // category however the two overlap.
+    let per_app_slack = options
+        .stratified_per_category
+        .saturating_add(options.random_per_app);
+
     for &app_id in app_ids {
         let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-        let predictions =
-            crate::evaluate::primary_categories(&snapshot.join("classifications.parquet"))?;
-        let corpus = predictions.len() as u64;
+        let path = snapshot.join("classifications.parquet");
 
-        let mut pool: Vec<Candidate> = predictions
-            .into_iter()
-            .map(|(id, predicted)| Candidate {
-                key: rank(options.seed, "random", &id),
-                id,
+        // Bounded from the first row. A corpus of a million reviews yields a few hundred
+        // here, so materialising it to sort it costs hundreds of megabytes to discard
+        // essentially all of them.
+        let mut random = BestByKey::new(options.random_per_app);
+        let mut by_category: HashMap<&'static str, BestByKey> = HashMap::new();
+        let mut corpus = 0_u64;
+
+        crate::evaluate::for_each_prediction(&path, |id, predicted| {
+            corpus += 1;
+            let Some(category) = CORE_SPINE.iter().find(|c| c.id == predicted) else {
+                return;
+            };
+            random.offer(Candidate {
+                key: rank(options.seed, "random", id),
+                id: id.to_owned(),
                 app_id,
-                predicted,
-            })
-            .collect();
-        pool.sort_unstable_by_key(|candidate| candidate.key);
+                predicted: category.id.to_owned(),
+            });
+            by_category
+                .entry(category.id)
+                .or_insert_with(|| BestByKey::new(per_app_slack))
+                .offer(Candidate {
+                    key: rank(options.seed, "stratified", id),
+                    id: id.to_owned(),
+                    app_id,
+                    predicted: category.id.to_owned(),
+                });
+        })?;
 
-        let split = options.random_per_app.min(pool.len());
-        let rest = pool.split_off(split);
-        chosen.extend(pool.into_iter().map(|candidate| candidate.into("random")));
-        leftovers.extend(rest.into_iter().map(|mut candidate| {
-            candidate.key = rank(options.seed, "stratified", &candidate.id);
-            candidate
-        }));
+        let drawn = random.take();
+        let taken: HashSet<String> = drawn.iter().map(|c| c.id.clone()).collect();
+        let count = drawn.len();
+        chosen.extend(drawn.into_iter().map(|candidate| candidate.into("random")));
+        for keep in by_category.into_values() {
+            leftovers.extend(keep.take().into_iter().filter(|c| !taken.contains(&c.id)));
+        }
 
         reports.push(SampleReport {
             app_id,
             corpus,
-            random: split,
+            random: count,
             stratified: 0,
             per_category: Vec::new(),
         });
@@ -293,6 +367,41 @@ mod tests {
         let mut by_stratified: Vec<&String> = ids.iter().collect();
         by_stratified.sort_by_key(|id| rank(7, "stratified", id));
         assert_ne!(by_random, by_stratified);
+    }
+
+    #[test]
+    fn keeping_the_best_as_it_goes_picks_what_sorting_everything_would_have_picked() {
+        // The bounded form exists so a million-review corpus never becomes a million-element
+        // sort. It is only worth having if it chooses the same reviews, which is what a
+        // reader of a reference set is entitled to assume.
+        let all: Vec<Candidate> = (0..5_000)
+            .map(|index| {
+                let id = format!("review-{index}");
+                Candidate {
+                    key: rank(3, "stratified", &id),
+                    id,
+                    app_id: 1,
+                    predicted: "bugs".to_owned(),
+                }
+            })
+            .collect();
+
+        for limit in [1_usize, 7, 40, 100] {
+            let mut sorted: Vec<&Candidate> = all.iter().collect();
+            sorted.sort_unstable_by_key(|candidate| candidate.key);
+            let expected: Vec<&str> = sorted
+                .iter()
+                .take(limit)
+                .map(|candidate| candidate.id.as_str())
+                .collect();
+
+            let mut bounded = BestByKey::new(limit);
+            for candidate in &all {
+                bounded.offer(candidate.clone_into_candidate());
+            }
+            let got: Vec<String> = bounded.take().into_iter().map(|c| c.id).collect();
+            assert_eq!(got, expected, "limit {limit} disagreed with a full sort");
+        }
     }
 
     #[test]
