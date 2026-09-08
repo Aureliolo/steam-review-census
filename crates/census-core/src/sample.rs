@@ -29,7 +29,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{Result, taxonomy::CORE_SPINE};
+use crate::{Error, Result, evaluate::ReferenceLabel, taxonomy::CORE_SPINE};
 
 /// How many reviews to draw, and how to spread them.
 #[derive(Debug, Clone, Copy)]
@@ -259,6 +259,136 @@ pub fn draw(
     attach_texts(out_dir, app_ids, &mut chosen)?;
     chosen.retain(|r| !r.review.trim().is_empty());
     Ok((chosen, reports))
+}
+
+/// What a labeller returns for one review, before the sample's own fields are put back.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReturnedLabel {
+    pub id: String,
+    pub primary: String,
+    #[serde(default)]
+    pub secondary: Vec<String>,
+    #[serde(default)]
+    pub ironic: bool,
+    #[serde(default)]
+    pub confidence: String,
+    #[serde(default)]
+    pub ambiguous: bool,
+}
+
+/// What ingesting a set of returned labels produced, and everything wrong with it.
+#[derive(Debug, Clone, Default)]
+pub struct IngestReport {
+    pub accepted: usize,
+    /// Reviews drawn for labelling that nobody returned a label for.
+    pub missing: Vec<String>,
+    /// Labels naming a review that was never drawn, usually a batch pasted into the wrong app.
+    pub unknown_reviews: Vec<String>,
+    /// Labels naming a category the taxonomy does not have.
+    pub unknown_categories: Vec<String>,
+    /// Reviews labelled more than once, kept at the first label seen.
+    pub duplicates: Vec<String>,
+}
+
+impl IngestReport {
+    /// Whether anything was wrong enough that the set should not be used as it stands.
+    #[must_use]
+    pub fn is_clean(&self) -> bool {
+        self.missing.is_empty()
+            && self.unknown_reviews.is_empty()
+            && self.unknown_categories.is_empty()
+            && self.duplicates.is_empty()
+    }
+}
+
+/// Writes a reference set's labels to `labels.json`.
+///
+/// # Errors
+///
+/// Fails if the file cannot be written.
+pub fn write_labels(dir: &Path, labels: &[ReferenceLabel]) -> Result<std::path::PathBuf> {
+    let path = dir.join("labels.json");
+    std::fs::write(&path, serde_json::to_vec_pretty(labels)?)?;
+    Ok(path)
+}
+
+/// Merges returned labels into a reference set, checking them against the drawn sample.
+///
+/// Labelling happens outside this program, so what comes back is unverified input: ids that
+/// were never drawn, categories that do not exist, reviews labelled twice by overlapping
+/// batches, reviews quietly skipped. Each of those corrupts a measurement in a way that is
+/// invisible later, so all four are checked here and reported rather than assumed away.
+///
+/// `subset` is taken from the sample rather than from the labeller, so no labeller can move
+/// a review between the training and measuring halves.
+///
+/// # Errors
+///
+/// Fails if the sample or a label file cannot be read or parsed.
+pub fn ingest(
+    reference_dir: &Path,
+    labels_dir: &Path,
+) -> Result<(Vec<ReferenceLabel>, IngestReport)> {
+    let drawn: Vec<SampledReview> = serde_json::from_slice(
+        &std::fs::read(reference_dir.join("sample.json")).map_err(|_| Error::NoReferenceSet {
+            path: reference_dir.join("sample.json"),
+        })?,
+    )?;
+    let subsets: HashMap<&str, &str> = drawn
+        .iter()
+        .map(|r| (r.id.as_str(), r.subset.as_str()))
+        .collect();
+    let known: HashSet<&str> = CORE_SPINE.iter().map(|c| c.id).collect();
+
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(labels_dir)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|e| e == "json"))
+        .collect();
+    files.sort();
+
+    let mut report = IngestReport::default();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out: Vec<ReferenceLabel> = Vec::new();
+
+    for file in files {
+        let returned: Vec<ReturnedLabel> = serde_json::from_slice(&std::fs::read(&file)?)?;
+        for label in returned {
+            let Some(subset) = subsets.get(label.id.as_str()) else {
+                report.unknown_reviews.push(label.id);
+                continue;
+            };
+            if !seen.insert(label.id.clone()) {
+                report.duplicates.push(label.id);
+                continue;
+            }
+            for named in std::iter::once(&label.primary).chain(&label.secondary) {
+                if !known.contains(named.as_str()) {
+                    report.unknown_categories.push(named.clone());
+                }
+            }
+            out.push(ReferenceLabel {
+                id: label.id,
+                primary: label.primary,
+                secondary: label.secondary,
+                ironic: label.ironic,
+                confidence: label.confidence,
+                subset: (*subset).to_owned(),
+                ambiguous: label.ambiguous,
+            });
+        }
+    }
+
+    report.missing = drawn
+        .iter()
+        .filter(|r| !seen.contains(&r.id))
+        .map(|r| r.id.clone())
+        .collect();
+    report.unknown_categories.sort_unstable();
+    report.unknown_categories.dedup();
+    report.accepted = out.len();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok((out, report))
 }
 
 /// One review as it is handed to a labeller.

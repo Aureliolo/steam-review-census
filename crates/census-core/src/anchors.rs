@@ -4,15 +4,14 @@
 //! nearest one. That description is prose about a topic, and reviews about that topic are
 //! not prose about it: "runs like garbage on my 4090" and "the game runs badly, low frame
 //! rate, poor optimisation" sit in noticeably different places even in a model that
-//! understands both. Measured against a reference set the gap showed up as 51.1% primary
-//! agreement on reviews the labeller called clear-cut.
+//! understands both. Measured against a reference set, the descriptions alone agree with
+//! the labels on roughly a third of reviews.
 //!
 //! An anchor fitted from labelled reviews removes that mismatch: the category is
 //! represented by the mean of things people actually wrote, in the register they wrote them
-//! in. The cost is that it needs labels, and the labels are thin. In the one reference set
-//! that exists, four of seventeen categories have no example at all and seven have fewer
-//! than five, so a set of pure prototypes would have holes exactly where the description was
-//! the only thing holding the category up.
+//! in. The cost is that it needs labels, and labels are thinnest exactly where a category is
+//! rare, which is where the description was the only thing holding it up. A set of pure
+//! prototypes would therefore have holes in precisely the wrong places.
 //!
 //! So each anchor is a blend, weighted by how much evidence there is for that category: a
 //! category with a hundred labelled reviews is almost entirely its reviews, a category with
@@ -111,11 +110,13 @@ pub struct Anchor {
 pub struct Anchors {
     pub spine_version: String,
     pub model: String,
-    /// App whose reference labels produced these, if any.
+    /// Apps whose reference labels produced these. Empty for written descriptions.
     ///
-    /// Recorded because an anchor set fitted on one game carries that game's vocabulary,
-    /// and whether it transfers to another is an open question rather than an assumption.
-    pub fitted_from: Option<u32>,
+    /// Recorded because an anchor set carries the vocabulary of the games it was fitted on,
+    /// and whether it reaches a game outside that list is a measurement rather than an
+    /// assumption. `census fit --leave-one-out` is what makes it.
+    #[serde(default)]
+    pub fitted_from: Vec<u32>,
     pub params: Option<FitParams>,
     pub categories: Vec<Anchor>,
 }
@@ -132,7 +133,7 @@ impl Anchors {
         Ok(Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
             model: MODEL_ID.to_owned(),
-            fitted_from: None,
+            fitted_from: Vec::new(),
             params: None,
             categories: CORE_SPINE
                 .iter()
@@ -150,7 +151,7 @@ impl Anchors {
 
     /// Blends the descriptions towards the labelled examples.
     #[must_use]
-    pub fn fit(&self, examples: &[Example], app_id: u32, params: FitParams) -> Self {
+    pub fn fit(&self, examples: &[Example], app_ids: &[u32], params: FitParams) -> Self {
         let mut sums = vec![vec![0.0_f32; EMBEDDING_DIM]; CORE_SPINE.len()];
         let mut evidence = vec![0.0_f32; CORE_SPINE.len()];
 
@@ -194,7 +195,7 @@ impl Anchors {
         Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
             model: MODEL_ID.to_owned(),
-            fitted_from: Some(app_id),
+            fitted_from: app_ids.to_vec(),
             params: Some(params),
             categories,
         }
@@ -371,6 +372,26 @@ impl Calibration {
     }
 }
 
+/// Whether an anchor set picks the same primary category as the labels, review by review.
+///
+/// Works on vectors already in hand rather than on stored classifications, so a set can be
+/// measured against reviews it was never used to classify. That is what makes leaving a
+/// whole game out of the fit and testing on it cheap enough to do six times over.
+///
+/// Per review rather than as a total because two anchor sets are compared over the same
+/// reviews, and the ones they both place the same way say nothing about which is better.
+#[must_use]
+pub fn agreements(anchors: &Anchors, examples: &[Example]) -> Vec<bool> {
+    examples
+        .iter()
+        .map(|example| {
+            let sims = anchors.similarities(&example.vector);
+            let (primary, _) = crate::classify::assign(&sims, anchors.mention_margin());
+            primary == example.primary
+        })
+        .collect()
+}
+
 /// What a parameter search found, and how confident that finding is entitled to be.
 #[derive(Debug, Clone)]
 pub struct FitOutcome {
@@ -515,7 +536,7 @@ fn cross_validate(
             .filter(|(index, _)| index % folds != fold)
             .map(|(_, example)| example.clone())
             .collect();
-        let mut fitted = descriptions.fit(&train, 0, params);
+        let mut fitted = descriptions.fit(&train, &[], params);
         if params.calibrate {
             fitted.calibrate(centroid);
         }
@@ -627,7 +648,7 @@ mod tests {
         Anchors {
             spine_version: CORE_SPINE_VERSION.to_owned(),
             model: MODEL_ID.to_owned(),
-            fitted_from: None,
+            fitted_from: Vec::new(),
             params: None,
             categories: CORE_SPINE
                 .iter()
@@ -645,7 +666,7 @@ mod tests {
 
     #[test]
     fn a_category_with_no_examples_keeps_its_description_exactly() {
-        let fitted = descriptions().fit(&[], 1, FitParams::default());
+        let fitted = descriptions().fit(&[], &[1], FitParams::default());
         for (before, after) in descriptions().categories.iter().zip(&fitted.categories) {
             assert_eq!(before.vector, after.vector, "{} moved", after.id);
             assert!(after.learned_share.abs() < f32::EPSILON);
@@ -663,7 +684,7 @@ mod tests {
                 secondary: vec![],
             })
             .collect();
-        let fitted = descriptions().fit(&examples, 1, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[1], FitParams::default());
 
         let moved = fitted.categories[0].vector[300];
         assert!(moved > 0.0, "the anchor did not move at all");
@@ -683,7 +704,7 @@ mod tests {
                 secondary: vec![],
             })
             .collect();
-        let fitted = descriptions().fit(&many, 1, FitParams::default());
+        let fitted = descriptions().fit(&many, &[1], FitParams::default());
         assert!(
             fitted.categories[1].learned_share > 0.9,
             "two hundred examples should dominate a description"
@@ -702,7 +723,7 @@ mod tests {
             secondary_weight: 0.5,
             ..FitParams::default()
         };
-        let fitted = descriptions().fit(&secondary, 1, params);
+        let fitted = descriptions().fit(&secondary, &[1], params);
         assert!((fitted.categories[5].evidence - 1.0).abs() < 1e-6);
         assert!((fitted.categories[2].evidence - 0.5).abs() < 1e-6);
         assert!(fitted.categories[5].learned_share > fitted.categories[2].learned_share);
@@ -715,7 +736,7 @@ mod tests {
             primary: 4,
             secondary: vec![9],
         }];
-        let fitted = descriptions().fit(&examples, 1, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[1], FitParams::default());
         for anchor in &fitted.categories {
             let norm = anchor.vector.iter().map(|v| v * v).sum::<f32>().sqrt();
             assert!(
@@ -759,11 +780,11 @@ mod tests {
             primary: 0,
             secondary: vec![],
         }];
-        let fitted = descriptions().fit(&examples, 296_970, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[296_970], FitParams::default());
         fitted.save(&path).unwrap();
 
         let loaded = Anchors::load(&path).unwrap();
-        assert_eq!(loaded.fitted_from, Some(296_970));
+        assert_eq!(loaded.fitted_from, vec![296_970]);
         assert_eq!(loaded.categories[0].vector, fitted.categories[0].vector);
         std::fs::remove_file(&path).ok();
     }

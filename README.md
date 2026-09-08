@@ -125,8 +125,10 @@ Three rules keep those figures honest:
   conclusions the counts cannot support.
 - **Reference sets span several games.** Anchors built from one game carry that game's
   vocabulary. Sets are labelled across games of different genres and different overall
-  sentiment, so agreement can be measured on a game the anchors were never fitted to. Numbers
-  from a single corpus describe that corpus and nothing else.
+  sentiment, so agreement can be measured on a game the anchors were never fitted to:
+  `census fit --leave-one-out` fits on every game but one and reports the one left out, which
+  is the only figure that says whether a category travels. Numbers from a single corpus
+  describe that corpus and nothing else.
 
 ## Honest limits
 

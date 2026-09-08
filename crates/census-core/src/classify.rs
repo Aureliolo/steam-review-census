@@ -152,8 +152,8 @@ pub struct ClassifyReport {
     pub categories: Vec<CategoryStats>,
     pub spine_version: &'static str,
     pub model: &'static str,
-    /// App whose labels fitted the anchors, or `None` if the written descriptions were used.
-    pub anchors_fitted_from: Option<u32>,
+    /// Apps whose labels fitted the anchors. Empty when the written descriptions were used.
+    pub anchors_fitted_from: Vec<u32>,
     pub elapsed: Duration,
     pub path: PathBuf,
 }
@@ -262,7 +262,7 @@ pub fn classify_corpus(
         categories: stats,
         spine_version: CORE_SPINE_VERSION,
         model: MODEL_ID,
-        anchors_fitted_from: anchors.fitted_from,
+        anchors_fitted_from: anchors.fitted_from.clone(),
         elapsed: started.elapsed(),
         path,
     })
@@ -358,9 +358,15 @@ struct Batch {
 /// How the anchors used for a run are named in the output, so a later reader can tell a
 /// zero-shot classification from a fitted one without being told which it is looking at.
 fn anchor_provenance(anchors: &Anchors) -> String {
-    anchors
+    if anchors.fitted_from.is_empty() {
+        return "descriptions".to_owned();
+    }
+    let apps: Vec<String> = anchors
         .fitted_from
-        .map_or_else(|| "descriptions".to_owned(), |app| format!("fitted:{app}"))
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    format!("fitted:{}", apps.join("+"))
 }
 
 impl Batch {

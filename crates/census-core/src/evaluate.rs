@@ -18,12 +18,12 @@ use std::{
 
 use arrow::array::{Array, ListArray, StringArray};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, taxonomy::CORE_SPINE};
 
 /// One review's reference labels.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReferenceLabel {
     pub id: String,
     pub primary: String,
@@ -175,8 +175,8 @@ impl Slice {
 
     /// 95% Wilson score interval for the agreement rate.
     ///
-    /// Reference sets are small: the randomly drawn subset of the only set that exists is
-    /// sixty reviews, where six reviews changing hands moves the headline ten points. A bare
+    /// Reference sets are small: a randomly drawn subset runs to a hundred reviews or so,
+    /// where six reviews changing hands moves the headline six points. A bare
     /// percentage invites reading such a swing as an improvement, so every rate reported
     /// here carries the range it is actually entitled to claim. Wilson rather than the
     /// textbook normal interval, which misbehaves badly at these counts and happily returns
@@ -198,6 +198,43 @@ impl Slice {
             ((centre + spread) / denominator).min(1.0),
         ))
     }
+}
+
+/// Two-sided exact McNemar test for two classifiers judged on the same reviews.
+///
+/// `gained` is the reviews the second gets right and the first does not, `lost` the reverse.
+/// Reviews both place the same way carry no information about which is better and are
+/// deliberately absent from the arithmetic, which is what makes this the right test for a
+/// paired comparison and an unpaired interval the wrong one.
+///
+/// Exact rather than the usual chi-squared approximation: reference sets of this size swap
+/// a couple of dozen reviews, and the approximation is unreliable there. `None` when nothing
+/// changed hands, where there is no comparison to make rather than a perfect tie.
+#[must_use]
+pub fn mcnemar_exact(gained: u64, lost: u64) -> Option<f64> {
+    let swapped = gained + lost;
+    if swapped == 0 {
+        return None;
+    }
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are a few hundred reviews"
+    )]
+    let n = swapped as f64;
+    // The tail of a fair binomial, summed by the ratio between neighbouring terms so no
+    // factorial is ever formed.
+    let mut term = 0.5_f64.powf(n);
+    let mut tail = term;
+    for k in 0..gained.min(lost) {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "reference sets are a few hundred reviews"
+        )]
+        let step = (swapped - k) as f64 / (k + 1) as f64;
+        term *= step;
+        tail += term;
+    }
+    Some((2.0 * tail).min(1.0))
 }
 
 #[derive(Debug, Clone)]
@@ -489,6 +526,33 @@ mod tests {
             narrow.1 - narrow.0 < wide.1 - wide.0,
             "ten times the reviews did not buy any precision"
         );
+    }
+
+    #[test]
+    fn twelve_reviews_gained_against_two_lost_is_the_published_p_value() {
+        // The figure the first reference set was reported with: fitting anchors moved 12
+        // reviews to the right category and 2 away from it, p = 0.013.
+        let p = mcnemar_exact(12, 2).unwrap();
+        assert!((p - 0.012_939).abs() < 1e-6, "p was {p}");
+    }
+
+    #[test]
+    fn an_even_split_is_as_unremarkable_as_a_result_can_be() {
+        assert!((mcnemar_exact(7, 7).unwrap() - 1.0).abs() < 1e-12);
+        assert!(mcnemar_exact(9, 7).unwrap() > 0.8);
+    }
+
+    #[test]
+    fn the_same_margin_over_more_reviews_is_the_stronger_evidence() {
+        let few = mcnemar_exact(9, 3).unwrap();
+        let many = mcnemar_exact(90, 30).unwrap();
+        assert!(many < few, "{many} should be far below {few}");
+        assert!(few < 0.15 && few > 0.05, "twelve swaps prove little: {few}");
+    }
+
+    #[test]
+    fn two_sets_that_place_every_review_alike_have_nothing_to_compare() {
+        assert_eq!(mcnemar_exact(0, 0), None);
     }
 
     #[test]

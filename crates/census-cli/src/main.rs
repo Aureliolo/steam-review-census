@@ -143,6 +143,21 @@ enum Command {
         batch_size: usize,
     },
 
+    /// Merge returned labels into a reference set, checking them against the drawn sample.
+    Ingest {
+        /// Steam app ID whose labels are being merged.
+        app_id: u32,
+        /// Directory holding the returned label files, one JSON array per batch.
+        #[arg(long)]
+        from: PathBuf,
+        /// Reference set directory. Defaults to the one for this app.
+        #[arg(long)]
+        reference: Option<PathBuf>,
+        /// Write labels.json even when reviews are missing or labels are unusable.
+        #[arg(long)]
+        allow_incomplete: bool,
+    },
+
     /// Compare stored classifications against a reference set.
     Evaluate {
         /// Steam app ID to evaluate.
@@ -170,7 +185,8 @@ struct ClassifyArgs {
     /// How many of the most-upvoted reviews count as "the top of the pile".
     #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
     top_helpful: usize,
-    /// Anchors fitted by `census fit`. Falls back to the written category descriptions.
+    /// Anchors fitted by `census fit`. Defaults to a set fitted for this game if one exists,
+    /// then to reference/anchors.json, then to the written category descriptions.
     #[arg(long)]
     anchors: Option<PathBuf>,
     /// Ignore any fitted anchors and use the written category descriptions.
@@ -186,8 +202,10 @@ struct ClassifyArgs {
 
 #[derive(clap::Args, Debug)]
 struct FitArgs {
-    /// Steam app ID whose reference labels should be fitted.
-    app_id: u32,
+    /// Steam app IDs whose reference labels should be fitted, pooled together. Anchors built
+    /// from several games carry less of any one game's vocabulary.
+    #[arg(required = true, num_args = 1..)]
+    app_ids: Vec<u32>,
     /// Directory holding the capture and its embeddings.
     #[arg(short, long, default_value = "data")]
     out: PathBuf,
@@ -204,9 +222,13 @@ struct FitArgs {
     /// `search` lets cross-validation decide, which favours the largest categories.
     #[arg(long, default_value = "search")]
     calibrate: Calibrate,
-    /// Where to write the fitted anchors. Defaults to the reference directory.
+    /// Where to write the fitted anchors. Defaults to reference/anchors.json.
     #[arg(long)]
     anchors_out: Option<PathBuf>,
+    /// Measure transfer instead of writing anchors: fit on every game but one and report
+    /// agreement on the game left out, for each game in turn.
+    #[arg(long)]
+    leave_one_out: bool,
     /// Where to cache the model. Defaults to the platform cache directory.
     #[arg(long)]
     model_dir: Option<PathBuf>,
@@ -245,6 +267,12 @@ async fn main() -> Result<()> {
         } => run_embed(app_id, &out, batch_size, model_dir, precision.into()).await,
         Command::Classify(args) => run_classify(args).await,
         Command::Fit(args) => run_fit(args).await,
+        Command::Ingest {
+            app_id,
+            from,
+            reference,
+            allow_incomplete,
+        } => run_ingest(app_id, &from, reference, allow_incomplete),
         Command::Sample {
             app_ids,
             out,
@@ -361,8 +389,14 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
 }
 
 /// Where `census fit` writes its result, and where `census classify` looks for it.
-fn default_anchor_path(app_id: u32) -> PathBuf {
-    census_core::evaluate::default_reference_dir(app_id).join("anchors.json")
+/// Where anchors are looked for, best first: a set fitted for this game, then the set
+/// shipped with the tool, which is fitted across several games and is what a game nobody
+/// has labelled gets.
+fn anchor_paths(app_id: u32) -> [PathBuf; 2] {
+    [
+        census_core::evaluate::default_reference_dir(app_id).join("anchors.json"),
+        PathBuf::from("reference").join("anchors.json"),
+    ]
 }
 
 /// Loads fitted anchors if there are any, falling back to embedding the descriptions.
@@ -376,19 +410,21 @@ async fn load_anchors(
     model_dir: Option<PathBuf>,
     precision: census_core::model::Precision,
 ) -> Result<census_core::Anchors> {
-    let path = explicit
-        .clone()
-        .unwrap_or_else(|| default_anchor_path(app_id));
+    let found = anchor_paths(app_id).into_iter().find(|path| path.exists());
+    let path = explicit.clone().or(found).unwrap_or_default();
     if !force_descriptions && (explicit.is_some() || path.exists()) {
         let anchors = census_core::Anchors::load(&path)?;
-        if anchors.fitted_from != Some(app_id) {
+        if !anchors.fitted_from.is_empty() && !anchors.fitted_from.contains(&app_id) {
             eprintln!(
-                "warning: these anchors were fitted on app {}, not {app_id}. Categories carry \
-                 the vocabulary of the game they were fitted on, and whether that transfers \
-                 has not been measured.",
+                "note: these anchors were fitted on {}, which does not include {app_id}. \
+                 Categories carry the vocabulary of the games behind them; `census fit \
+                 --leave-one-out` measures what that costs on a game left out.",
                 anchors
                     .fitted_from
-                    .map_or_else(|| "nothing".to_owned(), |id| id.to_string())
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
         eprintln!("anchors      {}", path.display());
@@ -426,6 +462,44 @@ async fn run_classify(args: ClassifyArgs) -> Result<()> {
     eprintln!("classifying app {app_id}");
     let report = census_core::classify_corpus(&anchors, app_id, &options, |_| {})?;
     print_classification(&report);
+    Ok(())
+}
+
+fn run_ingest(
+    app_id: u32,
+    from: &std::path::Path,
+    reference: Option<PathBuf>,
+    allow_incomplete: bool,
+) -> Result<()> {
+    let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
+    let (labels, report) = census_core::sample::ingest(&dir, from)?;
+
+    println!("app {app_id}");
+    println!("  accepted     {}", report.accepted);
+    let complain = |name: &str, items: &[String]| {
+        if items.is_empty() {
+            return;
+        }
+        let shown: Vec<&str> = items.iter().take(6).map(String::as_str).collect();
+        let more = if items.len() > shown.len() {
+            format!(" and {} more", items.len() - shown.len())
+        } else {
+            String::new()
+        };
+        println!("  {name:<12} {} ({}{more})", items.len(), shown.join(", "));
+    };
+    complain("missing", &report.missing);
+    complain("not drawn", &report.unknown_reviews);
+    complain("bad category", &report.unknown_categories);
+    complain("duplicated", &report.duplicates);
+
+    if !report.is_clean() && !allow_incomplete {
+        anyhow::bail!(
+            "labels do not cleanly cover the drawn sample; fix them, or pass              --allow-incomplete to write the set as it stands"
+        );
+    }
+    let path = census_core::sample::write_labels(&dir, &labels)?;
+    println!("  labels       {}", path.display());
     Ok(())
 }
 
@@ -493,9 +567,77 @@ fn run_sample(
     Ok(())
 }
 
+/// Everything one game contributes to a fit: the examples it trains on, the ones held back
+/// from it, and what an average review of it looks like.
+struct GameLabels {
+    app_id: u32,
+    training: Vec<census_core::anchors::Example>,
+    holdout: Vec<census_core::anchors::Example>,
+    centroid: Vec<f32>,
+}
+
+fn load_game(
+    app_id: u32,
+    out: &std::path::Path,
+    reference: Option<&PathBuf>,
+    holdout: &str,
+) -> Result<GameLabels> {
+    let dir = reference
+        .cloned()
+        .unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
+    let set = census_core::ReferenceSet::load(&dir)?;
+    if set.spine_version != census_core::CORE_SPINE_VERSION {
+        anyhow::bail!(
+            "app {app_id} was labelled against taxonomy {} but this build is {}; fitting from \
+             it would move every category boundary towards a taxonomy that no longer exists.",
+            set.spine_version,
+            census_core::CORE_SPINE_VERSION
+        );
+    }
+
+    // Only the labelled reviews are fetched. Pulling every vector in the corpus to use a few
+    // hundred of them costs gigabytes on a million-review game and buys nothing.
+    let wanted: std::collections::HashSet<String> =
+        set.labels.iter().map(|label| label.id.clone()).collect();
+    let vectors = census_core::embed::vectors_for(out, app_id, &wanted)?;
+
+    let split = |held: bool| -> Vec<census_core::evaluate::ReferenceLabel> {
+        set.labels
+            .iter()
+            .filter(|label| (label.subset == holdout) == held)
+            .cloned()
+            .collect()
+    };
+    Ok(GameLabels {
+        app_id,
+        training: census_core::anchors::to_examples(&split(false), &vectors),
+        holdout: census_core::anchors::to_examples(&split(true), &vectors),
+        centroid: census_core::embed::corpus_centroid(out, app_id)?,
+    })
+}
+
+/// The mean of the per-game centroids.
+///
+/// Each game counts once rather than once per review, so a corpus of a million does not
+/// decide by itself what an average review looks like to a set meant to serve all of them.
+fn pooled_centroid(games: &[GameLabels]) -> Vec<f32> {
+    let mut total = vec![0.0_f32; census_core::EMBEDDING_DIM];
+    for game in games {
+        for (slot, value) in total.iter_mut().zip(&game.centroid) {
+            *slot += *value;
+        }
+    }
+    #[expect(clippy::cast_precision_loss, reason = "a handful of games")]
+    let count = games.len().max(1) as f32;
+    for value in &mut total {
+        *value /= count;
+    }
+    total
+}
+
 async fn run_fit(args: FitArgs) -> Result<()> {
     let FitArgs {
-        app_id,
+        app_ids,
         out,
         reference,
         holdout,
@@ -504,38 +646,20 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         anchors_out,
         model_dir,
         precision,
+        leave_one_out,
     } = args;
     let holdout = holdout.as_str();
-    let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
-    let set = census_core::ReferenceSet::load(&dir)?;
-    if set.spine_version != census_core::CORE_SPINE_VERSION {
-        anyhow::bail!(
-            "reference set was labelled against taxonomy {} but this build is {}; fitting \
-             anchors from it would move every category boundary towards a taxonomy that no \
-             longer exists.",
-            set.spine_version,
-            census_core::CORE_SPINE_VERSION
-        );
+    if reference.is_some() && app_ids.len() > 1 {
+        anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
     }
 
-    let training: Vec<census_core::evaluate::ReferenceLabel> = set
-        .labels
+    let games: Vec<GameLabels> = app_ids
         .iter()
-        .filter(|label| label.subset != holdout)
-        .cloned()
-        .collect();
-    // Only the labelled reviews are fetched. Pulling every vector in the corpus to use a few
-    // hundred of them costs gigabytes on a million-review game and buys nothing.
-    let wanted: std::collections::HashSet<String> =
-        training.iter().map(|label| label.id.clone()).collect();
-    let vectors = census_core::embed::vectors_for(&out, app_id, &wanted)?;
-    let examples = census_core::anchors::to_examples(&training, &vectors);
-    if examples.is_empty() {
-        anyhow::bail!(census_core::Error::NoTrainingExamples { app_id });
+        .map(|&app_id| load_game(app_id, &out, reference.as_ref(), holdout))
+        .collect::<Result<_>>()?;
+    if games.iter().all(|game| game.training.is_empty()) {
+        anyhow::bail!(census_core::Error::NoTrainingExamples { app_id: app_ids[0] });
     }
-    // Calibration reads review vectors and no labels, so the whole corpus is fair game and
-    // is also what the classifier will be run over. It reduces to the corpus centroid.
-    let centroid = census_core::embed::corpus_centroid(&out, app_id)?;
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     let precision = precision.into();
@@ -543,27 +667,171 @@ async fn run_fit(args: FitArgs) -> Result<()> {
     let mut embedder = census_core::Embedder::load(&cache, precision)?;
     let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
 
+    if leave_one_out {
+        report_transfer(&descriptions, &games, folds, calibrate, holdout);
+        return Ok(());
+    }
+
+    let examples: Vec<census_core::anchors::Example> = games
+        .iter()
+        .flat_map(|game| game.training.clone())
+        .collect();
+    let centroid = pooled_centroid(&games);
     eprintln!(
-        "fitting {} labels from app {app_id}, holding back the {holdout} subset",
-        examples.len()
+        "fitting {} labels from {} game(s), holding back the {holdout} subset",
+        examples.len(),
+        games.len()
     );
     let outcome =
         census_core::anchors::search(&descriptions, &examples, &centroid, folds, calibrate.into());
-    let mut fitted = descriptions.fit(&examples, app_id, outcome.params);
+    let mut fitted = descriptions.fit(&examples, &app_ids, outcome.params);
     if outcome.params.calibrate {
         fitted.calibrate(&centroid);
     }
 
-    let path = anchors_out.unwrap_or_else(|| dir.join("anchors.json"));
+    let path = anchors_out.unwrap_or_else(|| PathBuf::from("reference").join("anchors.json"));
     fitted.save(&path)?;
-    print_fit(
-        &fitted,
-        &outcome,
-        &path,
-        holdout,
-        set.labels.len() - training.len(),
-    );
+    let held: usize = games.iter().map(|game| game.holdout.len()).sum();
+    print_fit(&fitted, &outcome, &path, holdout, held);
     Ok(())
+}
+
+/// Fits on every game but one and measures on the game left out, for each in turn.
+///
+/// This is the only figure that says whether anchors carry to a game they were never built
+/// from. Fitting and measuring on the same title, even across a held-back subset, still
+/// shares that title's vocabulary between the two halves.
+fn report_transfer(
+    descriptions: &census_core::Anchors,
+    games: &[GameLabels],
+    folds: usize,
+    calibrate: Calibrate,
+    holdout: &str,
+) {
+    println!("leave-one-game-out, measured on each game's {holdout} subset\n");
+    println!(
+        "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
+        "held out", "n", "descriptions", "same game", "unseen game", "gained / lost"
+    );
+    println!("{}", "-".repeat(72));
+
+    let mut totals = [0_u64; 6];
+    for (index, game) in games.iter().enumerate() {
+        if game.holdout.is_empty() {
+            continue;
+        }
+        let others: Vec<census_core::anchors::Example> = games
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != index)
+            .flat_map(|(_, game)| game.training.clone())
+            .collect();
+        let all: Vec<census_core::anchors::Example> = games
+            .iter()
+            .flat_map(|game| game.training.clone())
+            .collect();
+
+        let fit_on = |examples: &[census_core::anchors::Example]| {
+            let outcome = census_core::anchors::search(
+                descriptions,
+                examples,
+                &game.centroid,
+                folds,
+                calibrate.into(),
+            );
+            let mut anchors = descriptions.fit(examples, &[game.app_id], outcome.params);
+            if outcome.params.calibrate {
+                anchors.calibrate(&game.centroid);
+            }
+            anchors
+        };
+
+        let written = census_core::anchors::agreements(descriptions, &game.holdout);
+        let same = census_core::anchors::agreements(&fit_on(&all), &game.holdout);
+        let unseen = census_core::anchors::agreements(&fit_on(&others), &game.holdout);
+        let n = game.holdout.len() as u64;
+        let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
+        let (gained, lost) = swapped(&written, &unseen);
+
+        totals[0] += count(&written);
+        totals[1] += count(&same);
+        totals[2] += count(&unseen);
+        totals[3] += n;
+        totals[4] += gained;
+        totals[5] += lost;
+        println!(
+            "{:<10}{n:>7}{:>14}{:>12}{:>13}{:>16}",
+            game.app_id,
+            share(count(&written), n),
+            share(count(&same), n),
+            share(count(&unseen), n),
+            format!("+{gained} / -{lost}")
+        );
+    }
+
+    println!("{}", "-".repeat(72));
+    println!(
+        "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
+        "all",
+        totals[3],
+        share(totals[0], totals[3]),
+        share(totals[1], totals[3]),
+        share(totals[2], totals[3]),
+        format!("+{} / -{}", totals[4], totals[5])
+    );
+    println!(
+        "\n\"same game\" fits on every game including this one, so it shares this title's\n\
+         vocabulary between fitting and measuring. \"unseen game\" fits on the other games\n\
+         only, and is the figure that says whether anchors transfer."
+    );
+    match census_core::evaluate::mcnemar_exact(totals[4], totals[5]) {
+        Some(p) => println!(
+            "Of the {} reviews the written descriptions and the unseen-game fit place \
+             differently,\n{} move to the category the labels give and {} move away. \
+             Exact McNemar {}.",
+            totals[4] + totals[5],
+            totals[4],
+            totals[5],
+            if p < 0.0001 {
+                "p < 0.0001".to_owned()
+            } else {
+                format!("p = {p:.4}")
+            }
+        ),
+        None => println!("Neither set placed a single review differently from the other."),
+    }
+}
+
+/// Reviews the second set gets right and the first does not, and the reverse.
+fn swapped(before: &[bool], after: &[bool]) -> (u64, u64) {
+    let mut gained = 0;
+    let mut lost = 0;
+    for (was, now) in before.iter().zip(after) {
+        match (was, now) {
+            (false, true) => gained += 1,
+            (true, false) => lost += 1,
+            _ => {}
+        }
+    }
+    (gained, lost)
+}
+
+fn apps(ids: &[u32]) -> String {
+    if ids.is_empty() {
+        return "no labels at all".to_owned();
+    }
+    ids.iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+#[expect(clippy::cast_precision_loss, reason = "reference sets are hundreds")]
+fn share(part: u64, whole: u64) -> String {
+    if whole == 0 {
+        return "n/a".to_owned();
+    }
+    format!("{:.1}%", part as f64 / whole as f64 * 100.0)
 }
 
 fn print_fit(
@@ -573,7 +841,7 @@ fn print_fit(
     holdout: &str,
     held_back: usize,
 ) {
-    println!("app {}", anchors.fitted_from.unwrap_or_default());
+    println!("anchors from {}", apps(&anchors.fitted_from));
     println!("  fitted from  {} labels", outcome.examples);
     println!("  held back    {held_back} ({holdout} subset, never seen by the fit)");
     println!("  smoothing    {}", outcome.params.smoothing);
@@ -647,10 +915,11 @@ fn print_classification(report: &census_core::ClassifyReport) {
     println!("  model        {}", report.model);
     println!(
         "  anchors      {}",
-        report.anchors_fitted_from.map_or_else(
-            || "written descriptions (unfitted)".to_owned(),
-            |id| format!("fitted on app {id}")
-        )
+        if report.anchors_fitted_from.is_empty() {
+            "written descriptions (unfitted)".to_owned()
+        } else {
+            format!("fitted on {}", apps(&report.anchors_fitted_from))
+        }
     );
     println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
     println!("  assignments  {}", report.path.display());
