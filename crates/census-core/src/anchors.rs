@@ -27,7 +27,6 @@ use crate::{
     Error, Result,
     embed::Embedder,
     evaluate::ReferenceLabel,
-    model::{EMBEDDING_DIM, MODEL_ID},
     taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, embedding_text},
 };
 
@@ -122,6 +121,13 @@ pub struct Anchors {
 }
 
 impl Anchors {
+    /// How wide these vectors are, which is a fact about the encoder that produced them
+    /// rather than about the build reading them.
+    #[must_use]
+    pub fn dimensions(&self) -> usize {
+        self.categories.first().map_or(0, |a| a.vector.len())
+    }
+
     /// Embeds the written category descriptions. The zero-setup path, needing no labels.
     ///
     /// # Errors
@@ -132,7 +138,7 @@ impl Anchors {
         let vectors = embedder.embed(&text)?;
         Ok(Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
+            model: embedder.encoder().id().to_owned(),
             fitted_from: Vec::new(),
             params: None,
             categories: CORE_SPINE
@@ -152,7 +158,7 @@ impl Anchors {
     /// Blends the descriptions towards the labelled examples.
     #[must_use]
     pub fn fit(&self, examples: &[Example], app_ids: &[u32], params: FitParams) -> Self {
-        let mut sums = vec![vec![0.0_f32; EMBEDDING_DIM]; CORE_SPINE.len()];
+        let mut sums = vec![vec![0.0_f32; self.dimensions()]; CORE_SPINE.len()];
         let mut evidence = vec![0.0_f32; CORE_SPINE.len()];
 
         for example in examples {
@@ -194,7 +200,7 @@ impl Anchors {
 
         Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
+            model: self.model.clone(),
             fitted_from: app_ids.to_vec(),
             params: Some(params),
             categories,
@@ -224,7 +230,7 @@ impl Anchors {
     /// against six corpora the old form was several hundred passes over three million
     /// vectors, and this form is a few thousand multiplications.
     pub fn calibrate(&mut self, centroid: &[f32]) {
-        if centroid.len() != EMBEDDING_DIM {
+        if centroid.len() != self.dimensions() {
             return;
         }
         for anchor in &mut self.categories {
@@ -283,13 +289,6 @@ impl Anchors {
                 actual: anchors.spine_version,
             });
         }
-        if anchors.model != MODEL_ID {
-            return Err(Error::StaleAnchors {
-                field: "embedding model",
-                expected: MODEL_ID.to_owned(),
-                actual: anchors.model,
-            });
-        }
         let ids: Vec<&str> = anchors.categories.iter().map(|a| a.id.as_str()).collect();
         let expected: Vec<&str> = CORE_SPINE.iter().map(|c| c.id).collect();
         if ids != expected {
@@ -299,14 +298,11 @@ impl Anchors {
                 actual: ids.join(","),
             });
         }
-        if let Some(bad) = anchors
-            .categories
-            .iter()
-            .find(|a| a.vector.len() != EMBEDDING_DIM)
-        {
+        let width = anchors.dimensions();
+        if let Some(bad) = anchors.categories.iter().find(|a| a.vector.len() != width) {
             return Err(Error::StaleAnchors {
                 field: "vector width",
-                expected: EMBEDDING_DIM.to_string(),
+                expected: width.to_string(),
                 actual: bad.vector.len().to_string(),
             });
         }
@@ -502,9 +498,9 @@ pub fn search(
 pub enum Objective {
     /// Share of reviews whose main subject is identified correctly.
     ///
-    /// Dominated by whatever the corpus is mostly about: in the one reference set that
-    /// exists, two categories carry 72% of the labels, so a setting that improves those two
-    /// and ruins the other fifteen still wins on this.
+    /// Dominated by whatever the corpus is mostly about. Across the reference sets two
+    /// categories carry roughly two labels in five, so a setting that improves those two
+    /// and ruins every other category still wins on this.
     Primary,
     /// Mean per-category F1 over mentions, counting every category once however rare.
     ///
@@ -638,8 +634,10 @@ fn normalise(vector: &mut [f32]) {
 mod tests {
     use super::*;
 
+    const DIM: usize = crate::model::Encoder::E5Small.dimensions();
+
     fn unit(slot: usize) -> Vec<f32> {
-        let mut vector = vec![0.0; EMBEDDING_DIM];
+        let mut vector = vec![0.0; DIM];
         vector[slot] = 1.0;
         vector
     }
@@ -647,7 +645,7 @@ mod tests {
     fn descriptions() -> Anchors {
         Anchors {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
+            model: crate::model::Encoder::E5Small.id().to_owned(),
             fitted_from: Vec::new(),
             params: None,
             categories: CORE_SPINE
@@ -791,7 +789,7 @@ mod tests {
 
     /// The mean of a set of vectors, which is all calibration needs of a corpus.
     fn centroid_of(corpus: &[Vec<f32>]) -> Vec<f32> {
-        let mut total = vec![0.0_f32; EMBEDDING_DIM];
+        let mut total = vec![0.0_f32; DIM];
         for review in corpus {
             accumulate(&mut total, review, 1.0);
         }
@@ -812,7 +810,7 @@ mod tests {
             .map(|index| {
                 let mut review = unit(index % 7);
                 review[300] = 0.5;
-                review[index % EMBEDDING_DIM] += 0.25;
+                review[index % DIM] += 0.25;
                 normalise(&mut review);
                 review
             })

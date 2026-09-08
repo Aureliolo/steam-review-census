@@ -15,19 +15,181 @@ use sha2::{Digest, Sha256};
 
 use crate::{Error, Result};
 
-/// Multilingual by necessity: 57% of a typical Steam corpus is not English, so an
-/// English-only model would silently discard most of it.
-pub const MODEL_ID: &str = "intfloat/multilingual-e5-small";
-pub const EMBEDDING_DIM: usize = 384;
-
-/// The model's own position limit. Reviews longer than this are truncated, which affects
-/// roughly the top 1% by length.
+/// Tokens a review is cut to. Every encoder here allows at least this many, and several
+/// allow far more; they are held to the same limit so a comparison between them is about
+/// the encoder rather than about how much text each was allowed to read. Truncation affects
+/// roughly the top 1% of reviews by length.
 pub const MAX_TOKENS: usize = 512;
 
-/// e5 models are trained with an instruction prefix and produce measurably worse vectors
-/// without one. The model card specifies `query:` for symmetric similarity, which is what
-/// clustering and classification need.
-pub const E5_PREFIX: &str = "query: ";
+/// Which encoder turns a review into a vector.
+///
+/// Multilingual by necessity: 57% of a typical Steam corpus is not English, so an
+/// English-only encoder would silently discard most of it. Every option is permissively
+/// licensed and published as a single-file ONNX graph, because the tool fetches and runs the
+/// graph itself rather than shipping a Python stack to do it.
+///
+/// A corpus records which encoder produced it and anchors record which encoder they were
+/// fitted under, so vectors from two encoders can never be silently compared. Changing this
+/// means re-embedding, which is why `census fit` can embed a reference set directly: a
+/// candidate can be measured on labelled reviews before a corpus is committed to it.
+///
+/// All four were measured that way, leave-one-game-out over six reference sets and 600
+/// held-out reviews. "descriptions" is the zero-setup path with no labels at all; "unseen
+/// game" is anchors fitted on the other five games and never on the one being judged, which
+/// is the figure that decides this.
+///
+/// | encoder | dimensions | descriptions | unseen game | against e5-small |
+/// |---------|-----------|--------------|-------------|------------------|
+/// | e5-small | 384 | 30.0% | 46.3% | reference |
+/// | e5-base | 768 | 23.3% | 48.8% | +58 / -43, p = 0.16 |
+/// | arctic-m-v2 | 768 | 22.0% | 46.8% | worse than gte on the same reviews |
+/// | gte-base | 768 | **37.2%** | **51.8%** | **+94 / -61, p = 0.0099** |
+///
+/// gte-base wins on both, and it is the only candidate whose margin over the incumbent
+/// survives a paired test. It costs 1.5x the time and twice the storage of e5-small, which
+/// is what half a million reviews' worth of extra agreement is being bought with.
+///
+/// The e5 family remains for anyone who wants the smaller vectors or the first-party ONNX:
+/// intfloat publish their own exports, while gte-base's graph is a third-party conversion of
+/// Alibaba's weights. Every file is pinned by SHA-256 either way, so a conversion cannot
+/// change under a corpus that was built from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Encoder {
+    /// 118M parameters, 384 dimensions, MIT. The smallest and fastest.
+    E5Small,
+    /// 278M parameters, 768 dimensions, MIT.
+    E5Base,
+    /// Snowflake arctic-embed-m-v2.0. 305M parameters, 768 dimensions, Apache-2.0.
+    ArcticMediumV2,
+    /// Alibaba gte-multilingual-base, by way of its ONNX re-export. 305M parameters, 768
+    /// dimensions, Apache-2.0, and the most accurate of the four.
+    #[default]
+    GteBase,
+}
+
+/// How a sequence of token vectors becomes the one vector that represents a review.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pooling {
+    /// The mean over real tokens, which is what the e5 family is trained to produce.
+    Mean,
+    /// The leading token's vector, which these encoders are trained to summarise into.
+    Cls,
+}
+
+impl Encoder {
+    /// The name this encoder is chosen by and cached under.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::E5Small => "e5-small",
+            Self::E5Base => "e5-base",
+            Self::ArcticMediumV2 => "arctic-m-v2",
+            Self::GteBase => "gte-base",
+        }
+    }
+
+    /// The repository the graph and tokenizer come from, recorded with every corpus.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::E5Small => "intfloat/multilingual-e5-small",
+            Self::E5Base => "intfloat/multilingual-e5-base",
+            Self::ArcticMediumV2 => "Snowflake/snowflake-arctic-embed-m-v2.0",
+            Self::GteBase => "onnx-community/gte-multilingual-base",
+        }
+    }
+
+    #[must_use]
+    pub const fn dimensions(self) -> usize {
+        match self {
+            Self::E5Small => 384,
+            Self::E5Base | Self::ArcticMediumV2 | Self::GteBase => 768,
+        }
+    }
+
+    #[must_use]
+    pub fn pooling(self) -> Pooling {
+        match self {
+            Self::E5Small | Self::E5Base => Pooling::Mean,
+            Self::ArcticMediumV2 | Self::GteBase => Pooling::Cls,
+        }
+    }
+
+    /// Text put in front of every review before tokenising.
+    ///
+    /// e5 models are trained with an instruction prefix and produce measurably worse vectors
+    /// without one; their cards specify `query:` for symmetric similarity, which is what
+    /// classification needs. The others prefix queries only, so comparing reviews to
+    /// reviews means no prefix at all.
+    #[must_use]
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Self::E5Small | Self::E5Base => "query: ",
+            Self::ArcticMediumV2 | Self::GteBase => "",
+        }
+    }
+
+    fn graph(self, precision: Precision) -> Asset {
+        match (self, precision) {
+            (Self::E5Small, Precision::Float16) => Asset {
+                remote: "onnx/model_O4.onnx",
+                local: "model_fp16.onnx",
+                sha256: "4654c156f3e4171abc9c716cdb771bf9116455d15ac1aab364aeeede0e3205b0",
+            },
+            (Self::E5Small, Precision::Float32) => Asset {
+                remote: "onnx/model.onnx",
+                local: "model_fp32.onnx",
+                sha256: "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+            },
+            (Self::E5Base, Precision::Float16) => Asset {
+                remote: "onnx/model_O4.onnx",
+                local: "model_fp16.onnx",
+                sha256: "f60256a833caee5c75a3903e589116752ee016ca7bc16f9b96e4db09984c5703",
+            },
+            (Self::E5Base, Precision::Float32) => Asset {
+                remote: "onnx/model.onnx",
+                local: "model_fp32.onnx",
+                sha256: "84a4d426f7e87a6bf5bf195f0bae2c4a7d15f675b23ca96f42fab8326d7a77aa",
+            },
+            (Self::ArcticMediumV2, Precision::Float16) => Asset {
+                remote: "onnx/model_fp16.onnx",
+                local: "model_fp16.onnx",
+                sha256: "f27ab40ab6e230265ba49a202a37f1ad031556256cbbc105d0ca9c0bdc7ec42e",
+            },
+            (Self::ArcticMediumV2, Precision::Float32) => Asset {
+                remote: "onnx/model.onnx",
+                local: "model_fp32.onnx",
+                sha256: "c0c53d7f49a2db60761b92b7bbf5be87a7b3cf5d92dbbd7f1b5028bd5a40aa39",
+            },
+            (Self::GteBase, Precision::Float16) => Asset {
+                remote: "onnx/model_fp16.onnx",
+                local: "model_fp16.onnx",
+                sha256: "f1d0f4ec988a6c17387d3b256e631deea506a891aed3a6ded4f9bf09386cc38e",
+            },
+            (Self::GteBase, Precision::Float32) => Asset {
+                remote: "onnx/model.onnx",
+                local: "model_fp32.onnx",
+                sha256: "5b9f03fdc40350a78fa064b4cfb6bf9a229a7c40aa87736f537e3ebd00aa2b86",
+            },
+        }
+    }
+
+    fn tokenizer(self) -> Asset {
+        let sha256 = match self {
+            Self::E5Small => "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+            Self::E5Base => "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+            Self::ArcticMediumV2 => {
+                "f1cc44ad7faaeec47241864835473fd5403f2da94673f3f764a77ebcb0a803ec"
+            }
+            Self::GteBase => "3a56def25aa40facc030ea8b0b87f3688e4b3c39eb8b45d5702b3a1300fe2a20",
+        };
+        Asset {
+            remote: "tokenizer.json",
+            local: "tokenizer.json",
+            sha256,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct Asset {
@@ -38,9 +200,10 @@ struct Asset {
 
 /// Which build of the graph to run.
 ///
-/// Measured on a 2,875-text corpus rather than assumed, because the obvious assumption was
-/// wrong. Quantising was expected to trade a little accuracy for speed and size; it costs
-/// accuracy and buys no speed at all.
+/// Measured on a 2,875-text corpus under e5-small rather than assumed, because the obvious
+/// assumption was wrong. Quantising was expected to trade a little accuracy for speed and
+/// size; it cost accuracy and bought no speed at all. Downloads scale with the encoder, but
+/// fp32 is twice fp16 for all of them.
 ///
 /// | build | `DirectML` | CPU | download | batch-invariant | mean cosine to fp32 |
 /// |-------|-----------|-----|----------|-----------------|---------------------|
@@ -48,23 +211,21 @@ struct Asset {
 /// | fp16  | **4.9s**  | 115.0s | 224 MB | yes, 0.999999  | **0.999999** |
 /// | fp32  | 4.9s      | **93.3s** | 448 MB | yes         | reference |
 ///
-/// int8 is the slowest of the three on a GPU, where dynamic quantisation pays for its
-/// scales on every layer while fp16 runs on hardware built for it, and it is no faster on
-/// this CPU either. It is also the only build whose vectors depend on what a review was
-/// embedded alongside: activation scales are taken per tensor, and a tensor spans the batch.
+/// int8 was the slowest of the three on a GPU, where dynamic quantisation pays for its
+/// scales on every layer while fp16 runs on hardware built for it, and no faster on this CPU
+/// either. It was also the only build whose vectors depended on what a review was embedded
+/// alongside: activation scales are taken per tensor, and a tensor spans the batch. Worse on
+/// every axis but a 112 MB download, so it is not offered.
 ///
-/// So fp16 is the default. It is indistinguishable from the full graph, reproducible, the
-/// fastest option where a GPU exists, and half the download of fp32. int8 remains for anyone
-/// who needs the smallest download and can accept vectors that shift with batching, and fp32
-/// for CPU-only runs, where it is the fastest of the three.
+/// fp16 is the default: indistinguishable from the full graph, reproducible, the fastest
+/// option where a GPU exists, and half the download of fp32. fp32 is for CPU-only runs,
+/// where it is the faster of the two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Precision {
-    /// Smallest download. Slowest on a GPU, and not batch-invariant.
-    Int8,
     /// Indistinguishable from the full graph, and the fastest where a GPU exists.
     #[default]
     Float16,
-    /// The graph as exported. The reference the others are judged against, fastest on CPU.
+    /// The graph as exported. The reference fp16 is judged against, and faster on CPU.
     Float32,
 }
 
@@ -72,38 +233,11 @@ impl Precision {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Int8 => "int8",
             Self::Float16 => "fp16",
             Self::Float32 => "fp32",
         }
     }
-
-    fn asset(self) -> Asset {
-        match self {
-            Self::Int8 => Asset {
-                remote: "onnx/model_qint8_avx512_vnni.onnx",
-                local: "model_int8.onnx",
-                sha256: "dd476dd0c2514e9b9be83aeb3853fac0763e0bdf4a71645407587d77c48a2d88",
-            },
-            Self::Float16 => Asset {
-                remote: "onnx/model_O4.onnx",
-                local: "model_fp16.onnx",
-                sha256: "4654c156f3e4171abc9c716cdb771bf9116455d15ac1aab364aeeede0e3205b0",
-            },
-            Self::Float32 => Asset {
-                remote: "onnx/model.onnx",
-                local: "model_fp32.onnx",
-                sha256: "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
-            },
-        }
-    }
 }
-
-const TOKENIZER: Asset = Asset {
-    remote: "tokenizer.json",
-    local: "tokenizer.json",
-    sha256: "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
-};
 
 #[derive(Debug, Clone, Copy)]
 pub struct DownloadProgress<'a> {
@@ -145,20 +279,22 @@ fn dirs_cache() -> PathBuf {
 /// and propagates transport and filesystem failures.
 pub async fn ensure(
     cache_dir: &Path,
+    encoder: Encoder,
     precision: Precision,
     mut on_progress: impl FnMut(DownloadProgress),
 ) -> Result<()> {
-    std::fs::create_dir_all(cache_dir)?;
+    let dir = encoder_dir(cache_dir, encoder);
+    std::fs::create_dir_all(&dir)?;
     let http = reqwest::Client::builder()
         .user_agent(concat!("steam-review-census/", env!("CARGO_PKG_VERSION")))
         .build()?;
 
-    for asset in [TOKENIZER, precision.asset()] {
-        let path = cache_dir.join(asset.local);
+    for asset in [encoder.tokenizer(), encoder.graph(precision)] {
+        let path = dir.join(asset.local);
         if path.is_file() && sha256_file(&path)? == asset.sha256 {
             continue;
         }
-        download(&http, asset, &path, &mut on_progress).await?;
+        download(&http, encoder, asset, &path, &mut on_progress).await?;
 
         let actual = sha256_file(&path)?;
         if actual != asset.sha256 {
@@ -177,12 +313,14 @@ pub async fn ensure(
 
 async fn download(
     http: &reqwest::Client,
+    encoder: Encoder,
     asset: Asset,
     path: &Path,
     on_progress: &mut impl FnMut(DownloadProgress),
 ) -> Result<()> {
     let url = format!(
-        "https://huggingface.co/{MODEL_ID}/resolve/main/{}",
+        "https://huggingface.co/{}/resolve/main/{}",
+        encoder.id(),
         asset.remote
     );
     let mut response = http.get(&url).send().await?.error_for_status()?;
@@ -231,14 +369,19 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-#[must_use]
-pub fn model_path(cache_dir: &Path, precision: Precision) -> PathBuf {
-    cache_dir.join(precision.asset().local)
+/// One directory per encoder, so two encoders' graphs never share a filename.
+fn encoder_dir(cache_dir: &Path, encoder: Encoder) -> PathBuf {
+    cache_dir.join(encoder.as_str())
 }
 
 #[must_use]
-pub fn tokenizer_path(cache_dir: &Path) -> PathBuf {
-    cache_dir.join("tokenizer.json")
+pub fn model_path(cache_dir: &Path, encoder: Encoder, precision: Precision) -> PathBuf {
+    encoder_dir(cache_dir, encoder).join(encoder.graph(precision).local)
+}
+
+#[must_use]
+pub fn tokenizer_path(cache_dir: &Path, encoder: Encoder) -> PathBuf {
+    encoder_dir(cache_dir, encoder).join("tokenizer.json")
 }
 
 /// Builds a session on the fastest backend this build supports and the machine provides.
@@ -251,8 +394,12 @@ pub fn tokenizer_path(cache_dir: &Path) -> PathBuf {
 /// # Errors
 ///
 /// Fails if no backend, including the CPU fallback, can load the model.
-pub fn session(cache_dir: &Path, precision: Precision) -> Result<(Session, &'static str)> {
-    let path = model_path(cache_dir, precision);
+pub fn session(
+    cache_dir: &Path,
+    encoder: Encoder,
+    precision: Precision,
+) -> Result<(Session, &'static str)> {
+    let path = model_path(cache_dir, encoder, precision);
 
     #[cfg(feature = "directml")]
     if let Ok(session) = try_session(&path, ort::ep::DirectML::default().build()) {
@@ -281,19 +428,58 @@ fn try_session(path: &Path, provider: ort::ep::ExecutionProviderDispatch) -> Res
 mod tests {
     use super::*;
 
+    const EVERY_ENCODER: [Encoder; 4] = [
+        Encoder::E5Small,
+        Encoder::E5Base,
+        Encoder::ArcticMediumV2,
+        Encoder::GteBase,
+    ];
+
     #[test]
     fn every_pinned_hash_is_a_sha256() {
-        for asset in [
-            TOKENIZER,
-            Precision::Int8.asset(),
-            Precision::Float16.asset(),
-            Precision::Float32.asset(),
-        ] {
-            assert_eq!(asset.sha256.len(), 64, "{}", asset.local);
+        for encoder in EVERY_ENCODER {
+            for asset in [
+                encoder.tokenizer(),
+                encoder.graph(Precision::Float16),
+                encoder.graph(Precision::Float32),
+            ] {
+                assert_eq!(asset.sha256.len(), 64, "{} {}", encoder.id(), asset.local);
+                assert!(
+                    asset.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                    "{} {}",
+                    encoder.id(),
+                    asset.local
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn no_two_encoders_share_a_name_a_repository_or_a_tokenizer() {
+        for (slot, one) in EVERY_ENCODER.iter().enumerate() {
+            for other in &EVERY_ENCODER[slot + 1..] {
+                assert_ne!(one.as_str(), other.as_str());
+                assert_ne!(one.id(), other.id());
+                assert_ne!(
+                    one.tokenizer().sha256,
+                    other.tokenizer().sha256,
+                    "{} and {} would share a cached tokenizer",
+                    one.id(),
+                    other.id()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn each_encoder_caches_under_its_own_directory() {
+        let root = Path::new("cache");
+        for encoder in EVERY_ENCODER {
+            let path = model_path(root, encoder, Precision::Float16);
+            assert!(path.starts_with(root.join(encoder.as_str())), "{path:?}");
             assert!(
-                asset.sha256.chars().all(|c| c.is_ascii_hexdigit()),
-                "{}",
-                asset.local
+                tokenizer_path(root, encoder).starts_with(root.join(encoder.as_str())),
+                "{encoder:?}"
             );
         }
     }

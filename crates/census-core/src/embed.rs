@@ -27,7 +27,7 @@ use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 
 use crate::{
     Error, Result,
-    model::{self, E5_PREFIX, EMBEDDING_DIM, MAX_TOKENS, MODEL_ID},
+    model::{self, Encoder, MAX_TOKENS, Pooling},
 };
 
 pub const DEFAULT_BATCH_SIZE: usize = 64;
@@ -35,6 +35,7 @@ pub const DEFAULT_BATCH_SIZE: usize = 64;
 pub struct Embedder {
     session: Session,
     tokenizer: Tokenizer,
+    encoder: Encoder,
     precision: model::Precision,
     device_name: &'static str,
     output_name: String,
@@ -44,7 +45,7 @@ pub struct Embedder {
 impl std::fmt::Debug for Embedder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Embedder")
-            .field("model", &MODEL_ID)
+            .field("model", &self.encoder.id())
             .field("device", &self.device_name)
             .finish_non_exhaustive()
     }
@@ -63,12 +64,24 @@ impl Embedder {
         self.precision
     }
 
+    /// Which encoder is loaded. Part of a corpus's provenance, and what decides how wide
+    /// every vector it produces is.
+    #[must_use]
+    pub fn encoder(&self) -> Encoder {
+        self.encoder
+    }
+
+    #[must_use]
+    pub fn dimensions(&self) -> usize {
+        self.encoder.dimensions()
+    }
+
     /// # Errors
     ///
     /// Fails if the model files are missing, corrupt, or cannot be loaded on any backend.
-    pub fn load(cache_dir: &Path, precision: model::Precision) -> Result<Self> {
-        let (session, device_name) = model::session(cache_dir, precision)?;
-        let mut tokenizer = Tokenizer::from_file(model::tokenizer_path(cache_dir))
+    pub fn load(cache_dir: &Path, encoder: Encoder, precision: model::Precision) -> Result<Self> {
+        let (session, device_name) = model::session(cache_dir, encoder, precision)?;
+        let mut tokenizer = Tokenizer::from_file(model::tokenizer_path(cache_dir, encoder))
             .map_err(|e| Error::Tokenizer(e.to_string()))?;
         tokenizer.with_padding(Some(PaddingParams {
             strategy: PaddingStrategy::BatchLongest,
@@ -99,6 +112,7 @@ impl Embedder {
         Ok(Self {
             session,
             tokenizer,
+            encoder,
             precision,
             device_name,
             output_name,
@@ -106,21 +120,13 @@ impl Embedder {
         })
     }
 
-    /// Embeds a batch, mean-pooled over real tokens and L2-normalised.
+    /// Embeds a batch, pooled the way this encoder was trained and L2-normalised.
     ///
-    /// Under [`Precision::Int8`] a review's vector depends on which reviews were embedded
-    /// alongside it: dynamic quantisation derives its activation scales per tensor, and a
-    /// tensor spans the batch, so the extremes of a batch set the rounding for everything in
-    /// it. Batches of 64 against batches of one gave a mean cosine of 0.997 and put 12.5% of
-    /// reviews in a different category. It is not padding, which grouping by exact token
-    /// length removes without closing the gap, and it is not the execution provider, which
-    /// reproduces it on CPU. The float builds do not have the problem at all, which is why
-    /// one of them is the default.
-    ///
-    /// Even under int8 the aggregate survives: mention rates across a corpus moved at most
-    /// 1.6 percentage points and 0.31 on average, because per-review disagreements largely
-    /// cancel. Batch size is recorded alongside the vectors either way, so two corpora can
-    /// be compared knowingly.
+    /// A review's vector must not depend on which reviews were embedded alongside it, or a
+    /// corpus means something slightly different depending on how it was cut into batches.
+    /// Both float builds satisfy that; a quantised build did not, which is why one is not
+    /// offered. Batch size is recorded alongside the vectors regardless, so two corpora can
+    /// always be compared knowingly.
     ///
     /// # Errors
     ///
@@ -129,7 +135,8 @@ impl Embedder {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
-        let prefixed: Vec<String> = texts.iter().map(|t| format!("{E5_PREFIX}{t}")).collect();
+        let prefix = self.encoder.prefix();
+        let prefixed: Vec<String> = texts.iter().map(|t| format!("{prefix}{t}")).collect();
         let encodings = self
             .tokenizer
             .encode_batch(prefixed, true)
@@ -166,23 +173,33 @@ impl Embedder {
         let hidden = outputs[self.output_name.as_str()]
             .try_extract_array::<f32>()?
             .into_dimensionality::<ndarray::Ix3>()?;
-        Ok(pool(&hidden, &mask, rows, cols))
+        Ok(pool(
+            &hidden,
+            &mask,
+            rows,
+            cols,
+            self.encoder.pooling(),
+            self.encoder.dimensions(),
+        ))
     }
 }
 
-/// Mean-pools over real tokens, then L2-normalises.
+/// Reduces each row to one vector the way its encoder was trained to, then L2-normalises.
 ///
-/// Padding tokens must not contribute, or a short review batched with a long one would get
-/// a vector that depends on its batch neighbours rather than on what it says.
+/// Under mean pooling, padding tokens must not contribute, or a short review batched with a
+/// long one would get a vector that depends on its batch neighbours rather than on what it
+/// says. Under CLS pooling only the leading token is read, which padding never reaches.
 fn pool(
     hidden: &ndarray::ArrayView3<'_, f32>,
     mask: &[i64],
     rows: usize,
     cols: usize,
+    pooling: Pooling,
+    dimensions: usize,
 ) -> Vec<Vec<f32>> {
     let mut out = Vec::with_capacity(rows);
     for row in 0..rows {
-        let mut acc = vec![0.0_f32; EMBEDDING_DIM];
+        let mut acc = vec![0.0_f32; dimensions];
         let mut kept = 0.0_f32;
         for col in 0..cols {
             if mask[row * cols + col] == 0 {
@@ -191,6 +208,9 @@ fn pool(
             kept += 1.0;
             for (dim, value) in acc.iter_mut().enumerate() {
                 *value += hidden[[row, col, dim]];
+            }
+            if pooling == Pooling::Cls {
+                break;
             }
         }
         let divisor = if kept > 0.0 { kept } else { 1.0 };
@@ -274,7 +294,7 @@ pub fn embed_corpus(
     // embeddings.parquet behind, which reads as a finished artefact and fails confusingly
     // everywhere downstream; a partial file under its own name cannot be mistaken for one.
     let partial = snapshot.join("embeddings.parquet.partial");
-    let schema = embedding_schema();
+    let schema = embedding_schema(embedder.dimensions());
     // A row group is buffered whole before it reaches the disk, and the default holds a
     // million rows. At 1.5 KB a vector that is the entire file in memory for any corpus
     // smaller than that, which is most of them, and it is why embedding a million-review
@@ -332,16 +352,16 @@ pub fn embed_corpus(
     std::fs::write(
         snapshot.join("embeddings.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
-            "model": MODEL_ID,
+            "model": embedder.encoder().id(),
             "precision": embedder.precision().as_str(),
-            "dimensions": EMBEDDING_DIM,
+            "dimensions": embedder.dimensions(),
             "batch_size": batch_size,
             "device": embedder.device(),
             "reviews": reviews,
             "unique_texts": unique_texts,
-            "note": "Vectors from the int8 build depend on batch size: dynamic quantisation \
-                     takes its activation scales per tensor, and a tensor spans the batch. \
-                     The float builds do not. Compare corpora built the same way.",
+            "note": "Vectors from two encoders are not comparable and must never be mixed. \
+                     Both float builds are batch-invariant, so batch size changes how long \
+                     a corpus takes to build and nothing about what it says.",
         }))?,
     )?;
 
@@ -349,7 +369,7 @@ pub fn embed_corpus(
         app_id,
         reviews,
         unique_texts,
-        dim: EMBEDDING_DIM,
+        dim: embedder.dimensions(),
         device: embedder.device(),
         elapsed: started.elapsed(),
         bytes: std::fs::metadata(&path)
@@ -361,7 +381,7 @@ pub fn embed_corpus(
 
 /// Vectors per Parquet row group, which is what the writer buffers before flushing.
 ///
-/// At 384 floats a row that is roughly 100 MB held at a time, which is a sensible row group
+/// At 768 floats a row that is roughly 200 MB held at a time, which is a sensible row group
 /// for readers and a bounded amount of memory for writers.
 const VECTORS_PER_ROW_GROUP: usize = 65_536;
 
@@ -394,15 +414,21 @@ fn drain_window(
     for chunk in window.chunks(batch_size.max(1)) {
         let texts: Vec<String> = chunk.iter().map(|(text, _)| text.clone()).collect();
         let vectors = embedder.embed(&texts)?;
-        writer.write(&batch_to_record(app_id, chunk, &vectors, schema)?)?;
+        writer.write(&batch_to_record(
+            app_id,
+            embedder.encoder().id(),
+            chunk,
+            &vectors,
+            schema,
+        )?)?;
         written = written.saturating_add(chunk.len() as u64);
     }
     window.clear();
     Ok(written)
 }
 
-fn embedding_schema() -> Arc<Schema> {
-    let dim = i32::try_from(EMBEDDING_DIM).unwrap_or(0);
+fn embedding_schema(dimensions: usize) -> Arc<Schema> {
+    let dim = i32::try_from(dimensions).unwrap_or(0);
     Arc::new(Schema::new(vec![
         Field::new("text_sha256", DataType::Utf8, false),
         Field::new("appid", DataType::UInt32, false),
@@ -420,11 +446,12 @@ fn embedding_schema() -> Arc<Schema> {
 
 fn batch_to_record(
     app_id: u32,
+    model: &str,
     chunk: &[(String, u32)],
     vectors: &[Vec<f32>],
     schema: &Arc<Schema>,
 ) -> Result<RecordBatch> {
-    let dim = i32::try_from(EMBEDDING_DIM).unwrap_or(0);
+    let dim = i32::try_from(vectors.first().map_or(0, Vec::len)).unwrap_or(0);
     let mut hashes = StringBuilder::new();
     let mut appids = UInt32Builder::new();
     let mut counts = UInt32Builder::new();
@@ -435,7 +462,7 @@ fn batch_to_record(
         hashes.append_value(sha256_hex(text));
         appids.append_value(app_id);
         counts.append_value(*n);
-        models.append_value(MODEL_ID);
+        models.append_value(model);
         embeddings.values().append_slice(vector);
         embeddings.append(true);
     }
@@ -569,7 +596,7 @@ pub(crate) fn for_each_vector(
 ///
 /// This is all that calibration ever needed from a corpus. The mean of an anchor's
 /// similarity to every review is the anchor's similarity to the mean review, because a dot
-/// product is linear in its second argument, so a million vectors reduce to 384 floats
+/// product is linear in its second argument, so a million vectors reduce to one vector
 /// computed once instead of being walked again for every anchor, fold and parameter tried.
 ///
 /// Distinct texts rather than reviews, so that a copypasta posted five hundred times counts
@@ -580,10 +607,15 @@ pub(crate) fn for_each_vector(
 /// Fails if the embeddings are missing or malformed.
 pub fn corpus_centroid(out_dir: &Path, app_id: u32) -> Result<Vec<f32>> {
     let snapshot = latest_snapshot(out_dir, app_id)?;
-    let mut total = vec![0.0_f64; crate::model::EMBEDDING_DIM];
+    // Sized from the first vector read, because how wide a corpus's vectors are is a fact
+    // about the encoder that built it rather than about the build reading it.
+    let mut total: Vec<f64> = Vec::new();
     let mut seen = 0_u64;
 
     for_each_vector(&snapshot, |_, vector| {
+        if total.is_empty() {
+            total = vec![0.0_f64; vector.len()];
+        }
         for (slot, value) in total.iter_mut().zip(vector) {
             *slot += f64::from(*value);
         }
@@ -642,6 +674,92 @@ pub fn vectors_for<S: std::hash::BuildHasher>(
         Ok(())
     })?;
     Ok(found)
+}
+
+/// Embeds a named set of a capture's reviews with whatever encoder is loaded, ignoring the
+/// vectors the corpus already holds.
+///
+/// This is the path that makes an encoder measurable before a corpus is committed to it. A
+/// reference set is a thousand-odd reviews and costs seconds; re-embedding six corpora to
+/// find out whether a candidate was worth having costs hours and cannot be undone cheaply.
+///
+/// Blank reviews are skipped, as everywhere else: an empty string embeds to a point that
+/// says nothing and lands on whichever anchor happens to sit nearest it.
+///
+/// # Errors
+///
+/// Fails if the capture cannot be read or the forward pass fails.
+pub fn embed_reviews<S: std::hash::BuildHasher>(
+    embedder: &mut Embedder,
+    out_dir: &Path,
+    app_id: u32,
+    ids: &HashSet<String, S>,
+    batch_size: usize,
+) -> Result<HashMap<String, Vec<f32>>> {
+    let snapshot = latest_snapshot(out_dir, app_id)?;
+    let texts = crate::capture::texts_for(&snapshot, ids)?;
+
+    // Batched in a fixed order, shortest first. A hash map hands its contents out in an
+    // order that changes between runs, and two reviews batched together are padded to the
+    // longer of the pair, so leaving the order to chance makes a review's vector depend on
+    // which run produced it. Sorting also keeps the padding waste down.
+    let mut ordered: Vec<(String, String)> = texts.into_iter().collect();
+    ordered.sort_unstable_by(|(left_id, left), (right_id, right)| {
+        left.len()
+            .cmp(&right.len())
+            .then_with(|| left_id.cmp(right_id))
+    });
+
+    let mut found = HashMap::new();
+    let mut batch_ids: Vec<String> = Vec::with_capacity(batch_size);
+    let mut batch_texts: Vec<String> = Vec::with_capacity(batch_size);
+    for (id, text) in ordered {
+        if text.trim().is_empty() {
+            continue;
+        }
+        batch_ids.push(id);
+        batch_texts.push(text);
+        if batch_texts.len() >= batch_size {
+            flush_batch(embedder, &mut batch_ids, &mut batch_texts, &mut found)?;
+        }
+    }
+    flush_batch(embedder, &mut batch_ids, &mut batch_texts, &mut found)?;
+    Ok(found)
+}
+
+fn flush_batch(
+    embedder: &mut Embedder,
+    ids: &mut Vec<String>,
+    texts: &mut Vec<String>,
+    found: &mut HashMap<String, Vec<f32>>,
+) -> Result<()> {
+    if texts.is_empty() {
+        return Ok(());
+    }
+    for (id, vector) in ids.drain(..).zip(embedder.embed(texts)?) {
+        found.insert(id, vector);
+    }
+    texts.clear();
+    Ok(())
+}
+
+/// The encoder a corpus was embedded with, as recorded beside its vectors.
+///
+/// # Errors
+///
+/// Fails if the capture has no embeddings, or none that say what built them.
+pub fn corpus_encoder(out_dir: &Path, app_id: u32) -> Result<String> {
+    let snapshot = latest_snapshot(out_dir, app_id)?;
+    let path = snapshot.join("embeddings.json");
+    let sidecar: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).map_err(|_| Error::NoEmbeddings {
+            path: snapshot.join("embeddings.parquet"),
+        })?)?;
+    sidecar
+        .get("model")
+        .and_then(|model| model.as_str())
+        .map(ToOwned::to_owned)
+        .ok_or(Error::MalformedPayload { field: "model" })
 }
 
 /// The newest snapshot directory for an app.
@@ -732,12 +850,13 @@ mod tests {
     fn pooling_ignores_padding_and_returns_unit_vectors() {
         // Two positions, the second masked out. The result must equal the first position
         // alone, normalised, not the average of both.
-        let mut data = vec![0.0_f32; 2 * EMBEDDING_DIM];
+        const DIM: usize = 8;
+        let mut data = vec![0.0_f32; 2 * DIM];
         data[0] = 3.0;
         data[1] = 4.0;
-        data[EMBEDDING_DIM] = 100.0;
-        let hidden = ndarray::Array3::from_shape_vec((1, 2, EMBEDDING_DIM), data).unwrap();
-        let pooled = pool(&hidden.view(), &[1, 0], 1, 2);
+        data[DIM] = 100.0;
+        let hidden = ndarray::Array3::from_shape_vec((1, 2, DIM), data).unwrap();
+        let pooled = pool(&hidden.view(), &[1, 0], 1, 2, Pooling::Mean, DIM);
 
         assert!((pooled[0][0] - 0.6).abs() < 1e-6, "{:?}", &pooled[0][..2]);
         assert!((pooled[0][1] - 0.8).abs() < 1e-6);
@@ -751,7 +870,7 @@ mod tests {
             app_id: 1,
             reviews,
             unique_texts: unique,
-            dim: EMBEDDING_DIM,
+            dim: 384,
             device: "cpu",
             elapsed: Duration::from_secs(1),
             path: PathBuf::new(),

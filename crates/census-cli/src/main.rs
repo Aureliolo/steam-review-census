@@ -13,21 +13,45 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 enum Precision {
-    /// Smallest download, 112 MB. Slowest on a GPU, and its vectors shift with batching.
-    Int8,
-    /// 224 MB. Indistinguishable from fp32 and the fastest where a GPU exists.
+    /// Indistinguishable from fp32 and the fastest where a GPU exists. Half the download.
     #[default]
     Fp16,
-    /// 448 MB. The graph as exported, and the fastest of the three on CPU.
+    /// The graph as exported, and the faster of the two on CPU.
     Fp32,
 }
 
 impl From<Precision> for census_core::model::Precision {
     fn from(value: Precision) -> Self {
         match value {
-            Precision::Int8 => Self::Int8,
             Precision::Fp16 => Self::Float16,
             Precision::Fp32 => Self::Float32,
+        }
+    }
+}
+
+/// Which encoder turns a review into a vector. Vectors from two encoders are not
+/// comparable, so changing this means re-embedding the corpus.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum Model {
+    /// multilingual-e5-small. 384 dimensions, MIT, the smallest and fastest of the four.
+    E5Small,
+    /// multilingual-e5-base. 768 dimensions, MIT.
+    E5Base,
+    /// snowflake-arctic-embed-m-v2.0. 768 dimensions, Apache-2.0.
+    ArcticM2,
+    /// gte-multilingual-base. 768 dimensions, Apache-2.0. The most accurate of the four,
+    /// measured leave-one-game-out against six reference sets.
+    #[default]
+    GteBase,
+}
+
+impl From<Model> for census_core::Encoder {
+    fn from(value: Model) -> Self {
+        match value {
+            Model::E5Small => Self::E5Small,
+            Model::E5Base => Self::E5Base,
+            Model::ArcticM2 => Self::ArcticMediumV2,
+            Model::GteBase => Self::GteBase,
         }
     }
 }
@@ -101,8 +125,12 @@ enum Command {
         /// Reviews per forward pass.
         #[arg(long, default_value_t = DEFAULT_BATCH_SIZE)]
         batch_size: usize,
-        /// Which build of the model to run. fp16 matches the full graph and is fastest on
-        /// a GPU; int8 is the smallest download but its vectors shift with batching.
+        /// Which encoder to embed with. A corpus records this, and vectors from two
+        /// encoders are never compared.
+        #[arg(long, default_value = "gte-base")]
+        model: Model,
+        /// Which build of the graph to run. fp16 matches the full graph and is fastest on a
+        /// GPU; fp32 is the faster of the two on CPU.
         #[arg(long, default_value = "fp16")]
         precision: Precision,
         /// Where to cache the model. Defaults to the platform cache directory.
@@ -192,7 +220,11 @@ struct ClassifyArgs {
     /// Ignore any fitted anchors and use the written category descriptions.
     #[arg(long, conflicts_with = "anchors")]
     descriptions: bool,
-    /// Which build of the model to run when descriptions must be embedded.
+    /// Which encoder to embed the descriptions with. Must be the encoder the corpus was
+    /// embedded with, and is checked against it.
+    #[arg(long, default_value = "gte-base")]
+    model: Model,
+    /// Which build of the graph to run when descriptions must be embedded.
     #[arg(long, default_value = "fp16")]
     precision: Precision,
     /// Where to cache the model. Defaults to the platform cache directory.
@@ -229,10 +261,20 @@ struct FitArgs {
     /// agreement on the game left out, for each game in turn.
     #[arg(long)]
     leave_one_out: bool,
+    /// Run the transfer measurement a second time under another encoder and compare the two
+    /// review by review, which is the only way to tell a real difference between encoders
+    /// from two intervals that happen to overlap.
+    #[arg(long, requires = "leave_one_out")]
+    compare: Option<Model>,
     /// Where to cache the model. Defaults to the platform cache directory.
     #[arg(long)]
     model_dir: Option<PathBuf>,
-    /// Which build of the model to run when descriptions must be embedded.
+    /// Which encoder to fit under. Naming an encoder the corpus was not embedded with makes
+    /// the fit embed the labelled reviews itself, so a candidate encoder can be measured
+    /// without re-embedding millions of reviews first.
+    #[arg(long, default_value = "gte-base")]
+    model: Model,
+    /// Which build of the graph to run.
     #[arg(long, default_value = "fp16")]
     precision: Precision,
 }
@@ -262,9 +304,20 @@ async fn main() -> Result<()> {
             app_id,
             out,
             batch_size,
+            model,
             model_dir,
             precision,
-        } => run_embed(app_id, &out, batch_size, model_dir, precision.into()).await,
+        } => {
+            run_embed(
+                app_id,
+                &out,
+                batch_size,
+                model_dir,
+                model.into(),
+                precision.into(),
+            )
+            .await
+        }
         Command::Classify(args) => run_classify(args).await,
         Command::Fit(args) => run_fit(args).await,
         Command::Ingest {
@@ -388,7 +441,6 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     );
 }
 
-/// Where `census fit` writes its result, and where `census classify` looks for it.
 /// Where anchors are looked for, best first: a set fitted for this game, then the set
 /// shipped with the tool, which is fitted across several games and is what a game nobody
 /// has labelled gets.
@@ -408,6 +460,7 @@ async fn load_anchors(
     explicit: Option<PathBuf>,
     force_descriptions: bool,
     model_dir: Option<PathBuf>,
+    encoder: census_core::Encoder,
     precision: census_core::model::Precision,
 ) -> Result<census_core::Anchors> {
     let found = anchor_paths(app_id).into_iter().find(|path| path.exists());
@@ -432,8 +485,8 @@ async fn load_anchors(
     }
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
-    census_core::model::ensure(&cache, precision, |_| {}).await?;
-    let mut embedder = census_core::Embedder::load(&cache, precision)?;
+    census_core::model::ensure(&cache, encoder, precision, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(&cache, encoder, precision)?;
     eprintln!(
         "anchors      written descriptions, on {}",
         embedder.device()
@@ -449,10 +502,19 @@ async fn run_classify(args: ClassifyArgs) -> Result<()> {
         top_helpful,
         anchors,
         descriptions,
+        model,
         precision,
         model_dir,
     } = args;
-    let anchors = load_anchors(app_id, anchors, descriptions, model_dir, precision.into()).await?;
+    let anchors = load_anchors(
+        app_id,
+        anchors,
+        descriptions,
+        model_dir,
+        model.into(),
+        precision.into(),
+    )
+    .await?;
     let options = ClassifyOptions {
         out_dir: out,
         mention_margin: mention_margin.unwrap_or_else(|| anchors.mention_margin()),
@@ -576,11 +638,23 @@ struct GameLabels {
     centroid: Vec<f32>,
 }
 
+/// Where a reference set's vectors come from.
+///
+/// The corpus's own vectors are free and are what classification uses. Embedding the labels
+/// afresh is for judging an encoder the corpus was never built with, and it gives up the
+/// corpus centroid: a thousand labelled reviews are not what an average review looks like,
+/// so calibration is switched off rather than fed a number that is not the one it wants.
+enum Vectors<'a> {
+    Stored,
+    Fresh(&'a mut census_core::Embedder),
+}
+
 fn load_game(
     app_id: u32,
     out: &std::path::Path,
     reference: Option<&PathBuf>,
     holdout: &str,
+    source: Vectors<'_>,
 ) -> Result<GameLabels> {
     let dir = reference
         .cloned()
@@ -599,7 +673,16 @@ fn load_game(
     // hundred of them costs gigabytes on a million-review game and buys nothing.
     let wanted: std::collections::HashSet<String> =
         set.labels.iter().map(|label| label.id.clone()).collect();
-    let vectors = census_core::embed::vectors_for(out, app_id, &wanted)?;
+    let (vectors, centroid) = match source {
+        Vectors::Stored => (
+            census_core::embed::vectors_for(out, app_id, &wanted)?,
+            census_core::embed::corpus_centroid(out, app_id)?,
+        ),
+        Vectors::Fresh(embedder) => (
+            census_core::embed::embed_reviews(embedder, out, app_id, &wanted, DEFAULT_BATCH_SIZE)?,
+            Vec::new(),
+        ),
+    };
 
     let split = |held: bool| -> Vec<census_core::evaluate::ReferenceLabel> {
         set.labels
@@ -612,7 +695,7 @@ fn load_game(
         app_id,
         training: census_core::anchors::to_examples(&split(false), &vectors),
         holdout: census_core::anchors::to_examples(&split(true), &vectors),
-        centroid: census_core::embed::corpus_centroid(out, app_id)?,
+        centroid,
     })
 }
 
@@ -621,7 +704,11 @@ fn load_game(
 /// Each game counts once rather than once per review, so a corpus of a million does not
 /// decide by itself what an average review looks like to a set meant to serve all of them.
 fn pooled_centroid(games: &[GameLabels]) -> Vec<f32> {
-    let mut total = vec![0.0_f32; census_core::EMBEDDING_DIM];
+    let width = games.iter().map(|game| game.centroid.len()).max();
+    let Some(width) = width.filter(|width| *width > 0) else {
+        return Vec::new();
+    };
+    let mut total = vec![0.0_f32; width];
     for game in games {
         for (slot, value) in total.iter_mut().zip(&game.centroid) {
             *slot += *value;
@@ -635,6 +722,77 @@ fn pooled_centroid(games: &[GameLabels]) -> Vec<f32> {
     total
 }
 
+/// Everything a fit needs that does not depend on which encoder is running.
+struct FitInputs<'a> {
+    app_ids: &'a [u32],
+    out: &'a std::path::Path,
+    reference: Option<&'a PathBuf>,
+    holdout: &'a str,
+    cache: &'a std::path::Path,
+    precision: census_core::model::Precision,
+    calibrate: Calibrate,
+}
+
+/// A reference set as one encoder sees it.
+struct Under {
+    encoder: census_core::Encoder,
+    descriptions: census_core::Anchors,
+    games: Vec<GameLabels>,
+    calibrate: Calibrate,
+}
+
+async fn load_under(model: Model, inputs: &FitInputs<'_>) -> Result<Under> {
+    let encoder: census_core::Encoder = model.into();
+    census_core::model::ensure(inputs.cache, encoder, inputs.precision, |_| {}).await?;
+    let mut embedder = census_core::Embedder::load(inputs.cache, encoder, inputs.precision)?;
+    let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
+
+    // A corpus embedded with another encoder holds vectors that cannot be compared with
+    // these anchors at all, so the labelled reviews are embedded again rather than read.
+    let stored = census_core::embed::corpus_encoder(inputs.out, inputs.app_ids[0])?;
+    let fresh = stored != encoder.id();
+    if fresh {
+        eprintln!(
+            "the corpus was embedded with {stored} and this fit is under {}, so the labelled \
+             reviews are being embedded again.\nCalibration is off: a reference set is not \
+             what an average review looks like, and the corpus centroid belongs to the other \
+             encoder.",
+            encoder.id()
+        );
+    }
+
+    let mut games: Vec<GameLabels> = Vec::with_capacity(inputs.app_ids.len());
+    for &app_id in inputs.app_ids {
+        let source = if fresh {
+            Vectors::Fresh(&mut embedder)
+        } else {
+            Vectors::Stored
+        };
+        games.push(load_game(
+            app_id,
+            inputs.out,
+            inputs.reference,
+            inputs.holdout,
+            source,
+        )?);
+    }
+    if games.iter().all(|game| game.training.is_empty()) {
+        anyhow::bail!(census_core::Error::NoTrainingExamples {
+            app_id: inputs.app_ids[0]
+        });
+    }
+    Ok(Under {
+        encoder,
+        descriptions,
+        games,
+        calibrate: if fresh {
+            Calibrate::Off
+        } else {
+            inputs.calibrate
+        },
+    })
+}
+
 async fn run_fit(args: FitArgs) -> Result<()> {
     let FitArgs {
         app_ids,
@@ -645,33 +803,49 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         calibrate,
         anchors_out,
         model_dir,
+        model,
         precision,
         leave_one_out,
+        compare,
     } = args;
     let holdout = holdout.as_str();
     if reference.is_some() && app_ids.len() > 1 {
         anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
     }
 
-    let games: Vec<GameLabels> = app_ids
-        .iter()
-        .map(|&app_id| load_game(app_id, &out, reference.as_ref(), holdout))
-        .collect::<Result<_>>()?;
-    if games.iter().all(|game| game.training.is_empty()) {
-        anyhow::bail!(census_core::Error::NoTrainingExamples { app_id: app_ids[0] });
-    }
-
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
-    let precision = precision.into();
-    census_core::model::ensure(&cache, precision, |_| {}).await?;
-    let mut embedder = census_core::Embedder::load(&cache, precision)?;
-    let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
+    let inputs = FitInputs {
+        app_ids: &app_ids,
+        out: &out,
+        reference: reference.as_ref(),
+        holdout,
+        cache: &cache,
+        precision: precision.into(),
+        calibrate,
+    };
+    let base = load_under(model, &inputs).await?;
 
+    if let Some(other) = compare {
+        let other = load_under(other, &inputs).await?;
+        return report_comparison(&base, &other, folds, holdout);
+    }
     if leave_one_out {
-        report_transfer(&descriptions, &games, folds, calibrate, holdout);
+        report_transfer(
+            &base.descriptions,
+            &base.games,
+            folds,
+            base.calibrate,
+            holdout,
+        );
         return Ok(());
     }
 
+    let Under {
+        descriptions,
+        games,
+        calibrate,
+        ..
+    } = base;
     let examples: Vec<census_core::anchors::Example> = games
         .iter()
         .flat_map(|game| game.training.clone())
@@ -708,6 +882,7 @@ fn report_transfer(
     calibrate: Calibrate,
     holdout: &str,
 ) {
+    let measured = measure_transfer(descriptions, games, folds, calibrate);
     println!("leave-one-game-out, measured on each game's {holdout} subset\n");
     println!(
         "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
@@ -716,6 +891,125 @@ fn report_transfer(
     println!("{}", "-".repeat(72));
 
     let mut totals = [0_u64; 6];
+    for held in &measured {
+        let (written, same, unseen) = (&held.written, &held.same, &held.unseen);
+        let n = written.len() as u64;
+        let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
+        let (gained, lost) = swapped(written, unseen);
+
+        totals[0] += count(written);
+        totals[1] += count(same);
+        totals[2] += count(unseen);
+        totals[3] += n;
+        totals[4] += gained;
+        totals[5] += lost;
+        println!(
+            "{:<10}{n:>7}{:>14}{:>12}{:>13}{:>16}",
+            held.app_id,
+            share(count(written), n),
+            share(count(same), n),
+            share(count(unseen), n),
+            format!("+{gained} / -{lost}")
+        );
+    }
+    print_transfer_totals(&totals);
+}
+
+/// Runs the transfer measurement under two encoders and compares them review by review.
+///
+/// Two encoders judged on the same reviews are a paired comparison, and the reviews they
+/// both place the same way say nothing about which is better. Reading two overlapping
+/// intervals instead would throw away exactly the information that decides it.
+fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -> Result<()> {
+    let left = measure_transfer(&base.descriptions, &base.games, folds, base.calibrate);
+    let right = measure_transfer(&other.descriptions, &other.games, folds, other.calibrate);
+    if left.len() != right.len()
+        || left
+            .iter()
+            .zip(&right)
+            .any(|(l, r)| l.app_id != r.app_id || l.unseen.len() != r.unseen.len())
+    {
+        anyhow::bail!(
+            "the two encoders were measured on different reviews, so pairing them would \
+             compare unlike with unlike"
+        );
+    }
+
+    let one = base.encoder.as_str();
+    let two = other.encoder.as_str();
+    println!("leave-one-game-out under two encoders, on each game's {holdout} subset\n");
+    println!(
+        "{:<10}{:>7}{one:>14}{two:>14}{:>16}",
+        "held out", "n", "gained / lost"
+    );
+    println!("{}", "-".repeat(61));
+
+    let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
+    let mut totals = [0_u64; 5];
+    for (l, r) in left.iter().zip(&right) {
+        let n = l.unseen.len() as u64;
+        let (gained, lost) = swapped(&l.unseen, &r.unseen);
+        totals[0] += count(&l.unseen);
+        totals[1] += count(&r.unseen);
+        totals[2] += n;
+        totals[3] += gained;
+        totals[4] += lost;
+        println!(
+            "{:<10}{n:>7}{:>14}{:>14}{:>16}",
+            l.app_id,
+            share(count(&l.unseen), n),
+            share(count(&r.unseen), n),
+            format!("+{gained} / -{lost}")
+        );
+    }
+    println!("{}", "-".repeat(61));
+    println!(
+        "{:<10}{:>7}{:>14}{:>14}{:>16}",
+        "all",
+        totals[2],
+        share(totals[0], totals[2]),
+        share(totals[1], totals[2]),
+        format!("+{} / -{}", totals[3], totals[4])
+    );
+
+    println!(
+        "\nBoth columns are the unseen-game fit: anchors built from the other five games and \
+         never\nfrom the one being measured. Gained and lost are {two} against {one}."
+    );
+    match census_core::evaluate::mcnemar_exact(totals[3], totals[4]) {
+        Some(p) => println!(
+            "Of the {} reviews the two place differently, {} move to the category the labels \
+             give\nunder {two} and {} move away. Exact McNemar {}.",
+            totals[3] + totals[4],
+            totals[3],
+            totals[4],
+            if p < 0.0001 {
+                "p < 0.0001".to_owned()
+            } else {
+                format!("p = {p:.4}")
+            }
+        ),
+        None => println!("The two encoders placed every held-out review alike."),
+    }
+    Ok(())
+}
+
+/// One game held out, and whether each of its held-back reviews landed where the labels put
+/// it under each anchor set it is judged with.
+struct HeldOut {
+    app_id: u32,
+    written: Vec<bool>,
+    same: Vec<bool>,
+    unseen: Vec<bool>,
+}
+
+fn measure_transfer(
+    descriptions: &census_core::Anchors,
+    games: &[GameLabels],
+    folds: usize,
+    calibrate: Calibrate,
+) -> Vec<HeldOut> {
+    let mut measured = Vec::with_capacity(games.len());
     for (index, game) in games.iter().enumerate() {
         if game.holdout.is_empty() {
             continue;
@@ -746,29 +1040,17 @@ fn report_transfer(
             anchors
         };
 
-        let written = census_core::anchors::agreements(descriptions, &game.holdout);
-        let same = census_core::anchors::agreements(&fit_on(&all), &game.holdout);
-        let unseen = census_core::anchors::agreements(&fit_on(&others), &game.holdout);
-        let n = game.holdout.len() as u64;
-        let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
-        let (gained, lost) = swapped(&written, &unseen);
-
-        totals[0] += count(&written);
-        totals[1] += count(&same);
-        totals[2] += count(&unseen);
-        totals[3] += n;
-        totals[4] += gained;
-        totals[5] += lost;
-        println!(
-            "{:<10}{n:>7}{:>14}{:>12}{:>13}{:>16}",
-            game.app_id,
-            share(count(&written), n),
-            share(count(&same), n),
-            share(count(&unseen), n),
-            format!("+{gained} / -{lost}")
-        );
+        measured.push(HeldOut {
+            app_id: game.app_id,
+            written: census_core::anchors::agreements(descriptions, &game.holdout),
+            same: census_core::anchors::agreements(&fit_on(&all), &game.holdout),
+            unseen: census_core::anchors::agreements(&fit_on(&others), &game.holdout),
+        });
     }
+    measured
+}
 
+fn print_transfer_totals(totals: &[u64; 6]) {
     println!("{}", "-".repeat(72));
     println!(
         "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
@@ -965,14 +1247,16 @@ async fn run_embed(
     out: &std::path::Path,
     batch_size: usize,
     model_dir: Option<PathBuf>,
+    encoder: census_core::Encoder,
     precision: census_core::model::Precision,
 ) -> Result<()> {
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     let interactive = std::io::stderr().is_terminal();
 
+    eprintln!("model:       {} {}", encoder.id(), precision.as_str());
     eprintln!("model cache: {}", cache.display());
     let mut announced = String::new();
-    census_core::model::ensure(&cache, precision, |progress| {
+    census_core::model::ensure(&cache, encoder, precision, |progress| {
         if announced != progress.file {
             progress.file.clone_into(&mut announced);
             eprintln!("  downloading {}", progress.file);
@@ -995,7 +1279,7 @@ async fn run_embed(
         eprintln!();
     }
 
-    let mut embedder = census_core::Embedder::load(&cache, precision)?;
+    let mut embedder = census_core::Embedder::load(&cache, encoder, precision)?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
     let report = census_core::embed_corpus(&mut embedder, out, app_id, batch_size, |progress| {
@@ -1166,7 +1450,25 @@ fn thousands(n: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::thousands;
+    use clap::Parser as _;
+
+    use super::{Cli, Command, Model, thousands};
+
+    #[test]
+    fn the_flag_default_is_the_encoder_the_library_would_have_picked() {
+        // Two defaults that must agree: what `--model` falls back to, and what a corpus is
+        // embedded with when nothing says otherwise. Drift between them would classify a
+        // corpus with anchors from another encoder, which is refused, loudly, much later.
+        let parsed = Cli::parse_from(["census", "embed", "1"]);
+        let Command::Embed { model, .. } = parsed.command else {
+            panic!("embed did not parse as embed");
+        };
+        assert_eq!(
+            census_core::Encoder::from(model),
+            census_core::Encoder::default()
+        );
+        assert_eq!(census_core::Encoder::from(Model::default()), model.into());
+    }
 
     #[test]
     fn thousands_groups_digits() {

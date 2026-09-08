@@ -5,8 +5,8 @@
 //! category descriptions, which need no labels and no setup, or a set fitted from labelled
 //! reviews, which is measurably better and needs a reference set to exist first.
 //!
-//! Nothing here corrects for classifier error. What the error is, on the one corpus where
-//! it has been measured, is what `census evaluate` reports.
+//! Nothing here corrects for classifier error. What that error is, on the corpora where it
+//! has been measured, is what `census evaluate` reports.
 
 use std::{
     collections::HashMap,
@@ -29,7 +29,6 @@ use parquet::{
 use crate::{
     Error, Result,
     anchors::Anchors,
-    model::MODEL_ID,
     taxonomy::{CORE_SPINE, CORE_SPINE_VERSION},
 };
 
@@ -151,7 +150,9 @@ pub struct ClassifyReport {
     pub top_helpful: u64,
     pub categories: Vec<CategoryStats>,
     pub spine_version: &'static str,
-    pub model: &'static str,
+    /// The encoder behind the anchors, which is also the encoder behind the vectors: the
+    /// two are checked against each other before a single review is placed.
+    pub model: String,
     /// Apps whose labels fitted the anchors. Empty when the written descriptions were used.
     pub anchors_fitted_from: Vec<u32>,
     pub elapsed: Duration,
@@ -172,9 +173,20 @@ pub fn classify_corpus(
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
 
-    // The join runs review-side-in-memory, vector-side-streamed. Vectors are 1.5 KB each and
-    // reviews a few dozen bytes, so holding the reviews costs a tenth of what holding the
-    // vectors would on a million-review corpus. Grouping by text also means each distinct
+    // Two encoders put the same review in different places, and nothing about a cosine
+    // between vectors from different spaces looks wrong. It would simply be meaningless.
+    let corpus_encoder = crate::embed::corpus_encoder(&options.out_dir, app_id)?;
+    if corpus_encoder != anchors.model {
+        return Err(Error::StaleAnchors {
+            field: "embedding model",
+            expected: corpus_encoder,
+            actual: anchors.model.clone(),
+        });
+    }
+
+    // The join runs review-side-in-memory, vector-side-streamed. A vector is a couple of
+    // kilobytes and a review a few dozen bytes, so holding the reviews costs a fraction of
+    // what holding the vectors would on a million-review corpus. Grouping by text also means each distinct
     // review is compared against the anchors once however many people posted it.
     let mut by_hash: HashMap<String, Vec<ReviewRow>> = HashMap::new();
     let mut reviews = 0_u64;
@@ -261,7 +273,7 @@ pub fn classify_corpus(
         top_helpful: classified.min(u64::try_from(options.top_helpful).unwrap_or(u64::MAX)),
         categories: stats,
         spine_version: CORE_SPINE_VERSION,
-        model: MODEL_ID,
+        model: anchors.model.clone(),
         anchors_fitted_from: anchors.fitted_from.clone(),
         elapsed: started.elapsed(),
         path,

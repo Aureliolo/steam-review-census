@@ -23,7 +23,7 @@ pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corp
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
 pub use evaluate::{AgreementReport, ReferenceSet, Slice, compare};
-pub use model::{EMBEDDING_DIM, MODEL_ID};
+pub use model::{Encoder, Precision};
 pub use query::{ReviewQuery, SortOrder};
 pub use sample::{SampleOptions, SampleReport, SampledReview};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
