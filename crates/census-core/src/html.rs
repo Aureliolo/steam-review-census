@@ -27,6 +27,12 @@ const LANGUAGES_SHOWN: usize = 12;
 /// these are only the numbers the shapes are drawn in.
 const WIDTH: f64 = 1000.0;
 const HEIGHT: f64 = 160.0;
+const SPARK_HEIGHT: f64 = 40.0;
+
+/// Reviews a month needs before its rates are drawn. Below this a single review moves the
+/// figure by tens of points, and one such month would set the scale for every month that has
+/// something to say.
+const ENOUGH_FOR_A_RATE: u64 = 30;
 
 /// Renders the whole report.
 #[must_use]
@@ -444,9 +450,75 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
 
     if has_examples {
         let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"6\">");
+        sparkline(out, app, &category.id);
         reviews(out, app, examples);
         out.push_str("</td></tr>");
     }
+}
+
+/// One category's mention rate month by month.
+///
+/// The same argument as the volume chart, one level down: a category at 5% of a corpus may
+/// have been 40% of one month and absent since, and only the shape says which.
+fn sparkline(out: &mut String, app: &AppReport, id: &str) {
+    let Some(slot) = CORE_SPINE.iter().position(|c| c.id == id) else {
+        return;
+    };
+    let months = &app.classification.months;
+    if months.len() < 3 {
+        return;
+    }
+    // A month with three reviews in it can be 100% of anything, and one such month would set
+    // the scale for every month that has something to say.
+    let rates: Vec<Option<f64>> = months
+        .iter()
+        .map(|month| {
+            (month.reviews >= ENOUGH_FOR_A_RATE)
+                .then(|| month.rate(slot))
+                .flatten()
+        })
+        .collect();
+    let peak = rates
+        .iter()
+        .flatten()
+        .copied()
+        .fold(0.0_f64, f64::max)
+        .max(f64::EPSILON);
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a corpus spans hundreds of months at most"
+    )]
+    let step = WIDTH / (months.len() - 1).max(1) as f64;
+    let points: Vec<String> = rates
+        .iter()
+        .enumerate()
+        .filter_map(|(index, rate)| {
+            let rate = (*rate)?;
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a corpus spans hundreds of months at most"
+            )]
+            let x = index as f64 * step;
+            Some(format!("{x:.2},{:.2}", (1.0 - rate / peak) * SPARK_HEIGHT))
+        })
+        .collect();
+    if points.len() < 3 {
+        return;
+    }
+
+    let _ = writeln!(
+        out,
+        "<figure class=\"spark\">\n<svg viewBox=\"0 0 {WIDTH:.0} {SPARK_HEIGHT:.0}\" \
+         preserveAspectRatio=\"none\" role=\"img\" aria-label=\"Mention rate by month\">\
+         <polyline points=\"{}\" /></svg>\n\
+         <figcaption>Mention rate by month, {} to {}, peaking at {}. Months with fewer than \
+         {ENOUGH_FOR_A_RATE} reviews are left out.</figcaption>\n</figure>",
+        points.join(" "),
+        escape(&crate::time::month_name(&months[0].label)),
+        escape(&crate::time::month_name(&months[months.len() - 1].label)),
+        percent(peak)
+    );
 }
 
 /// A rate, carrying the number it was formatted from so the table can be reordered by it.

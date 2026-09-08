@@ -528,6 +528,30 @@ details.pile[open] > summary {
   margin-bottom: 0.75rem;
 }
 
+figure.spark {
+  margin: 0 0 0.9rem;
+}
+
+figure.spark svg {
+  display: block;
+  width: 100%;
+  height: 40px;
+}
+
+figure.spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+figure.spark figcaption {
+  font-size: 0.74rem;
+  color: var(--ink-faint);
+  padding-top: 0.2rem;
+}
+
 ol.reviews {
   list-style: none;
   margin: 0;
