@@ -33,15 +33,13 @@ jobs:
             binary: census.exe
             asset: census-x86_64-pc-windows-msvc
             features: "--features directml"
+          # Apple Silicon only: ONNX Runtime publishes no prebuilt binary for Intel macOS,
+          # and building it from source in CI is not worth it for a platform Apple has
+          # stopped shipping.
           - os: macos-latest
             target: aarch64-apple-darwin
             binary: census
             asset: census-aarch64-apple-darwin
-            features: "--features coreml"
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary: census
-            asset: census-x86_64-apple-darwin
             features: "--features coreml"
     runs-on: ${{ matrix.os }}
     steps:
