@@ -1117,6 +1117,61 @@ mod tests {
         );
     }
 
+    /// The declarations inside a block, given the text that opens it.
+    fn declared_in(marker: &str) -> Vec<&'static str> {
+        let start = STYLE
+            .find(marker)
+            .unwrap_or_else(|| panic!("no {marker} in the stylesheet"));
+        let open = start + STYLE[start..].find('{').expect("a block with no brace");
+        let mut depth = 0_i32;
+        let mut end = open;
+        for (offset, character) in STYLE[open..].char_indices() {
+            match character {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + offset;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        STYLE[open..end]
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("--"))
+            .filter_map(|line| line.split(':').next())
+            .collect()
+    }
+
+    #[test]
+    fn no_colour_goes_missing_when_the_page_is_read_in_the_dark() {
+        // A token used but not defined for a theme is invisible text, and only in that
+        // theme, which is exactly the kind of thing nobody notices until somebody else does.
+        let light = declared_in(":root {");
+        let media = declared_in("@media (prefers-color-scheme: dark)");
+        let attribute = declared_in(":root[data-theme='dark']");
+
+        // Set on individual elements by the markup rather than by the theme.
+        let inline = ["fill", "heat", "offset"];
+        for used in STYLE.split("var(--").skip(1) {
+            let name = used.split([')', ',', ' ']).next().unwrap_or_default();
+            assert!(
+                light.contains(&name) || inline.contains(&name),
+                "--{name} is used and never defined"
+            );
+        }
+        for name in &light {
+            assert_eq!(
+                media.contains(name),
+                attribute.contains(name),
+                "--{name} is themed by one dark rule and not the other"
+            );
+        }
+        assert!(!media.is_empty(), "the dark theme defines nothing at all");
+    }
+
     #[test]
     fn every_character_that_could_close_a_tag_is_escaped() {
         // Review text is arbitrary text written by strangers. A single unescaped angle

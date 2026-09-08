@@ -15,12 +15,10 @@
   --over: #b4451f;
   --over-soft: #f6e2d9;
   --under: #1f6f6b;
-  --under-soft: #d9eceb;
   --warn-bg: #fdf6e3;
   --warn-line: #e8d9a8;
 
   --radius: 10px;
-  --gap: 1.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,7 +35,6 @@
     --over: #e8875a;
     --over-soft: #3a2419;
     --under: #5fbfb8;
-    --under-soft: #16302e;
     --warn-bg: #241f14;
     --warn-line: #4a3f24;
   }
@@ -56,7 +53,6 @@
   --over: #e8875a;
   --over-soft: #3a2419;
   --under: #5fbfb8;
-  --under-soft: #16302e;
   --warn-bg: #241f14;
   --warn-line: #4a3f24;
 }
