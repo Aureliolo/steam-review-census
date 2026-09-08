@@ -174,30 +174,36 @@ impl Slice {
     }
 
     /// 95% Wilson score interval for the agreement rate.
-    ///
-    /// Reference sets are small: a randomly drawn subset runs to a hundred reviews or so,
-    /// where six reviews changing hands moves the headline six points. A bare
-    /// percentage invites reading such a swing as an improvement, so every rate reported
-    /// here carries the range it is actually entitled to claim. Wilson rather than the
-    /// textbook normal interval, which misbehaves badly at these counts and happily returns
-    /// bounds outside zero to one.
     #[must_use]
     pub fn interval(&self) -> Option<(f64, f64)> {
-        const Z: f64 = 1.959_963_985;
-        let hits = self.agreement()?;
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "reference sets are a few hundred reviews"
-        )]
-        let n = self.compared as f64;
-        let denominator = Z.mul_add(Z / n, 1.0);
-        let centre = hits + Z * Z / (2.0 * n);
-        let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
-        Some((
-            ((centre - spread) / denominator).max(0.0),
-            ((centre + spread) / denominator).min(1.0),
-        ))
+        wilson(self.agreed, self.compared)
     }
+}
+
+/// 95% Wilson score interval for a proportion.
+///
+/// Reference sets are small: a randomly drawn subset runs to a hundred reviews or so, where
+/// six reviews changing hands moves the headline six points. A bare percentage invites
+/// reading such a swing as an improvement, so every rate reported anywhere in this tool
+/// carries the range it is actually entitled to claim. Wilson rather than the textbook
+/// normal interval, which misbehaves badly at these counts and happily returns bounds
+/// outside zero to one.
+#[must_use]
+pub fn wilson(part: u64, whole: u64) -> Option<(f64, f64)> {
+    const Z: f64 = 1.959_963_985;
+    let hits = rate(part, whole)?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are a few hundred reviews"
+    )]
+    let n = whole as f64;
+    let denominator = Z.mul_add(Z / n, 1.0);
+    let centre = hits + Z * Z / (2.0 * n);
+    let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
+    Some((
+        ((centre - spread) / denominator).max(0.0),
+        ((centre + spread) / denominator).min(1.0),
+    ))
 }
 
 /// Two-sided exact McNemar test for two classifiers judged on the same reviews.

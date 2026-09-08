@@ -401,17 +401,21 @@ pub struct FitOutcome {
     /// Held-out mention macro F1 of the chosen blend and margin.
     pub mention_macro_f1: f64,
     pub baseline_macro_f1: f64,
+    /// What the blend was chosen to win. The other figure is a cost, not a claim.
+    pub objective: Objective,
     pub folds: usize,
     pub examples: usize,
 }
 
 /// Fits the blend and the mention margin by cross-validation over the training examples.
 ///
-/// Two stages, because the two settings answer different questions and one objective cannot
-/// serve both. The blend is chosen on held-out primary agreement, which is the question the
-/// classifier is mainly asked. The margin only affects which *additional* categories a
-/// review keeps, so it is chosen afterwards, on held-out mention macro F1, with the blend
-/// already fixed.
+/// Which of the two questions the search is trying to win is the caller's to say, because
+/// they pull in different directions: the secondary weight that best identifies a review's
+/// main subject is zero, and zero leaves every category that is usually somebody's second
+/// subject with almost no evidence and a written description it never moves off.
+///
+/// The margin is settled last and always on mentions, whatever the blend was chosen for,
+/// since it decides nothing else.
 ///
 /// Every score here is on examples the fold did not see. Selecting on training-fold scores
 /// would pick whichever setting memorised the labels hardest, which for anchors is always
@@ -423,25 +427,34 @@ pub fn search(
     centroid: &[f32],
     folds: usize,
     calibration: Calibration,
+    objective: Objective,
 ) -> FitOutcome {
     let folds = folds.max(2).min(examples.len().max(2));
     let score = |params, objective| {
         cross_validate(descriptions, examples, centroid, folds, params, objective)
+    };
+    let margins: &[f32] = match objective {
+        // The margin cannot change which category scores highest, so trying it here would
+        // only spend folds to arrive back where it started.
+        Objective::Primary => &[crate::classify::DEFAULT_MENTION_MARGIN],
+        Objective::Mentions => MARGIN_GRID,
     };
 
     let mut best = (f64::NEG_INFINITY, FitParams::default());
     for &smoothing in SMOOTHING_GRID {
         for &secondary_weight in SECONDARY_GRID {
             for calibrate in calibration.candidates() {
-                let params = FitParams {
-                    smoothing,
-                    secondary_weight,
-                    calibrate,
-                    ..FitParams::default()
-                };
-                let agreement = score(params, Objective::Primary);
-                if agreement > best.0 {
-                    best = (agreement, params);
+                for &mention_margin in margins {
+                    let params = FitParams {
+                        smoothing,
+                        secondary_weight,
+                        mention_margin,
+                        calibrate,
+                    };
+                    let found = score(params, objective);
+                    if found > best.0 {
+                        best = (found, params);
+                    }
                 }
             }
         }
@@ -458,9 +471,9 @@ pub fn search(
     let mut baseline = (f64::NEG_INFINITY, flat);
     for calibrate in calibration.candidates() {
         let params = FitParams { calibrate, ..flat };
-        let agreement = score(params, Objective::Primary);
-        if agreement > baseline.0 {
-            baseline = (agreement, params);
+        let found = score(params, objective);
+        if found > baseline.0 {
+            baseline = (found, params);
         }
     }
 
@@ -477,17 +490,21 @@ pub fn search(
     };
     let (mention_macro_f1, mention_margin) = best_margin(best.1);
     let (baseline_macro_f1, _) = best_margin(baseline.1);
+    let params = FitParams {
+        mention_margin,
+        ..best.1
+    };
 
     FitOutcome {
-        params: FitParams {
-            mention_margin,
-            ..best.1
-        },
-        primary_agreement: best.0,
-        baseline_agreement: baseline.0,
+        params,
+        // Reported rather than selected on, so a blend chosen for one question still says
+        // plainly what it cost the other.
+        primary_agreement: score(params, Objective::Primary),
+        baseline_agreement: score(baseline.1, Objective::Primary),
         baseline_calibrated: baseline.1.calibrate,
         mention_macro_f1,
         baseline_macro_f1,
+        objective,
         folds,
         examples: examples.len(),
     }
@@ -547,15 +564,7 @@ fn cross_validate(
                         agreed += 1;
                     }
                 }
-                Objective::Mentions => {
-                    for (slot, counts) in confusion.iter_mut().enumerate() {
-                        let expected = example.primary == slot || example.secondary.contains(&slot);
-                        let found = mentions & (1 << slot) != 0;
-                        counts.expected += u64::from(expected);
-                        counts.found += u64::from(found);
-                        counts.hit += u64::from(expected && found);
-                    }
-                }
+                Objective::Mentions => tally(&mut confusion, example, mentions),
             }
         }
     }
@@ -571,6 +580,56 @@ struct Counts {
     expected: u64,
     found: u64,
     hit: u64,
+}
+
+/// What one anchor set gets right on a set of labelled reviews.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Scored {
+    /// Reviews whose main subject was identified as the labeller identified it.
+    pub agreed: u64,
+    pub compared: u64,
+    /// Mean per-category F1 over mentions, counting every category once however rare.
+    pub mention_macro_f1: f64,
+}
+
+impl Scored {
+    /// Share of reviews whose main subject was agreed, or zero when nothing was compared.
+    #[must_use]
+    pub fn primary_agreement(&self) -> f64 {
+        ratio(self.agreed, self.compared)
+    }
+}
+
+/// Scores an anchor set against labelled reviews it is not being fitted to.
+///
+/// Both questions at once, because they are answered from the same pass and reporting only
+/// one of them is how a set that finds two categories well and nineteen not at all comes to
+/// look like a good one.
+#[must_use]
+pub fn score(anchors: &Anchors, examples: &[Example], margin: f32) -> Scored {
+    let mut agreed = 0_u64;
+    let mut confusion = vec![Counts::default(); CORE_SPINE.len()];
+    for example in examples {
+        let sims = anchors.similarities(&example.vector);
+        let (primary, mentions) = crate::classify::assign(&sims, margin);
+        agreed += u64::from(primary == example.primary);
+        tally(&mut confusion, example, mentions);
+    }
+    Scored {
+        agreed,
+        compared: examples.len() as u64,
+        mention_macro_f1: macro_f1(&confusion),
+    }
+}
+
+fn tally(confusion: &mut [Counts], example: &Example, mentions: u32) {
+    for (slot, counts) in confusion.iter_mut().enumerate() {
+        let expected = example.primary == slot || example.secondary.contains(&slot);
+        let found = mentions & (1 << slot) != 0;
+        counts.expected += u64::from(expected);
+        counts.found += u64::from(found);
+        counts.hit += u64::from(expected && found);
+    }
 }
 
 /// Unweighted mean F1 over the categories the examples actually use, so a rare category the
@@ -899,24 +958,78 @@ mod tests {
 
     #[test]
     fn the_search_never_returns_a_setting_it_did_not_score() {
-        let examples: Vec<Example> = (0..40)
+        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
+        for objective in [Objective::Primary, Objective::Mentions] {
+            let outcome = search(
+                &descriptions(),
+                &spread_over_four(),
+                &centroid_of(&corpus),
+                5,
+                Calibration::Search,
+                objective,
+            );
+            assert!(SMOOTHING_GRID.contains(&outcome.params.smoothing));
+            assert!(SECONDARY_GRID.contains(&outcome.params.secondary_weight));
+            assert!(MARGIN_GRID.contains(&outcome.params.mention_margin));
+            assert_eq!(outcome.objective, objective);
+            assert_eq!(outcome.examples, 40);
+        }
+    }
+
+    /// Both figures come back whichever one was chosen on, or a caller cannot see what the
+    /// choice cost and the flag is unreadable.
+    #[test]
+    fn a_search_reports_the_question_it_was_not_asked() {
+        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
+        for objective in [Objective::Primary, Objective::Mentions] {
+            let outcome = search(
+                &descriptions(),
+                &spread_over_four(),
+                &centroid_of(&corpus),
+                5,
+                Calibration::Search,
+                objective,
+            );
+            assert!(
+                outcome.primary_agreement > 0.0,
+                "{objective:?} reports no agreement"
+            );
+            assert!(
+                outcome.mention_macro_f1 > 0.0,
+                "{objective:?} reports no F1"
+            );
+        }
+    }
+
+    #[test]
+    fn a_perfect_set_scores_perfectly_on_reviews_it_was_never_fitted_to() {
+        let examples = spread_over_four();
+        let fitted = descriptions().fit(&examples, &[], FitParams::default());
+        let scored = score(&fitted, &examples, crate::classify::DEFAULT_MENTION_MARGIN);
+
+        assert_eq!(scored.compared, 40);
+        assert!(
+            (scored.primary_agreement() - 1.0).abs() < 1e-9,
+            "four separated categories should never be confused: {scored:?}"
+        );
+        assert_eq!(
+            score(&fitted, &[], crate::classify::DEFAULT_MENTION_MARGIN).compared,
+            0
+        );
+        assert!(
+            (score(&fitted, &[], crate::classify::DEFAULT_MENTION_MARGIN).primary_agreement())
+                .abs()
+                < 1e-9
+        );
+    }
+
+    fn spread_over_four() -> Vec<Example> {
+        (0..40)
             .map(|index| Example {
                 vector: unit(index % 4),
                 primary: index % 4,
                 secondary: vec![],
             })
-            .collect();
-        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
-        let outcome = search(
-            &descriptions(),
-            &examples,
-            &centroid_of(&corpus),
-            5,
-            Calibration::Search,
-        );
-        assert!(SMOOTHING_GRID.contains(&outcome.params.smoothing));
-        assert!(SECONDARY_GRID.contains(&outcome.params.secondary_weight));
-        assert!(MARGIN_GRID.contains(&outcome.params.mention_margin));
-        assert_eq!(outcome.examples, 40);
+            .collect()
     }
 }

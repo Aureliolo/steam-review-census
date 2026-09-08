@@ -73,6 +73,21 @@ impl From<Calibrate> for census_core::anchors::Calibration {
     }
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Select {
+    Mentions,
+    Primary,
+}
+
+impl From<Select> for census_core::anchors::Objective {
+    fn from(value: Select) -> Self {
+        match value {
+            Select::Mentions => Self::Mentions,
+            Select::Primary => Self::Primary,
+        }
+    }
+}
+
 /// How often to emit a progress line when stderr is not a terminal.
 const PROGRESS_EVERY_SHARDS: usize = 5;
 const PROGRESS_EVERY_TEXTS: u64 = 5_000;
@@ -276,6 +291,11 @@ struct FitArgs {
     /// `search` lets cross-validation decide, which favours the largest categories.
     #[arg(long, default_value = "search")]
     calibrate: Calibrate,
+    /// What the blend is chosen to win. `mentions` weighs every category the same, which is
+    /// what a report giving each one a row needs; `primary` maximises how often the main
+    /// subject is right, which the largest few categories decide.
+    #[arg(long, default_value = "mentions")]
+    select: Select,
     /// Where to write the fitted anchors. Defaults to reference/anchors.json.
     #[arg(long)]
     anchors_out: Option<PathBuf>,
@@ -820,6 +840,7 @@ struct FitInputs<'a> {
     cache: &'a std::path::Path,
     precision: census_core::model::Precision,
     calibrate: Calibrate,
+    select: Select,
 }
 
 /// A reference set as one encoder sees it.
@@ -828,6 +849,7 @@ struct Under {
     descriptions: census_core::Anchors,
     games: Vec<GameLabels>,
     calibrate: Calibrate,
+    select: Select,
 }
 
 async fn load_under(model: Model, inputs: &FitInputs<'_>) -> Result<Under> {
@@ -890,6 +912,7 @@ async fn load_under(model: Model, inputs: &FitInputs<'_>) -> Result<Under> {
         } else {
             inputs.calibrate
         },
+        select: inputs.select,
     })
 }
 
@@ -907,6 +930,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         precision,
         leave_one_out,
         compare,
+        select,
     } = args;
     let holdout = holdout.as_str();
     if reference.is_some() && app_ids.len() > 1 {
@@ -922,6 +946,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         cache: &cache,
         precision: precision.into(),
         calibrate,
+        select,
     };
     let base = load_under(model, &inputs).await?;
 
@@ -935,6 +960,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
             &base.games,
             folds,
             base.calibrate,
+            base.select,
             holdout,
         );
         return Ok(());
@@ -944,6 +970,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         descriptions,
         games,
         calibrate,
+        select,
         ..
     } = base;
     let examples: Vec<census_core::anchors::Example> = games
@@ -956,18 +983,85 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         examples.len(),
         games.len()
     );
-    let outcome =
-        census_core::anchors::search(&descriptions, &examples, &centroid, folds, calibrate.into());
-    let mut fitted = descriptions.fit(&examples, &app_ids, outcome.params);
-    if outcome.params.calibrate {
-        fitted.calibrate(&centroid);
-    }
+    let search = |objective| {
+        let outcome = census_core::anchors::search(
+            &descriptions,
+            &examples,
+            &centroid,
+            folds,
+            calibrate.into(),
+            objective,
+        );
+        let mut anchors = descriptions.fit(&examples, &app_ids, outcome.params);
+        if outcome.params.calibrate {
+            anchors.calibrate(&centroid);
+        }
+        (outcome, anchors)
+    };
+    let (outcome, fitted) = search(select.into());
 
     let path = anchors_out.unwrap_or_else(|| PathBuf::from("reference").join("anchors.json"));
     fitted.save(&path)?;
-    let held: usize = games.iter().map(|game| game.holdout.len()).sum();
-    print_fit(&fitted, &outcome, &path, holdout, held);
+    let held: Vec<census_core::anchors::Example> =
+        games.iter().flat_map(|game| game.holdout.clone()).collect();
+    let honest = census_core::anchors::score(&fitted, &held, outcome.params.mention_margin);
+    print_fit(&fitted, &outcome, &path, holdout, honest);
+    print_cost_of_the_other_choice(&search(other(select.into())), &fitted, &held);
     Ok(())
+}
+
+const fn other(objective: census_core::anchors::Objective) -> census_core::anchors::Objective {
+    match objective {
+        census_core::anchors::Objective::Mentions => census_core::anchors::Objective::Primary,
+        census_core::anchors::Objective::Primary => census_core::anchors::Objective::Mentions,
+    }
+}
+
+/// What choosing the other objective would have bought and cost, on the reviews neither saw.
+///
+/// A flag that silently decides how good the numbers in the report are is worth measuring
+/// rather than arguing about. The two anchor sets are judged on the same held-back reviews,
+/// so the ones they place the same way carry no information and are left out of the test.
+fn print_cost_of_the_other_choice(
+    (outcome, anchors): &(census_core::FitOutcome, census_core::Anchors),
+    chosen: &census_core::Anchors,
+    held: &[census_core::anchors::Example],
+) {
+    if held.is_empty() {
+        return;
+    }
+    let alternative = census_core::anchors::score(anchors, held, outcome.params.mention_margin);
+    let mine = census_core::anchors::agreements(chosen, held);
+    let theirs = census_core::anchors::agreements(anchors, held);
+    let gained = mine
+        .iter()
+        .zip(&theirs)
+        .filter(|(a, b)| **a && !**b)
+        .count() as u64;
+    let lost = mine
+        .iter()
+        .zip(&theirs)
+        .filter(|(a, b)| !**a && **b)
+        .count() as u64;
+
+    println!(
+        "\nChoosing for {} instead would have scored {:.1}% and {:.3} on the same reviews.",
+        match outcome.objective {
+            census_core::anchors::Objective::Mentions => "mentions",
+            census_core::anchors::Objective::Primary => "the main subject",
+        },
+        alternative.primary_agreement() * 100.0,
+        alternative.mention_macro_f1
+    );
+    match census_core::evaluate::mcnemar_exact(gained, lost) {
+        Some(p) => println!(
+            "On the main subject {gained} reviews went one way and {lost} the other, \
+             p = {p:.4} (exact McNemar)."
+        ),
+        None => {
+            println!("Neither placed a single review differently, so there is nothing to test.");
+        }
+    }
 }
 
 /// Fits on every game but one and measures on the game left out, for each in turn.
@@ -980,9 +1074,10 @@ fn report_transfer(
     games: &[GameLabels],
     folds: usize,
     calibrate: Calibrate,
+    select: Select,
     holdout: &str,
 ) {
-    let measured = measure_transfer(descriptions, games, folds, calibrate);
+    let measured = measure_transfer(descriptions, games, folds, calibrate, select);
     println!("leave-one-game-out, measured on each game's {holdout} subset\n");
     println!(
         "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
@@ -1021,8 +1116,20 @@ fn report_transfer(
 /// both place the same way say nothing about which is better. Reading two overlapping
 /// intervals instead would throw away exactly the information that decides it.
 fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -> Result<()> {
-    let left = measure_transfer(&base.descriptions, &base.games, folds, base.calibrate);
-    let right = measure_transfer(&other.descriptions, &other.games, folds, other.calibrate);
+    let left = measure_transfer(
+        &base.descriptions,
+        &base.games,
+        folds,
+        base.calibrate,
+        base.select,
+    );
+    let right = measure_transfer(
+        &other.descriptions,
+        &other.games,
+        folds,
+        other.calibrate,
+        other.select,
+    );
     if left.len() != right.len()
         || left
             .iter()
@@ -1108,6 +1215,7 @@ fn measure_transfer(
     games: &[GameLabels],
     folds: usize,
     calibrate: Calibrate,
+    select: Select,
 ) -> Vec<HeldOut> {
     let mut measured = Vec::with_capacity(games.len());
     for (index, game) in games.iter().enumerate() {
@@ -1132,6 +1240,7 @@ fn measure_transfer(
                 &game.centroid,
                 folds,
                 calibrate.into(),
+                select.into(),
             );
             let mut anchors = descriptions.fit(examples, &[game.app_id], outcome.params);
             if outcome.params.calibrate {
@@ -1221,11 +1330,14 @@ fn print_fit(
     outcome: &census_core::FitOutcome,
     path: &std::path::Path,
     holdout: &str,
-    held_back: usize,
+    honest: census_core::anchors::Scored,
 ) {
     println!("anchors from {}", apps(&anchors.fitted_from));
     println!("  fitted from  {} labels", outcome.examples);
-    println!("  held back    {held_back} ({holdout} subset, never seen by the fit)");
+    println!(
+        "  held back    {} ({holdout} subset, never seen by the fit)",
+        honest.compared
+    );
     println!("  smoothing    {}", outcome.params.smoothing);
     println!("  secondary    {}", outcome.params.secondary_weight);
     println!("  margin       {}", outcome.params.mention_margin);
@@ -1235,6 +1347,15 @@ fn print_fit(
             "on"
         } else {
             "off"
+        }
+    );
+    println!(
+        "  chosen for   {}",
+        match outcome.objective {
+            census_core::anchors::Objective::Mentions =>
+                "mentions, every category weighed the same",
+            census_core::anchors::Objective::Primary =>
+                "the main subject, which the largest few decide",
         }
     );
     println!("  anchors      {}", path.display());
@@ -1256,6 +1377,24 @@ fn print_fit(
         "    mention macro F1   {:.3}   ({baseline_note}: {:.3})",
         outcome.mention_macro_f1, outcome.baseline_macro_f1
     );
+
+    if honest.compared > 0 {
+        println!(
+            "\n  on the {} held-back {holdout} reviews, which chose nothing:",
+            honest.compared
+        );
+        let agreement = honest.primary_agreement();
+        match census_core::evaluate::wilson(honest.agreed, honest.compared) {
+            Some((low, high)) => println!(
+                "    primary agreement  {:.1}%  [{:.1}, {:.1}]",
+                agreement * 100.0,
+                low * 100.0,
+                high * 100.0
+            ),
+            None => println!("    primary agreement  {:.1}%", agreement * 100.0),
+        }
+        println!("    mention macro F1   {:.3}", honest.mention_macro_f1);
+    }
 
     println!(
         "\n{:<30} {:>10} {:>16}",
@@ -1279,8 +1418,9 @@ fn print_fit(
     );
     println!(
         "\nCross-validated figures are measured on the fitting data and are optimistic: the\n\
-         blend and the margin were both chosen against them. Classify with these anchors and\n\
-         run `census evaluate` to read the held-out {holdout} subset, which is the honest number."
+         blend and the margin were both chosen against them. The held-back figures above are\n\
+         the honest ones, on reviews no setting was chosen against. `census evaluate` reads\n\
+         the same subset after a full classify, and adds the per-category breakdown."
     );
 }
 
