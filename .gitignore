@@ -10,6 +10,10 @@ reference/**/sample.json
 reference/**/batches/
 corpus/
 raw/
+
+# Rendered reports quote review text, which is the same reason the captures are not here.
+census-report.html
+*-report.html
 analysis/
 output/
 *.db
