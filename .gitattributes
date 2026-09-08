@@ -1,0 +1,9 @@
+# CI runs the same bash steps on Linux, macOS and Windows runners, so line endings are
+# normalised rather than left to the checkout platform.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.onnx binary
+*.parquet binary
