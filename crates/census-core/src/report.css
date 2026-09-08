@@ -275,6 +275,41 @@ section.game {
   max-width: 52rem;
 }
 
+figure.timeline {
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.75rem 0.9rem 0.5rem;
+}
+
+figure.timeline svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+figure.timeline .bar {
+  fill: var(--accent);
+  opacity: 0.55;
+}
+
+figure.timeline .share {
+  fill: none;
+  stroke: var(--over);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+figure.timeline figcaption {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+  padding-top: 0.35rem;
+}
+
 .scroll {
   overflow-x: auto;
   border: 1px solid var(--line);

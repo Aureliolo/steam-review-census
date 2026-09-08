@@ -18,6 +18,7 @@ pub mod sample;
 pub mod shard;
 pub mod state;
 pub mod taxonomy;
+pub mod time;
 
 pub use anchors::{Anchors, FitOutcome, FitParams};
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};

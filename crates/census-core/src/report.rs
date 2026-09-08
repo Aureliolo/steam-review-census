@@ -65,6 +65,10 @@ pub struct Classification {
     /// Reviews per language, most common first.
     #[serde(default)]
     pub languages: Vec<(String, u64)>,
+    /// What was said month by month, oldest first. Absent from sidecars written before the
+    /// classifier counted it.
+    #[serde(default)]
+    pub months: Vec<Month>,
     #[serde(default)]
     pub top_reviews: Vec<TopRow>,
 }
@@ -91,6 +95,39 @@ impl CategoryCount {
     )]
     pub fn positive_share(&self) -> Option<f64> {
         (self.mention_count > 0).then(|| self.positive_mentions as f64 / self.mention_count as f64)
+    }
+}
+
+/// One month of a corpus.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Month {
+    pub label: String,
+    pub reviews: u64,
+    pub positive: u64,
+    /// Mentions per category, in taxonomy order.
+    pub categories: Vec<u64>,
+}
+
+impl Month {
+    /// Share of this month's reviews that recommended the game.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn positive_share(&self) -> Option<f64> {
+        (self.reviews > 0).then(|| self.positive as f64 / self.reviews as f64)
+    }
+
+    /// Share of this month's reviews that mention a category, by its taxonomy position.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn rate(&self, slot: usize) -> Option<f64> {
+        let mentions = *self.categories.get(slot)?;
+        (self.reviews > 0).then(|| mentions as f64 / self.reviews as f64)
     }
 }
 
@@ -453,6 +490,7 @@ mod tests {
                     })
                     .collect(),
                 languages: Vec::new(),
+                months: Vec::new(),
                 top_reviews: Vec::new(),
             },
             examples: Vec::new(),

@@ -23,6 +23,11 @@ const PREVIEW_CHARS: usize = 320;
 /// Languages listed before the tail is summarised as a count.
 const LANGUAGES_SHOWN: usize = 12;
 
+/// The timeline's own coordinate space. The SVG scales to whatever width it is given, so
+/// these are only the numbers the shapes are drawn in.
+const WIDTH: f64 = 1000.0;
+const HEIGHT: f64 = 160.0;
+
 /// Renders the whole report.
 #[must_use]
 pub fn render(report: &Report) -> String {
@@ -175,6 +180,7 @@ fn game(out: &mut String, app: &AppReport) {
     let _ = writeln!(out, "<h2>{}</h2>", escape(&app.crawl.title()));
     facts(out, app);
     headline(out, app);
+    over_time(out, app);
     categories(out, app);
     top_of_the_pile(out, app);
     languages(out, app);
@@ -198,7 +204,7 @@ fn facts(out: &mut String, app: &AppReport) {
     if !crawl.review_score_desc.is_empty() {
         fact(out, "Steam calls it", &crawl.review_score_desc);
     }
-    fact(out, "Captured", &date(crawl.snapshot_unix));
+    fact(out, "Captured", &crate::time::day(crawl.snapshot_unix));
     out.push_str("</dl>\n");
 }
 
@@ -236,6 +242,96 @@ fn headline(out: &mut String, app: &AppReport) {
         percent(overall),
     );
     out.push_str("\n</p>\n");
+}
+
+/// Reviews per month, and how many of them recommended the game.
+///
+/// A mention rate is one number for a corpus that took years to gather. A game review-bombed
+/// for a fortnight and quiet since produces much the same rate as one grumbled about steadily
+/// for a decade, and a reader shown only the rate cannot tell which they are looking at.
+///
+/// Drawn as inline SVG: a chart that fetched a plotting library would not be a self-contained
+/// page, and this one is two shapes.
+fn over_time(out: &mut String, app: &AppReport) {
+    let months = &app.classification.months;
+    if months.len() < 2 {
+        return;
+    }
+    let first = crate::time::month_name(&months[0].label);
+    let last = crate::time::month_name(&months[months.len() - 1].label);
+    let tallest = months.iter().map(|m| m.reviews).max().unwrap_or(1).max(1);
+
+    out.push_str("<h3>When it was said</h3>\n");
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">Reviews per month, {} to {}. The line is the share of each month \
+         that recommended the game, from none at the bottom to all at the top.</p>",
+        escape(&first),
+        escape(&last)
+    );
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a corpus spans hundreds of months at most"
+    )]
+    let step = WIDTH / months.len() as f64;
+
+    let _ = writeln!(
+        out,
+        "<figure class=\"timeline\">\n<svg viewBox=\"0 0 {WIDTH:.0} {HEIGHT:.0}\" \
+         preserveAspectRatio=\"none\" role=\"img\" \
+         aria-label=\"Reviews per month from {} to {}\">",
+        escape(&first),
+        escape(&last)
+    );
+
+    for (index, month) in months.iter().enumerate() {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "counts and month numbers are both far below 2^53"
+        )]
+        let (x, tall) = (
+            index as f64 * step,
+            month.reviews as f64 / tallest as f64 * HEIGHT,
+        );
+        let _ = writeln!(
+            out,
+            "<rect class=\"bar\" x=\"{x:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{tall:.2}\">\
+             <title>{}: {} reviews</title></rect>",
+            HEIGHT - tall,
+            (step * 0.82).max(0.5),
+            escape(&crate::time::month_name(&month.label)),
+            thousands(month.reviews)
+        );
+    }
+
+    let line: Vec<String> = months
+        .iter()
+        .enumerate()
+        .filter_map(|(index, month)| {
+            let share = month.positive_share()?;
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a corpus spans hundreds of months at most"
+            )]
+            let x = index as f64 * step + step / 2.0;
+            Some(format!("{x:.2},{:.2}", (1.0 - share) * HEIGHT))
+        })
+        .collect();
+    if line.len() > 1 {
+        let _ = writeln!(
+            out,
+            "<polyline class=\"share\" points=\"{}\" />",
+            line.join(" ")
+        );
+    }
+
+    let _ = writeln!(
+        out,
+        "</svg>\n<figcaption><span>{}</span><span>{}</span></figcaption>\n</figure>",
+        escape(&first),
+        escape(&last)
+    );
 }
 
 fn categories(out: &mut String, app: &AppReport) {
@@ -737,51 +833,6 @@ fn hours(minutes: u32) -> String {
     format!("{} h", minutes / 60)
 }
 
-/// A date without pulling in a calendar crate, which for a UTC day is arithmetic.
-fn date(unix: i64) -> String {
-    const MONTHS: [&str; 12] = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ];
-    if unix <= 0 {
-        return "unknown".to_owned();
-    }
-    let (year, month, day) = civil_from_days(unix.div_euclid(86_400));
-    let name = MONTHS
-        .get(usize::from(month).saturating_sub(1))
-        .copied()
-        .unwrap_or("?");
-    format!("{day} {name} {year}")
-}
-
-/// Howard Hinnant's days-from-civil, inverted. Exact for every date this tool can hold.
-fn civil_from_days(days: i64) -> (i64, u8, u8) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (
-        if m <= 2 { y + 1 } else { y },
-        u8::try_from(m).unwrap_or(1),
-        u8::try_from(d).unwrap_or(1),
-    )
-}
-
 const STYLE: &str = include_str!("report.css");
 const SCRIPT: &str = include_str!("report.js");
 
@@ -845,6 +896,20 @@ mod tests {
                         category("performance", "Performance", 100, 2),
                     ],
                     languages: vec![("english".to_owned(), 600), ("schinese".to_owned(), 400)],
+                    months: vec![
+                        crate::report::Month {
+                            label: "2024-01".to_owned(),
+                            reviews: 400,
+                            positive: 320,
+                            categories: vec![40, 100],
+                        },
+                        crate::report::Month {
+                            label: "2024-02".to_owned(),
+                            reviews: 600,
+                            positive: 380,
+                            categories: vec![60, 300],
+                        },
+                    ],
                     top_reviews: Vec::new(),
                 },
                 examples: vec![("bugs".to_owned(), vec![example])],
@@ -928,13 +993,5 @@ mod tests {
         assert_eq!(thousands(999), "999");
         assert_eq!(thousands(1_000), "1,000");
         assert_eq!(thousands(1_161_047), "1,161,047");
-    }
-
-    #[test]
-    fn dates_match_the_calendar() {
-        assert_eq!(date(0), "unknown");
-        assert_eq!(date(1_700_000_000), "14 November 2023");
-        // A leap day, which off-by-one arithmetic gets wrong.
-        assert_eq!(date(1_709_164_800), "29 February 2024");
     }
 }

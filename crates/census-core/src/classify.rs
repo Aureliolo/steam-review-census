@@ -173,6 +173,8 @@ pub struct ClassifyReport {
     pub mention_margin: f32,
     /// Reviews per language, most common first. Empty strings are grouped as unknown.
     pub languages: Vec<(String, u64)>,
+    /// What was said month by month, oldest first.
+    pub months: Vec<Month>,
     /// The most-upvoted reviews and what they were about, so a reader can be shown the top
     /// of the pile rather than only told how far it differs from everyone else.
     pub top_reviews: Vec<TopReview>,
@@ -233,11 +235,115 @@ impl ClassifyReport {
                 "anchors_fitted_from": self.anchors_fitted_from,
                 "categories": categories,
                 "languages": self.languages,
+                "months": self.months.iter().map(|month| serde_json::json!({
+                    "label": month.label,
+                    "reviews": month.reviews,
+                    "positive": month.positive,
+                    "categories": month.categories,
+                })).collect::<Vec<_>>(),
                 "top_reviews": top,
             }))?,
         )?;
         Ok(())
     }
+}
+
+/// Everything counted while walking the corpus once.
+///
+/// Kept together because they are: one pass over every review feeds all of them, and a
+/// counter that lives somewhere else is a counter that can be forgotten in a new branch.
+struct Tallies {
+    categories: Vec<CategoryStats>,
+    /// What language a review is written in is not decoration. Steam's own default shows a
+    /// reader only their own language, so a corpus that keeps every language is measuring
+    /// something the store's own page cannot.
+    languages: HashMap<String, u64>,
+    /// A rate is one number for a corpus that took years to accumulate. A game review-bombed
+    /// in one month and quiet since reads identically to one grumbled about steadily, and
+    /// the two are not the same fact about anything.
+    calendar: HashMap<String, MonthTally>,
+    classified: u64,
+    positive: u64,
+}
+
+impl Tallies {
+    fn new() -> Self {
+        Self {
+            categories: empty_stats(),
+            languages: HashMap::new(),
+            calendar: HashMap::new(),
+            classified: 0,
+            positive: 0,
+        }
+    }
+
+    fn record(&mut self, review: &ReviewRow, primary: usize, mentions: u32) {
+        self.classified += 1;
+        if review.voted_up {
+            self.positive += 1;
+        }
+        self.categories[primary].primary_count += 1;
+        for (index, stat) in self.categories.iter_mut().enumerate() {
+            if mentions & (1 << index) != 0 {
+                stat.mention_count += 1;
+                if review.voted_up {
+                    stat.positive_mentions += 1;
+                }
+            }
+        }
+        *self.languages.entry(review.language.clone()).or_default() += 1;
+
+        let month = self
+            .calendar
+            .entry(crate::time::year_month(review.created))
+            .or_insert_with(|| MonthTally {
+                reviews: 0,
+                positive: 0,
+                categories: vec![0; CORE_SPINE.len()],
+            });
+        month.reviews += 1;
+        if review.voted_up {
+            month.positive += 1;
+        }
+        for (index, count) in month.categories.iter_mut().enumerate() {
+            if mentions & (1 << index) != 0 {
+                *count += 1;
+            }
+        }
+    }
+}
+
+/// One month of a corpus.
+#[derive(Debug, Clone)]
+pub struct Month {
+    /// `2024-02`, which sorts as it reads.
+    pub label: String,
+    pub reviews: u64,
+    pub positive: u64,
+    /// Mentions per category, in taxonomy order.
+    pub categories: Vec<u64>,
+}
+
+struct MonthTally {
+    reviews: u64,
+    positive: u64,
+    categories: Vec<u64>,
+}
+
+/// Months oldest first, with the gaps left as gaps: a month nobody reviewed in is a fact
+/// about the game, and inventing a zero row for it would say the same thing less clearly.
+fn by_month(tallies: HashMap<String, MonthTally>) -> Vec<Month> {
+    let mut months: Vec<Month> = tallies
+        .into_iter()
+        .map(|(label, tally)| Month {
+            label,
+            reviews: tally.reviews,
+            positive: tally.positive,
+            categories: tally.categories,
+        })
+        .collect();
+    months.sort_by(|left, right| left.label.cmp(&right.label));
+    months
 }
 
 /// Languages by how many reviews are written in them, most first.
@@ -285,13 +391,7 @@ pub fn classify_corpus(
     refuse_a_foreign_encoder(anchors, &options.out_dir, app_id)?;
     let (by_hash, reviews) = group_reviews_by_text(&snapshot)?;
 
-    let mut stats = empty_stats();
-
-    // What language a review is written in is not decoration. Steam's own default shows a
-    // reader only their own language, so a corpus that keeps every language is measuring
-    // something the store's own page cannot.
-    let mut languages: HashMap<String, u64> = HashMap::new();
-    let mut positive = 0_u64;
+    let mut tallies = Tallies::new();
     let provenance = anchor_provenance(anchors);
     let path = snapshot.join("classifications.parquet");
     let schema = classification_schema();
@@ -307,7 +407,6 @@ pub fn classify_corpus(
     )?;
 
     let mut top = TopOfThePile::new(options.top_helpful);
-    let mut classified = 0_u64;
     let mut pending = Batch::default();
 
     crate::embed::for_each_vector(&snapshot, |hash, vector| {
@@ -318,20 +417,7 @@ pub fn classify_corpus(
         let (primary, mentions) = assign(&sims, options.mention_margin);
 
         for review in group {
-            classified += 1;
-            if review.voted_up {
-                positive += 1;
-            }
-            stats[primary].primary_count += 1;
-            for (index, stat) in stats.iter_mut().enumerate() {
-                if mentions & (1 << index) != 0 {
-                    stat.mention_count += 1;
-                    if review.voted_up {
-                        stat.positive_mentions += 1;
-                    }
-                }
-            }
-            *languages.entry(review.language.clone()).or_default() += 1;
+            tallies.record(review, primary, mentions);
             top.offer(TopReview {
                 id: review.recommendationid.clone(),
                 helpfulness: review.helpfulness,
@@ -345,7 +431,7 @@ pub fn classify_corpus(
         if pending.len() >= 8192 {
             writer.write(&pending.take(&schema, &provenance)?)?;
             on_progress(ClassifyProgress {
-                classified,
+                classified: tallies.classified,
                 total: reviews,
             });
         }
@@ -358,22 +444,24 @@ pub fn classify_corpus(
 
     let top_reviews = top.take();
     for review in &top_reviews {
-        for (index, stat) in stats.iter_mut().enumerate() {
+        for (index, stat) in tallies.categories.iter_mut().enumerate() {
             if review.mentions & (1 << index) != 0 {
                 stat.top_mention_count += 1;
             }
         }
     }
+    let classified = tallies.classified;
 
     let report = ClassifyReport {
         app_id,
         reviews,
-        positive,
+        positive: tallies.positive,
         unmatched: reviews.saturating_sub(classified),
         top_helpful: classified.min(u64::try_from(options.top_helpful).unwrap_or(u64::MAX)),
         mention_margin: options.mention_margin,
-        categories: stats,
-        languages: ranked(languages),
+        categories: tallies.categories,
+        languages: ranked(tallies.languages),
+        months: by_month(tallies.calendar),
         top_reviews,
         spine_version: CORE_SPINE_VERSION,
         model: anchors.model.clone(),
@@ -524,6 +612,7 @@ pub(crate) struct ReviewRow {
     pub(crate) votes_up: u32,
     pub(crate) voted_up: bool,
     pub(crate) language: String,
+    pub(crate) created: i64,
 }
 
 #[derive(Default)]
@@ -635,7 +724,7 @@ pub(crate) fn for_each_review(
     snapshot: &Path,
     mut visit: impl FnMut(ReviewRow) -> Result<()>,
 ) -> Result<()> {
-    use arrow::array::{BooleanArray, Float64Array, StringArray, UInt32Array};
+    use arrow::array::{BooleanArray, Float64Array, Int64Array, StringArray, UInt32Array};
 
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
         .filter_map(std::result::Result::ok)
@@ -660,6 +749,7 @@ pub(crate) fn for_each_review(
             let votes = column::<UInt32Array>(&batch, "votes_up")?;
             let languages = column::<StringArray>(&batch, "language")?;
             let recommended = column::<BooleanArray>(&batch, "voted_up")?;
+            let created = column::<Int64Array>(&batch, "timestamp_created")?;
             for row in 0..batch.num_rows() {
                 if texts.is_null(row) || texts.value(row).trim().is_empty() {
                     continue;
@@ -682,6 +772,11 @@ pub(crate) fn for_each_review(
                         String::new()
                     } else {
                         languages.value(row).to_owned()
+                    },
+                    created: if created.is_null(row) {
+                        0
+                    } else {
+                        created.value(row)
                     },
                 })?;
             }
