@@ -272,14 +272,14 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     let mut categories = report.categories.clone();
     categories.sort_by_key(|c| std::cmp::Reverse(c.reference_mentions));
     println!(
-        "\n{:<26} {:>8} {:>10} {:>8} {:>7}",
+        "\n{:<30} {:>8} {:>10} {:>8} {:>7}",
         "category", "in ref", "precision", "recall", "F1"
     );
-    println!("{}", "-".repeat(64));
+    println!("{}", "-".repeat(68));
     for stat in &categories {
         let fmt = |v: Option<f64>| v.map_or_else(|| "    -".to_owned(), |x| format!("{x:.2}"));
         println!(
-            "{:<26} {:>8} {:>10} {:>8} {:>7}",
+            "{:<30} {:>8} {:>10} {:>8} {:>7}",
             stat.label,
             stat.reference_mentions,
             fmt(stat.precision()),
@@ -529,16 +529,16 @@ fn print_classification(report: &census_core::ClassifyReport) {
     });
 
     println!(
-        "\n{:<26} {:>9} {:>9} {:>9} {:>7}",
+        "\n{:<30} {:>9} {:>9} {:>9} {:>7}",
         "category", "mention%", "primary%", "top50%", "bias"
     );
-    println!("{}", "-".repeat(64));
+    println!("{}", "-".repeat(68));
     for stat in &categories {
         let bias = stat
             .bias_factor(report.reviews, report.top_helpful)
             .map_or_else(|| "    -".to_owned(), |b| format!("{b:.2}x"));
         println!(
-            "{:<26} {:>8.1}% {:>8.1}% {:>8.1}% {:>7}",
+            "{:<30} {:>8.1}% {:>8.1}% {:>8.1}% {:>7}",
             stat.label,
             stat.mention_rate(report.reviews) * 100.0,
             stat.primary_share(report.reviews) * 100.0,
