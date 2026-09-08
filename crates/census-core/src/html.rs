@@ -143,7 +143,8 @@ fn overview(out: &mut String, report: &Report) {
         out,
         "<p class=\"note\">Mention rates for {} reviews of {} games. Read down a column for \
          one game and across a row to see which games a subject belongs to. Deeper shading is \
-         a higher rate; the rates are not comparable to any other corpus.</p>",
+         a higher rate and the outlined cell is the highest in its row; the rates are not \
+         comparable to any other corpus.</p>",
         thousands(total),
         report.apps.len()
     );
@@ -177,23 +178,47 @@ fn overview(out: &mut String, report: &Report) {
         if pooled == 0 {
             continue;
         }
+        let rates: Vec<Option<f64>> = report
+            .apps
+            .iter()
+            .map(|app| {
+                app.classification
+                    .categories
+                    .iter()
+                    .find(|c| c.id == id)
+                    .and_then(|c| app.rate(c.mention_count))
+            })
+            .collect();
+        // Which game a subject belongs to most is the question a reader brings to a row, and
+        // reading it off six shades of the same colour is guesswork.
+        let loudest = rates
+            .iter()
+            .enumerate()
+            .filter_map(|(index, rate)| rate.map(|rate| (index, rate)))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(index, _)| index);
+
         let _ = write!(out, "<tr><th scope=\"row\">{}</th>", escape(label));
-        for app in &report.apps {
-            let rate = app
-                .classification
-                .categories
-                .iter()
-                .find(|c| c.id == id)
-                .and_then(|c| app.rate(c.mention_count));
-            match rate {
+        for (index, rate) in rates.iter().enumerate() {
+            match *rate {
                 Some(rate) => {
                     // Square-rooted so the common categories do not wash every other cell
                     // out; the number is always there for anyone reading exactly.
                     let heat = (rate * 2.0).sqrt().min(1.0);
+                    let top = if loudest == Some(index) {
+                        " loudest"
+                    } else {
+                        ""
+                    };
                     let _ = write!(
                         out,
-                        "<td class=\"num heat\" style=\"--heat:{heat:.3}\">{}</td>",
-                        percent(rate)
+                        "<td class=\"num heat{top}\" style=\"--heat:{heat:.3}\">{}{}</td>",
+                        percent(rate),
+                        if top.is_empty() {
+                            ""
+                        } else {
+                            "<span class=\"read-aloud\">, the highest of these games</span>"
+                        }
                     );
                 }
                 None => {
@@ -490,10 +515,16 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
     }
     out.push('>');
 
+    let measured = app
+        .agreement
+        .as_ref()
+        .and_then(|report| report.categories.iter().find(|c| c.id == category.id));
+
     let _ = write!(
         out,
-        "<th scope=\"row\"><span class=\"name\">{}{}</span></th>",
+        "<th scope=\"row\"><span class=\"name\">{}{}{}</span></th>",
         escape(&category.label),
+        measured.map(thinly_measured).unwrap_or_default(),
         if has_examples {
             "<span class=\"chevron\" aria-hidden=\"true\"></span>"
         } else {
@@ -525,10 +556,80 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
 
     if has_examples {
         let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"6\">");
+        if let Some(measured) = measured {
+            how_well_this_row_is_known(out, measured);
+        }
         sparkline(out, app, &category.id);
         reviews(out, app, examples);
         out.push_str("</td></tr>");
     }
+}
+
+/// Reviews the reference set must raise a category in before its recall means anything.
+///
+/// Below this the measurement is a handful of reviews and its own interval is wider than
+/// any finding, so calling the row weak would be reading noise back as a warning.
+const ENOUGH_TO_JUDGE_A_ROW: u64 = 10;
+
+/// Recall below which the number in this row is standing on very little.
+const THINLY_FOUND: f64 = 0.25;
+
+/// A mark against a rate the classifier is measured to miss most of.
+///
+/// Only on the rows that earn it. Decorating every row with its own score would make the
+/// table harder to read and the warning worth less exactly where it matters.
+fn thinly_measured(measured: &crate::evaluate::CategoryAgreement) -> String {
+    if measured.reference_mentions < ENOUGH_TO_JUDGE_A_ROW {
+        return String::new();
+    }
+    let Some(recall) = measured.recall() else {
+        return String::new();
+    };
+    if recall >= THINLY_FOUND {
+        return String::new();
+    }
+    format!(
+        "<span class=\"thin\" title=\"Found in only {} of the reviews measured to raise it, \
+         so this rate is a floor rather than a count\">\u{2757}\
+         <span class=\"read-aloud\">measured to miss most of this category</span></span>",
+        percent(recall)
+    )
+}
+
+/// What the reference set says about this row alone.
+///
+/// The page carries one figure for how often the classifier agrees overall, and that figure
+/// is no guide at all to a particular row: the same run finds nine mentions in ten of one
+/// category and one in twenty of another.
+fn how_well_this_row_is_known(out: &mut String, measured: &crate::evaluate::CategoryAgreement) {
+    if measured.reference_mentions == 0 {
+        let _ = writeln!(
+            out,
+            "<p class=\"note\">No labelled review raises this category, so nothing here is \
+             measured.</p>"
+        );
+        return;
+    }
+    let found = measured
+        .recall()
+        .map_or_else(|| "none of them".to_owned(), percent);
+    let right = measured
+        .precision()
+        .map_or_else(|| "nothing it claimed".to_owned(), percent);
+    let class = if measured.reference_mentions < ENOUGH_TO_JUDGE_A_ROW {
+        "note"
+    } else if measured.recall().is_some_and(|r| r < THINLY_FOUND) {
+        "note warn"
+    } else {
+        "note"
+    };
+    let _ = writeln!(
+        out,
+        "<p class=\"{class}\">Measured on this row: of the {} labelled reviews that raise it, \
+         the classifier found {found}; of the reviews it filed here, {right} were labelled \
+         that way. A rate built on a category it misses is a floor, not a count.</p>",
+        thousands(measured.reference_mentions)
+    );
 }
 
 /// One category's mention rate month by month.
@@ -928,6 +1029,49 @@ fn agreement_note(out: &mut String, agreement: &crate::AgreementReport) {
         percent(low),
         percent(high)
     );
+
+    // One figure for a whole taxonomy hides the shape of the error: the same run finds nine
+    // mentions in ten of one category and one in twenty of another.
+    let judged: Vec<&crate::evaluate::CategoryAgreement> = agreement
+        .categories
+        .iter()
+        .filter(|c| c.reference_mentions >= ENOUGH_TO_JUDGE_A_ROW)
+        .collect();
+    let thin = judged
+        .iter()
+        .filter(|c| c.recall().is_some_and(|recall| recall < THINLY_FOUND))
+        .count();
+    if judged.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">Averaged over the categories rather than over the reviews, so a \
+         rare one counts as much as a common one, that comes to <strong>{:.2}</strong> on a \
+         scale where 1 is perfect agreement. {}</p>",
+        agreement.macro_f1().unwrap_or(0.0),
+        if thin == 0 {
+            format!(
+                "Every one of the {} categories with enough labels to judge is found in at \
+                 least a quarter of the reviews raising it.",
+                judged.len()
+            )
+        } else if thin == 1 {
+            format!(
+                "One of the {} categories with enough labels to judge is found in fewer than \
+                 a quarter of the reviews raising it, and its row is marked: read that rate \
+                 as a floor.",
+                judged.len()
+            )
+        } else {
+            format!(
+                "{thin} of the {} categories with enough labels to judge are found in fewer \
+                 than a quarter of the reviews raising them, and their rows are marked: read \
+                 those rates as floors.",
+                judged.len()
+            )
+        }
+    );
 }
 
 fn page_footer(out: &mut String, report: &Report) {
@@ -1256,6 +1400,48 @@ mod tests {
             SCRIPT.contains("form.hidden = false"),
             "nothing ever reveals the filter"
         );
+    }
+
+    /// A rate the classifier is measured to miss most of is not a count, and a reader
+    /// scanning the table has no way to tell the two apart unless the page says so.
+    #[test]
+    fn a_row_the_classifier_barely_finds_is_marked_as_one() {
+        let scored = |reference_mentions, mention_agreed| crate::evaluate::CategoryAgreement {
+            id: "bugs",
+            label: "Bugs and crashes",
+            reference_primary: 0,
+            predicted_primary: 0,
+            primary_agreed: 0,
+            reference_mentions,
+            predicted_mentions: mention_agreed,
+            mention_agreed,
+        };
+
+        assert!(
+            thinly_measured(&scored(100, 4)).contains("class=\"thin\""),
+            "four found in a hundred is a floor, not a count"
+        );
+        assert!(
+            thinly_measured(&scored(100, 90)).is_empty(),
+            "a row the classifier finds should carry no warning"
+        );
+        assert!(
+            thinly_measured(&scored(4, 0)).is_empty(),
+            "four labelled reviews cannot condemn a row"
+        );
+
+        let mut out = String::new();
+        how_well_this_row_is_known(&mut out, &scored(100, 4));
+        assert!(out.contains("found 4.0%"), "{out}");
+        assert!(out.contains("100 labelled reviews"), "{out}");
+        assert!(
+            out.contains("note warn"),
+            "a row this thin should look thin: {out}"
+        );
+
+        let mut none = String::new();
+        how_well_this_row_is_known(&mut none, &scored(0, 0));
+        assert!(none.contains("nothing here is measured"), "{none}");
     }
 
     #[test]
