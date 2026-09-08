@@ -133,6 +133,89 @@ header.page .lede {
   border-color: var(--ink-faint);
 }
 
+/* Deliberately not sticky: the table headers below are, and two sticky bars fighting for
+   the same edge is worse than one. */
+nav.contents {
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+nav.contents ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0.6rem 0;
+}
+
+nav.contents a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  text-decoration: none;
+  padding: 0.15rem 0;
+}
+
+nav.contents a:hover .nav-name {
+  text-decoration: underline;
+}
+
+.nav-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.nav-count {
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+section.overview {
+  padding: 2.5rem 0 1rem;
+}
+
+table.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+table.matrix th,
+table.matrix td {
+  padding: 0.45rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+table.matrix thead th {
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+table.matrix tbody th {
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: var(--card);
+}
+
+table.matrix .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shading is a second reading of a number that is always printed, never the only one. */
+td.heat {
+  background: color-mix(in srgb, var(--accent) calc(var(--heat) * 45%), transparent);
+}
+
 section.game {
   padding: 2.5rem 0 3rem;
   border-bottom: 1px solid var(--line);

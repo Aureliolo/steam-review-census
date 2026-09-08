@@ -36,6 +36,8 @@ pub fn render(report: &Report) -> String {
 
     page_header(&mut out, report);
     out.push_str("<main>\n");
+    contents(&mut out, report);
+    overview(&mut out, report);
     for app in &report.apps {
         game(&mut out, app);
     }
@@ -65,6 +67,103 @@ fn page_header(out: &mut String, report: &Report) {
          <span aria-hidden=\"true\">◐</span> Theme</button>\n",
     );
     out.push_str("</div>\n</header>\n");
+}
+
+/// A way to reach each game once there is more than one to reach.
+fn contents(out: &mut String, report: &Report) {
+    if report.apps.len() < 2 {
+        return;
+    }
+    out.push_str("<nav class=\"contents\" aria-label=\"Games in this report\">\n<div class=\"wrap\">\n<ul>\n");
+    for app in &report.apps {
+        let _ = writeln!(
+            out,
+            "<li><a href=\"#app-{}\"><span class=\"nav-name\">{}</span>\
+             <span class=\"nav-count\">{}</span></a></li>",
+            app.app_id(),
+            escape(&app.crawl.title()),
+            thousands(app.classification.reviews)
+        );
+    }
+    out.push_str("</ul>\n</div>\n</nav>\n");
+}
+
+/// Every game against every other, which is the only view a census across games can give
+/// and no single game's page ever can.
+fn overview(out: &mut String, report: &Report) {
+    if report.apps.len() < 2 {
+        return;
+    }
+    let total: u64 = report
+        .apps
+        .iter()
+        .map(|app| app.classification.reviews)
+        .sum();
+
+    out.push_str("<section class=\"overview\">\n<div class=\"wrap\">\n");
+    out.push_str("<h2>Across these games</h2>\n");
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">Mention rates for {} reviews of {} games. Read down a column for \
+         one game and across a row to see which games a subject belongs to. Deeper shading is \
+         a higher rate; the rates are not comparable to any other corpus.</p>",
+        thousands(total),
+        report.apps.len()
+    );
+
+    let mut order: Vec<(&str, &str, u64)> = Vec::new();
+    for category in CORE_SPINE {
+        let pooled: u64 = report
+            .apps
+            .iter()
+            .flat_map(|app| app.classification.categories.iter())
+            .filter(|c| c.id == category.id)
+            .map(|c| c.mention_count)
+            .sum();
+        order.push((category.id, category.label, pooled));
+    }
+    order.sort_by_key(|(_, _, pooled)| std::cmp::Reverse(*pooled));
+
+    out.push_str("<div class=\"scroll\">\n<table class=\"matrix\">\n<thead><tr>");
+    out.push_str("<th scope=\"col\">Category</th>");
+    for app in &report.apps {
+        let _ = write!(
+            out,
+            "<th scope=\"col\" class=\"num\">{}</th>",
+            escape(&app.crawl.title())
+        );
+    }
+    out.push_str("</tr></thead>\n<tbody>\n");
+
+    for (id, label, pooled) in order {
+        if pooled == 0 {
+            continue;
+        }
+        let _ = write!(out, "<tr><th scope=\"row\">{}</th>", escape(label));
+        for app in &report.apps {
+            let rate = app
+                .classification
+                .categories
+                .iter()
+                .find(|c| c.id == id)
+                .and_then(|c| app.rate(c.mention_count));
+            match rate {
+                Some(rate) => {
+                    // Square-rooted so the common categories do not wash every other cell
+                    // out; the number is always there for anyone reading exactly.
+                    let heat = (rate * 2.0).sqrt().min(1.0);
+                    let _ = write!(
+                        out,
+                        "<td class=\"num heat\" style=\"--heat:{heat:.3}\">{}</td>",
+                        percent(rate)
+                    );
+                }
+                None => out.push_str("<td class=\"num\">\u{2014}</td>"),
+            }
+        }
+        out.push_str("</tr>\n");
+    }
+    out.push_str("</tbody>\n</table>\n</div>\n</div>\n</section>\n");
 }
 
 fn game(out: &mut String, app: &AppReport) {
