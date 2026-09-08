@@ -744,6 +744,121 @@ const SCRIPT: &str = include_str!("report.js");
 mod tests {
     use super::*;
 
+    fn sample_report(text: &str) -> Report {
+        let category =
+            |id: &str, label: &str, mentions: u64, top: u64| crate::report::CategoryCount {
+                id: id.to_owned(),
+                label: label.to_owned(),
+                primary_count: mentions / 2,
+                mention_count: mentions,
+                top_mention_count: top,
+                positive_mentions: mentions / 3,
+            };
+        let example = Example {
+            review: crate::capture::CapturedReview {
+                id: "42".to_owned(),
+                text: text.to_owned(),
+                language: "english".to_owned(),
+                author_steamid: "7656119".to_owned(),
+                voted_up: false,
+                votes_up: 12,
+                votes_funny: 0,
+                playtime_at_review_minutes: 600,
+                created: 1_700_000_000,
+            },
+            primary: "bugs".to_owned(),
+            mentions: vec!["bugs".to_owned(), "performance".to_owned()],
+            from_the_top: true,
+        };
+        Report {
+            generated_unix: 1_700_000_000,
+            apps: vec![AppReport {
+                crawl: crate::report::CrawlFacts {
+                    app_id: 7,
+                    name: "A Game <& Friends>".to_owned(),
+                    review_score_desc: "Mostly Positive".to_owned(),
+                    rows_unique: 1_000,
+                    valve_total_reviews: 1_000,
+                    valve_total_positive: 700,
+                    valve_total_negative: 300,
+                    coverage: 1.0,
+                    snapshot_unix: 1_700_000_000,
+                    shards: 1,
+                },
+                classification: crate::report::Classification {
+                    app_id: 7,
+                    reviews: 1_000,
+                    positive: 700,
+                    unmatched: 3,
+                    top_helpful: 50,
+                    mention_margin: 0.01,
+                    spine_version: "core-3".to_owned(),
+                    model: "test-encoder".to_owned(),
+                    anchors_fitted_from: vec![7],
+                    categories: vec![
+                        category("bugs", "Bugs and crashes", 400, 30),
+                        category("performance", "Performance", 100, 2),
+                    ],
+                    languages: vec![("english".to_owned(), 600), ("schinese".to_owned(), 400)],
+                    top_reviews: Vec::new(),
+                },
+                examples: vec![("bugs".to_owned(), vec![example])],
+                top: Vec::new(),
+                agreement: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn a_review_cannot_break_out_of_the_page_it_is_quoted_in() {
+        // Review text is written by strangers and this one is trying. Nothing it contains
+        // may reach the browser as markup.
+        let hostile = "</p></td></tr></table><script>alert(1)</script><img src=x onerror=1>";
+        let page = render(&sample_report(hostile));
+
+        assert!(!page.contains("<script>alert(1)"), "a script tag survived");
+        assert!(!page.contains("<img src=x"), "an image tag survived");
+        assert!(
+            page.contains("&lt;script&gt;alert(1)"),
+            "the text itself is missing"
+        );
+        // The game's own name is equally untrusted, coming from the store.
+        assert!(page.contains("A Game &lt;&amp; Friends&gt;"));
+    }
+
+    #[test]
+    fn the_page_fetches_nothing_and_says_what_it_cannot_tell_you() {
+        let page = render(&sample_report("ordinary text"));
+
+        for fetching in ["<script src", "<link ", "<img ", "@import", "url("] {
+            assert!(!page.contains(fetching), "the page would fetch: {fetching}");
+        }
+        assert!(page.contains("What this cannot tell you"));
+        assert!(
+            page.contains("No reference set has been labelled"),
+            "a report with no measured agreement must say so"
+        );
+    }
+
+    #[test]
+    fn every_category_with_mentions_reaches_the_page_with_its_evidence() {
+        let page = render(&sample_report("ordinary text"));
+
+        assert!(page.contains("Bugs and crashes"));
+        assert!(page.contains("Performance"));
+        // 400 of 1,000 mention bugs, 30 of the top 50 do: 60% against 40%.
+        assert!(page.contains("40.0%"), "the corpus rate is missing");
+        assert!(
+            page.contains("60.0%"),
+            "the top-of-the-pile rate is missing"
+        );
+        assert!(page.contains("1.5\u{d7}"), "the bias factor is missing");
+        assert!(
+            page.contains("On Steam"),
+            "the link back to the source is missing"
+        );
+    }
+
     #[test]
     fn every_character_that_could_close_a_tag_is_escaped() {
         // Review text is arbitrary text written by strangers. A single unescaped angle
