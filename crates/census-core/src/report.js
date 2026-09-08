@@ -97,6 +97,75 @@
     });
   }
 
+  // Every row that names a category, in the cross-game matrix and in each game's table, with
+  // the evidence panel that has to move with it.
+  function named() {
+    var out = [];
+    var tables = document.querySelectorAll('table.categories, table.matrix');
+    Array.prototype.forEach.call(tables, function (table) {
+      var body = table.tBodies[0];
+      if (!body) {
+        return;
+      }
+      Array.prototype.forEach.call(body.rows, function (row) {
+        if (row.classList.contains('panel')) {
+          return;
+        }
+        var head = row.cells[0];
+        var next = row.nextElementSibling;
+        out.push({
+          row: row,
+          panel: next && next.classList.contains('panel') ? next : null,
+          name: head ? head.textContent.toLowerCase() : ''
+        });
+      });
+    });
+    return out;
+  }
+
+  function narrow(form) {
+    var input = form.querySelector('[data-filter-input]');
+    var count = form.querySelector('[data-filter-count]');
+    var rows = named();
+    var total = {};
+    rows.forEach(function (entry) {
+      total[entry.name] = true;
+    });
+    var all = Object.keys(total).length;
+
+    function apply() {
+      var query = input.value.trim().toLowerCase();
+      var matched = {};
+      rows.forEach(function (entry) {
+        var hit = query === '' || entry.name.indexOf(query) !== -1;
+        entry.row.hidden = !hit;
+        if (entry.panel) {
+          // The row owns whether its evidence is open; filtering only ever hides.
+          entry.panel.hidden = !hit || entry.row.getAttribute('aria-expanded') !== 'true';
+        }
+        if (hit) {
+          matched[entry.name] = true;
+        }
+      });
+      var shown = Object.keys(matched).length;
+      if (query === '') {
+        count.textContent = 'all ' + all + ' of them';
+      } else if (shown === 0) {
+        count.textContent = 'no category matches';
+      } else {
+        count.textContent = shown + ' of ' + all;
+      }
+    }
+
+    input.addEventListener('input', apply);
+    // A search input clears itself, and browsers disagree about which event says so.
+    input.addEventListener('search', apply);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+    });
+    form.hidden = false;
+  }
+
   function setUp() {
     // Tells the stylesheet that folding is available. Everything folded is fully present in
     // the markup, so a page without scripting is longer rather than incomplete.
@@ -154,6 +223,12 @@
         button.textContent = open ? 'Show less' : 'Show the rest';
       });
     });
+
+    // After the panels, which decide for themselves whether they start open.
+    var form = document.querySelector('[data-filter]');
+    if (form && form.querySelector('[data-filter-input]')) {
+      narrow(form);
+    }
   }
 
   if (document.readyState === 'loading') {

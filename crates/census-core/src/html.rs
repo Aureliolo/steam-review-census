@@ -78,7 +78,32 @@ fn page_header(out: &mut String, report: &Report) {
         "<button class=\"theme\" type=\"button\" data-theme-toggle aria-pressed=\"false\">\
          <span aria-hidden=\"true\">◐</span> Theme</button>\n",
     );
+    filter(out, report);
     out.push_str("</div>\n</header>\n");
+}
+
+/// Narrows every table on the page to the categories whose name matches.
+///
+/// Hidden in the markup rather than by a stylesheet rule, so a reader without scripting is
+/// never offered a box that does nothing. Twenty-one categories across several games is more
+/// than anyone can scan for one subject.
+fn filter(out: &mut String, report: &Report) {
+    let total = CORE_SPINE.len();
+    let _ = writeln!(
+        out,
+        "<form class=\"filter\" role=\"search\" hidden data-filter \
+         aria-label=\"Filter the report by category\">\n\
+         <label for=\"filter-categories\">Show categories matching</label>\n\
+         <input id=\"filter-categories\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" \
+         placeholder=\"price, story, crashes\u{2026}\" data-filter-input>\n\
+         <span class=\"filter-count\" role=\"status\" data-filter-count>all {total} of \
+         them{}</span>\n</form>",
+        if report.apps.len() > 1 {
+            ", in every table"
+        } else {
+            ""
+        }
+    );
 }
 
 /// A way to reach each game once there is more than one to reach.
@@ -141,7 +166,8 @@ fn overview(out: &mut String, report: &Report) {
     for app in &report.apps {
         let _ = write!(
             out,
-            "<th scope=\"col\" class=\"num\">{}</th>",
+            "<th scope=\"col\" class=\"num\"><a href=\"#app-{}\">{}</a></th>",
+            app.app_id(),
             escape(&app.crawl.title())
         );
     }
@@ -170,7 +196,9 @@ fn overview(out: &mut String, report: &Report) {
                         percent(rate)
                     );
                 }
-                None => out.push_str("<td class=\"num\">\u{2014}</td>"),
+                None => {
+                    let _ = write!(out, "<td class=\"num\">{}</td>", nothing("no reviews"));
+                }
             }
         }
         out.push_str("</tr>\n");
@@ -291,7 +319,8 @@ fn over_time(out: &mut String, app: &AppReport) {
     let _ = writeln!(
         out,
         "<p class=\"note\">Reviews per month, {} to {}. The line is the share of each month \
-         that recommended the game, from none at the bottom to all at the top.</p>",
+         that recommended the game, from none at the bottom to all at the top; the dashed \
+         line is half. Point at a month to read it.</p>",
         escape(&first),
         escape(&last)
     );
@@ -322,14 +351,19 @@ fn over_time(out: &mut String, app: &AppReport) {
         );
         let _ = writeln!(
             out,
-            "<rect class=\"bar\" x=\"{x:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{tall:.2}\">\
-             <title>{}: {} reviews</title></rect>",
+            "<rect class=\"bar\" x=\"{x:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{tall:.2}\" />",
             HEIGHT - tall,
-            (step * 0.82).max(0.5),
-            escape(&crate::time::month_name(&month.label)),
-            thousands(month.reviews)
+            (step * 0.82).max(0.5)
         );
     }
+
+    // The share line is halfway up when half a month recommended the game, which is the
+    // reading nobody can do off a line with nothing to measure it against.
+    let _ = writeln!(
+        out,
+        "<line class=\"midline\" x1=\"0\" y1=\"{0:.2}\" x2=\"{WIDTH:.0}\" y2=\"{0:.2}\" />",
+        HEIGHT / 2.0
+    );
 
     let line: Vec<String> = months
         .iter()
@@ -349,6 +383,27 @@ fn over_time(out: &mut String, app: &AppReport) {
             out,
             "<polyline class=\"share\" points=\"{}\" />",
             line.join(" ")
+        );
+    }
+
+    // Last, and the full height of the chart: a quiet month is a bar one pixel tall, which is
+    // nothing to aim at. These are what the pointer actually finds.
+    for (index, month) in months.iter().enumerate() {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a corpus spans hundreds of months at most"
+        )]
+        let x = index as f64 * step;
+        let _ = writeln!(
+            out,
+            "<rect class=\"hit\" x=\"{x:.2}\" y=\"0\" width=\"{:.2}\" height=\"{HEIGHT:.0}\">\
+             <title>{}: {} reviews, {} recommended</title></rect>",
+            step.max(0.5),
+            escape(&crate::time::month_name(&month.label)),
+            thousands(month.reviews),
+            month
+                .positive_share()
+                .map_or_else(|| "no".to_owned(), percent)
         );
     }
 
@@ -459,7 +514,7 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
         category.mention_count,
         share,
         app.rate(category.mention_count)
-            .map_or("—".to_owned(), percent),
+            .map_or_else(|| nothing("no reviews"), percent),
         thousands(category.mention_count)
     );
     rate_cell(out, app.rate(category.primary_count));
@@ -551,14 +606,24 @@ fn rate_cell(out: &mut String, rate: Option<f64>) {
                 percent(rate)
             );
         }
-        None => out.push_str("<td class=\"num\" data-value=\"-1\">—</td>"),
+        None => {
+            let _ = write!(
+                out,
+                "<td class=\"num\" data-value=\"-1\">{}</td>",
+                nothing("no reviews")
+            );
+        }
     }
 }
 
 /// Bias is the point, so it gets a bar that leaves the middle rather than a bare number.
 fn bias_cell(out: &mut String, factor: Option<f64>) {
     let Some(factor) = factor else {
-        out.push_str("<td class=\"num\" data-value=\"-1\">—</td>");
+        let _ = write!(
+            out,
+            "<td class=\"num\" data-value=\"-1\">{}</td>",
+            nothing("not measured")
+        );
         return;
     };
     // Log scale: twice as often and half as often are the same distance from the middle,
@@ -579,7 +644,11 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
 /// only interesting once a reader knows whether 80% is high or low for that game.
 fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
     let Some(share) = share else {
-        out.push_str("<td class=\"num\" data-value=\"-1\">\u{2014}</td>");
+        let _ = write!(
+            out,
+            "<td class=\"num\" data-value=\"-1\">{}</td>",
+            nothing("none raised it")
+        );
         return;
     };
     let tone = match baseline {
@@ -960,6 +1029,18 @@ fn escape(raw: &str) -> String {
     out
 }
 
+/// A cell with no number behind it.
+///
+/// A dash reads as absence at a glance and as silence to a screen reader, so why the cell is
+/// empty is spelled out for anyone who cannot see the column it sits in.
+fn nothing(reason: &str) -> String {
+    format!(
+        "<span aria-hidden=\"true\">\u{2013}</span>\
+         <span class=\"read-aloud\">{}</span>",
+        escape(reason)
+    )
+}
+
 fn percent(rate: f64) -> String {
     if rate > 0.0 && rate < 0.001 {
         return "<0.1%".to_owned();
@@ -1156,6 +1237,46 @@ mod tests {
             page.contains("No reference set has been labelled"),
             "a report with no measured agreement must say so"
         );
+    }
+
+    #[test]
+    fn nothing_offered_to_a_reader_without_scripting_does_nothing() {
+        let page = render(&sample_report("ordinary text"));
+
+        let filter = page
+            .split_once("<form class=\"filter\"")
+            .expect("the category filter is missing")
+            .1;
+        let opening = filter.split_once('>').expect("an unclosed form tag").0;
+        assert!(
+            opening.contains(" hidden"),
+            "the filter is offered before scripting has said it works: {opening}"
+        );
+        assert!(
+            SCRIPT.contains("form.hidden = false"),
+            "nothing ever reveals the filter"
+        );
+    }
+
+    #[test]
+    fn a_cell_with_no_number_says_so_out_loud() {
+        let mut out = String::new();
+        rate_cell(&mut out, None);
+        bias_cell(&mut out, None);
+        verdict_cell(&mut out, None, Some(0.8));
+
+        assert!(
+            !out.contains('\u{2014}'),
+            "an em dash reached the page: {out}"
+        );
+        assert_eq!(
+            out.matches("class=\"read-aloud\"").count(),
+            3,
+            "a dash was left with nothing to say to a screen reader: {out}"
+        );
+        assert!(out.contains("no reviews"));
+        assert!(out.contains("not measured"));
+        assert!(out.contains("none raised it"));
     }
 
     #[test]
