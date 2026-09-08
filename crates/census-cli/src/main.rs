@@ -114,6 +114,29 @@ enum Command {
     /// people wrote rather than by descriptions of the topic.
     Fit(FitArgs),
 
+    /// Draw the reviews a reference set will be labelled from, reproducibly.
+    Sample {
+        /// Steam app IDs to sample across. Categories are pooled over all of them, so a
+        /// category one game never discusses is supplied by a game that does.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their classifications.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Uniformly drawn reviews per app. The only subset figures may be quoted from.
+        #[arg(long, default_value_t = 100)]
+        random: usize,
+        /// Reviews per category, pooled across every app being sampled.
+        #[arg(long, default_value_t = 40)]
+        per_category: usize,
+        /// Changing this draws a different sample. The same seed always draws the same one.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Also write the category sheet labellers should work from.
+        #[arg(long)]
+        brief: bool,
+    },
+
     /// Compare stored classifications against a reference set.
     Evaluate {
         /// Steam app ID to evaluate.
@@ -203,6 +226,23 @@ async fn main() -> Result<()> {
             .await
         }
         Command::Fit(args) => run_fit(args).await,
+        Command::Sample {
+            app_ids,
+            out,
+            random,
+            per_category,
+            seed,
+            brief,
+        } => run_sample(
+            &app_ids,
+            &out,
+            &census_core::SampleOptions {
+                random_per_app: random,
+                stratified_per_category: per_category,
+                seed,
+            },
+            brief,
+        ),
         Command::Evaluate {
             app_id,
             out,
@@ -362,6 +402,65 @@ async fn run_classify(
     eprintln!("classifying app {app_id}");
     let report = census_core::classify_corpus(&anchors, app_id, &options, |_| {})?;
     print_classification(&report);
+    Ok(())
+}
+
+fn run_sample(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    options: &census_core::SampleOptions,
+    brief: bool,
+) -> Result<()> {
+    let (drawn, reports) = census_core::sample::draw(out, app_ids, options)?;
+
+    for report in &reports {
+        let dir = census_core::evaluate::default_reference_dir(report.app_id);
+        census_core::sample::write_for_app(&dir, report.app_id, &drawn)?;
+
+        let thin: Vec<&str> = report
+            .per_category
+            .iter()
+            .filter(|(_, n)| *n == 0)
+            .map(|(id, _)| *id)
+            .collect();
+        println!(
+            "app {:<9} corpus {:>9}  random {:>4}  stratified {:>4}  -> {}",
+            report.app_id,
+            thousands(report.corpus),
+            report.random,
+            report.stratified,
+            dir.join("sample.json").display()
+        );
+        if !thin.is_empty() {
+            println!("    supplies nothing for: {}", thin.join(", "));
+        }
+    }
+
+    if brief {
+        let path = std::path::Path::new("reference").join("labelling-brief.txt");
+        std::fs::write(&path, census_core::taxonomy::labelling_brief())?;
+        println!("brief    {}", path.display());
+    }
+
+    let short: Vec<String> = census_core::CORE_SPINE
+        .iter()
+        .filter_map(|category| {
+            let total: usize = reports
+                .iter()
+                .flat_map(|r| &r.per_category)
+                .filter(|(id, _)| *id == category.id)
+                .map(|(_, n)| *n)
+                .sum();
+            (total < options.stratified_per_category).then(|| format!("{} ({total})", category.id))
+        })
+        .collect();
+    if !short.is_empty() {
+        println!(
+            "\nBelow target across every corpus, so these stay anchored on their written\n\
+             descriptions rather than on reviews: {}",
+            short.join(", ")
+        );
+    }
     Ok(())
 }
 

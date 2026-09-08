@@ -258,6 +258,61 @@ impl RowBuilders {
     }
 }
 
+/// Reads back the text of specific reviews, by id.
+///
+/// Takes the ids it wants rather than returning the corpus, because a caller that needs a
+/// few hundred reviews out of a million should not pay for the other million.
+///
+/// # Errors
+///
+/// Fails if a shard cannot be read.
+pub fn texts_for<S: std::hash::BuildHasher>(
+    snapshot: &Path,
+    ids: &std::collections::HashSet<String, S>,
+) -> Result<std::collections::HashMap<String, String>> {
+    use arrow::array::{Array, StringArray};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let mut shards: Vec<std::path::PathBuf> = std::fs::read_dir(snapshot)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"))
+        })
+        .collect();
+    shards.sort();
+
+    let mut found = std::collections::HashMap::new();
+    for shard in shards {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let column = |name: &'static str| -> Result<&StringArray> {
+                batch
+                    .column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let review_ids = column("recommendationid")?;
+            let bodies = column("review")?;
+            for row in 0..batch.num_rows() {
+                if bodies.is_null(row) {
+                    continue;
+                }
+                let id = review_ids.value(row);
+                if ids.contains(id) {
+                    found.insert(id.to_owned(), bodies.value(row).to_owned());
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
 fn text(v: Option<&Value>) -> Option<&str> {
     v?.as_str()
 }

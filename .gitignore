@@ -28,6 +28,7 @@ models/
 
 # Build and dependency artefacts
 target/
+target-*/
 dist/
 build/
 node_modules/

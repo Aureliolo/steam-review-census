@@ -408,6 +408,31 @@ fn downcast<'a, T: 'static>(
         .ok_or(Error::MalformedPayload { field: name })
 }
 
+/// Every review's primary category, for callers that do not need its other mentions.
+///
+/// # Errors
+///
+/// Fails if the classifications are missing or were written by an older build.
+pub fn primary_categories(path: &Path) -> Result<Vec<(String, String)>> {
+    let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(8192)
+        .build()?;
+
+    let mut out = Vec::new();
+    for batch in reader {
+        let batch = batch?;
+        let ids = downcast::<StringArray>(&batch, "recommendationid")?;
+        let primaries = downcast::<StringArray>(&batch, "primary_category")?;
+        for row in 0..batch.num_rows() {
+            out.push((ids.value(row).to_owned(), primaries.value(row).to_owned()));
+        }
+    }
+    Ok(out)
+}
+
 /// Where a reference set for an app is expected to live.
 #[must_use]
 pub fn default_reference_dir(app_id: u32) -> PathBuf {
