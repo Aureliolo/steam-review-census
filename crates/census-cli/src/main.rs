@@ -837,21 +837,32 @@ async fn load_under(model: Model, inputs: &FitInputs<'_>) -> Result<Under> {
     let descriptions = census_core::Anchors::from_descriptions(&mut embedder)?;
 
     // A corpus embedded with another encoder holds vectors that cannot be compared with
-    // these anchors at all, so the labelled reviews are embedded again rather than read.
-    let stored = census_core::embed::corpus_encoder(inputs.out, inputs.app_ids[0])?;
-    let fresh = stored != encoder.id();
+    // these anchors at all, so its labelled reviews are embedded again rather than read.
+    // Asked per game rather than once: a set of games embedded under different encoders
+    // would otherwise have some of them silently measured in the wrong space.
+    let mut foreign: Vec<u32> = Vec::new();
+    for &app_id in inputs.app_ids {
+        if census_core::embed::corpus_encoder(inputs.out, app_id)? != encoder.id() {
+            foreign.push(app_id);
+        }
+    }
+    let fresh = !foreign.is_empty();
     if fresh {
         eprintln!(
-            "the corpus was embedded with {stored} and this fit is under {}, so the labelled \
-             reviews are being embedded again.\nCalibration is off: a reference set is not \
-             what an average review looks like, and the corpus centroid belongs to the other \
-             encoder.",
+            "{} of {} corpora were embedded with another encoder, so every game's labelled \
+             reviews are being embedded again under {}.\nCalibration is off for this fit: a \
+             reference set is not what an average review looks like, and a stored centroid \
+             belongs to the encoder that built it.",
+            foreign.len(),
+            inputs.app_ids.len(),
             encoder.id()
         );
     }
 
     let mut games: Vec<GameLabels> = Vec::with_capacity(inputs.app_ids.len());
     for &app_id in inputs.app_ids {
+        // One foreign corpus re-embeds all of them: every game in a fit has to arrive in
+        // the same space, whichever space that turns out to be.
         let source = if fresh {
             Vectors::Fresh(&mut embedder)
         } else {
