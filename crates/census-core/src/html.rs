@@ -53,7 +53,7 @@ pub fn render(report: &Report) -> String {
         game(&mut out, app);
     }
     out.push_str("</main>\n");
-    page_footer(&mut out);
+    page_footer(&mut out, report);
     let _ = writeln!(out, "<script>{SCRIPT}</script>");
     out.push_str("</body>\n</html>\n");
     out
@@ -857,16 +857,18 @@ fn agreement_note(out: &mut String, agreement: &crate::AgreementReport) {
     );
 }
 
-fn page_footer(out: &mut String) {
+fn page_footer(out: &mut String, report: &Report) {
     out.push_str("<footer class=\"page\">\n<div class=\"wrap\">\n");
     out.push_str("<h3>What this cannot tell you</h3>\n<ul>\n");
     for limit in FOOTER_LIMITS {
         let _ = writeln!(out, "<li>{limit}</li>");
     }
     out.push_str("</ul>\n");
-    out.push_str(
-        "<p class=\"note\">Built by steam-review-census. Nothing on this page was sent \
-         anywhere to produce it.</p>\n",
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">Rendered on {} by steam-review-census, from captures taken on the \
+         dates given above. Nothing on this page was sent anywhere to produce it.</p>",
+        escape(&crate::time::day(report.generated_unix))
     );
     out.push_str("</div>\n</footer>\n");
 }
