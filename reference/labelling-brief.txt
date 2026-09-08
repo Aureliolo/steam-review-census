@@ -1,0 +1,77 @@
+Categories (spine core-3). Each review gets exactly one primary category, plus any others it genuinely also covers.
+
+Performance (performance)
+  The game runs badly. Low frame rate, stuttering, frame drops, poor optimisation, long loading times, and it struggles even on good hardware.
+  RULE: Frame rate and stuttering belong here. How the animation itself looks, and how fast it plays out, belong to graphics.
+
+Bugs and crashes (bugs)
+  The game is broken and buggy. It crashes to desktop, freezes, corrupts or loses save files, and is full of glitches that block progress.
+
+Gameplay and mechanics (gameplay)
+  The systems and mechanics themselves. Combat, movement, crafting, building, exploration, progression systems, and whether the mechanics are deep or shallow.
+  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty. How much game there is belongs to content.
+
+Genre and comparisons (genre)
+  What kind of game this is. A roguelike, turn-based tactics, a management sim, a deckbuilder, a soulslike. It plays like FTL, it is XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like this, it reminds me of the old games in the genre.
+  RULE: Naming what kind of game it is, or which games it resembles, belongs here. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay.
+
+Overall verdict only (verdict)
+  A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, worth every penny, do not buy, waste of money, best game ever, I find this game childish, please make a sequel.
+  RULE: Only when no aspect is named at all. A review that gives a verdict and then names one specific thing belongs to that thing: "super fun, worth every penny" is price. Asking for a sequel belongs here; asking for a port belongs to compatibility.
+
+Says nothing about the game (offtopic)
+  The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
+  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty. This is only for reviews from which a reader would learn nothing about the game at all.
+
+Story and writing (story)
+  The story, plot and characters. The writing, the dialogue, the humour, the ending, the world and its lore, the characters players grew fond of, and whether the narrative is worth following.
+  RULE: Anecdotes from a playthrough belong here when they are about a character or an event, and to gameplay when they are about a mechanic. Humour in the writing is here; a charming art style is graphics.
+
+Graphics and art (graphics)
+  How the game looks. The visuals, the art style, the animation and how quickly it plays out, the environments and character models, whether it is beautiful or ugly or charming.
+  RULE: Animation quality and animation speed belong here. Frame rate belongs to performance.
+
+Audio and music (audio)
+  How the game sounds. The soundtrack, the music, the sound effects, the voice acting and the audio mixing.
+
+Controls and interface (controls)
+  The controls and the user interface. Clunky or responsive controls, keybindings, controller support, menus, the HUD, the inventory screens, and how many clicks it takes to do anything.
+  RULE: Whether a controller is supported belongs here. Whether the game runs on a given device belongs to compatibility.
+
+Difficulty and balance (difficulty)
+  How hard the game is and whether it is fair. Difficulty spikes, grinding, whether the options are balanced against each other, luck and randomness deciding the outcome, and whether it is too easy or punishing.
+  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless.
+
+Amount of content (content)
+  How much game there is. Length, how many hours it lasts, replay value, whether runs differ from one another, whether it gets repetitive, and whether it feels finished or thin and runs out of things to do.
+  RULE: Replayability and repetitiveness are two ends of one axis and both belong here, never to gameplay.
+
+Price and value (price)
+  What it costs and whether it is worth the money. Full price versus sale, value for money, refunds, and whether to wait for a discount.
+  RULE: What the base game costs belongs here. What is sold on top of it belongs to monetisation.
+
+Monetisation and DLC (monetisation)
+  Paid extras and how they are sold. Microtransactions, battle passes, loot boxes, paywalls, season passes and content cut out to sell as DLC.
+
+Multiplayer and online (multiplayer)
+  Playing with or against other people. Matchmaking, servers, lag and ping, co-op, player counts, whether lobbies are dead and whether cheaters ruin it.
+  RULE: Servers, matchmaking and connection quality belong here. What the other players are like belongs to community.
+
+Community and players (community)
+  The people who play it. Whether the community is welcoming or toxic, griefing and harassment, and what the playerbase is like.
+
+Updates and developer support (updates)
+  What the developers do after release. Patches, roadmaps, early access progress, communication with players, whether promises were kept, and whether the game is abandoned.
+
+Hardware and compatibility (compatibility)
+  Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
+  RULE: Asking for a port to another platform belongs here. Asking for a sequel belongs to verdict.
+
+Accessibility and options (accessibility)
+  Settings and accommodations. Subtitles, colourblind modes, remappable controls, difficulty options, text size, and the settings players need in order to play at all.
+  RULE: Which languages the game is available in belongs to language, not here.
+
+Language and localisation (language)
+  Which languages the game is in and how good the translation is. No English, no Chinese, machine translation, a language dropped in an update, subtitles only in some languages, playing anyway with a dictionary.
+  RULE: Whether a language exists and how well it reads belongs here. Subtitles as an accommodation, in a language that is already supported, belong to accessibility.
+

@@ -377,6 +377,23 @@ mod tests {
     }
 
     #[test]
+    fn the_checked_in_brief_is_the_one_this_build_would_generate() {
+        // The sheet labellers work from is committed so it can be read without building the
+        // tool, which makes it capable of drifting from the taxonomy it claims to describe.
+        // A reference set labelled against a stale sheet is silently mislabelled, and the
+        // first set produced by this project lost consistency exactly that way.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../reference/labelling-brief.txt");
+        let committed = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{} is missing: {e}", path.display()));
+        assert_eq!(
+            committed.replace("\r\n", "\n"),
+            labelling_brief(),
+            "reference/labelling-brief.txt is stale; regenerate it with `census sample --brief`"
+        );
+    }
+
+    #[test]
     fn lookup_finds_categories_and_rejects_unknown_ones() {
         assert_eq!(by_id("bugs").map(|c| c.label), Some("Bugs and crashes"));
         assert_eq!(
