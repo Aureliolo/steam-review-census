@@ -1,4 +1,4 @@
-# Steam Review Lab
+# Steam Review Census
 
 > ## ⚠️ IN DEVELOPMENT — NOT USABLE YET
 >
@@ -20,10 +20,10 @@ Steam sorts reviews by helpfulness. If you read the top forty to judge a game, y
 reading the reviews other people upvoted, which are also the longest and angriest ones.
 That is a measure of agreement, not of how common an opinion is.
 
-The gap is large enough to change conclusions. In one game we measured, a complaint
-appeared in 64% of the fifty most-upvoted negative reviews and in 24.7% of all of them.
-Both numbers are true. Only the second is a fact about players. Reading the top of the pile
-overstates themes by roughly two to two and a half times.
+The gap is large enough to change conclusions. In one game measured in earlier work, a
+complaint appeared in 64% of the fifty most-upvoted negative reviews and in 24.7% of all of
+them. Both numbers are true. Only the second is a fact about players. Reading the top of
+the pile overstated that theme by a factor of 2.6.
 
 The only way to remove the argument is to hold every review and count.
 
@@ -38,10 +38,28 @@ The only way to remove the argument is to hold every review and count.
 
 You choose which model does the sorting, and how closely it reads.
 
+### What a percentage means here
+
+The headline figure for a category is a **mention rate**: the share of all reviews in the
+corpus that say something about it. A review that covers two topics counts towards both, so
+mention rates across categories add up to more than 100%, and they are meant to. This is
+the number the 24.7% above refers to, and it is the one people usually have in mind when
+they ask how common a complaint is.
+
+Where a figure is not a mention rate, it is labelled. Two others appear:
+
+- **Primary share**, the share of reviews whose single main subject is that category. These
+  are exhaustive and add up to the number of reviews.
+- **Claim share**, used in deep reading, where the unit counted is an individual opinion
+  rather than a whole review.
+
+No percentage is ever shown without saying which of the three it is. The point of counting
+everything is lost if the denominator is ambiguous.
+
 ### One category, and only more when a review earns it
 
-Every review gets a single primary category. That keeps the counts clean: the categories
-add up to the number of reviews, and a percentage means what it appears to mean.
+Every review gets a single primary category. That keeps the primary shares clean: they add
+up to the number of reviews, and the figure means what it appears to mean.
 
 A review that genuinely covers more than one thing also records the other topics it
 touches, so "great simulation, awful interface" is not filed under one of those and
@@ -57,7 +75,9 @@ finely each one is taken apart:
 - **Deep** breaks it into the separate points it makes, so a long review contributes
   several distinct opinions instead of one blurred average of them.
 
-Deep costs more time and finds more. Neither setting drops a review.
+Deep reading is the default, because it is also what makes a mention rate correct: a review
+counts towards a category when any of its points belongs there. Shallow is faster and
+systematically understates multi-topic reviews. Neither setting drops a review.
 
 ### Ratings that disagree with the text
 
@@ -73,29 +93,71 @@ silently miscounted.
 
 ## Honest limits
 
-- **"Every review" means every review Valve will serve.** Reviews from deleted and private
-  accounts are counted in Valve's totals but cannot be retrieved by anyone. In practice
-  this leaves a fraction of a percent unreachable.
+- **"Every review" means every review Valve will serve, and the request parameters decide
+  how many that is.** Two API defaults quietly remove a large and biased slice.
+  `purchase_type` defaults to Steam purchases only, dropping activated keys, and
+  `filter_offtopic_activity` defaults to excluding review bombs. On Cyberpunk 2077, asking
+  for everything returns 986,295 reviews where the defaults return 881,295. That is 105,000
+  missing, 10.6% of the corpus, and the loss is not even: **17.3% of all negative reviews
+  disappear against 9.6% of positive ones.** A census that accepts the defaults understates
+  exactly what it is trying to measure. This one always sets both.
+
+- **The default pagination is worse than the defaults above.** Steam's `filter=all` is
+  helpfulness-ranked and stalls almost immediately. On a 2,909-review title it returned 21
+  unique reviews before repeating its cursor: 0.7% coverage, drawn from the top of the pile.
+  Reading that would reproduce precisely the bias this tool exists to remove. The census
+  paginates by creation date instead, which on that same title returned all 2,909 reviews
+  with no duplicates.
+
+- **Some reviews are genuinely unreachable.** Reviews from deleted and private accounts are
+  counted in Valve's totals but cannot be retrieved by anyone. Every corpus therefore
+  reports its own coverage, fetched against Valve's stated total, as a figure you can read
+  rather than a claim you have to trust.
+
 - **The target moves.** New reviews arrive constantly, so a corpus is a snapshot with a
-  timestamp, and it can be topped up rather than rebuilt.
+  timestamp, and it can be topped up rather than rebuilt. Reviews are also edited and
+  deleted after the fact, and vote counts drift, so a top-up is periodically followed by a
+  full re-crawl.
+
 - **Counting words is not understanding them.** A category assignment is a useful summary
   and a starting point for reading, never a substitute for it. That is why drilling down to
   the underlying reviews is a first-class feature and not an afterthought.
 
-## Data
+## Data and privacy
 
 This repository holds no review data. Reviews belong to the people who wrote them and to
 Valve, and they are downloadable by anyone with the app ID, so there is nothing to gain
-from redistributing them here. Everything you pull stays on your machine.
+from redistributing them here.
+
+By default nothing you pull leaves your machine. The crawler talks to Valve, and
+categorisation runs on a local embedding model, so a complete census is possible with no
+account, no key and no network beyond Steam itself.
+
+Configuring a hosted model changes that in a specific and bounded way: the text of a
+sampled subset of reviews is sent to that provider to induce categories, label training
+examples and write summaries. The full corpus is never sent. Which provider, and whether to
+use one at all, is your choice, and the tool records what ran against every number it
+reports.
+
+Steam review text, author IDs and profiles are public. A local corpus of millions of
+accounts is still personal data, so it stays on your disk, and exporting a corpus offers
+de-identification.
 
 ## Status
 
-**Nothing described above is implemented.** This repository holds a specification and a
-README, and that is all.
+**Nothing described above is implemented.** This repository holds a specification, a
+README, and the beginnings of a Rust workspace.
 
 What does exist is prior work this is being built from: the underlying approach has been
-run against a corpus of 1.7 million reviews across 62 games, which is where the numbers
-quoted at the top come from. That work lives elsewhere as a set of one-off scripts. The
-tool is the attempt to turn it into something anyone can point at a game.
+run against a corpus of 1.7 million reviews across 62 games, which is where the 64% and
+24.7% figures above come from. That work lives elsewhere as a set of one-off scripts, and
+it predates the parameter findings recorded under Honest limits, so those figures will be
+re-measured against a freshly crawled corpus before they are presented as anything more
+than indicative. The tool is the attempt to turn that work into something anyone can point
+at a game.
 
 There is no release, no version, and no timeline.
+
+## Licence
+
+Apache License 2.0. See [LICENSE](LICENSE).
