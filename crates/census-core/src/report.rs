@@ -21,6 +21,9 @@ use crate::{Result, bounded::Smallest, capture::CapturedReview, taxonomy::CORE_S
 /// Reviews shown per category before a reader is asked to go to the corpus itself.
 pub const DEFAULT_EXAMPLES: usize = 8;
 
+/// Of those, how many are taken from the most-upvoted reviews rather than at random.
+const FROM_THE_TOP: usize = 2;
+
 /// A category has to reach this fraction of the top of the pile before the headline will
 /// quote its bias. One in ten, so a fifty-review top needs five of them.
 const HEADLINE_TOP_SHARE: u64 = 10;
@@ -28,8 +31,9 @@ const HEADLINE_TOP_SHARE: u64 = 10;
 #[derive(Debug, Clone)]
 pub struct ReportOptions {
     pub out_dir: PathBuf,
-    /// Reviews quoted per category. Two are drawn from the top of the pile where possible,
-    /// so a category's examples are not all reviews nobody read.
+    /// Reviews quoted per category. The first two come from the top of the pile where the
+    /// category reaches it, so a category's evidence is not made entirely of reviews nobody
+    /// ever read.
     pub examples: usize,
     /// Changing this quotes different reviews. The same seed always quotes the same ones.
     pub seed: u64,
@@ -341,20 +345,45 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let examples = CORE_SPINE
         .iter()
         .map(|category| {
-            let quoted = wanted_per_category
-                .get(category.id)
-                .map(Vec::as_slice)
-                .unwrap_or_default()
+            // A few from the top of the pile first, where the category reaches it at all.
+            // A random sample of a million reviews will almost never contain one of the
+            // fifty most-upvoted, and what those fifty said about a category next to what
+            // everyone said is the whole argument in miniature.
+            let mut quoted: Vec<Example> = classification
+                .top_reviews
                 .iter()
-                .filter_map(|filed| {
+                .filter(|row| row.mentions.iter().any(|id| id == category.id))
+                .take(FROM_THE_TOP)
+                .filter_map(|row| {
                     Some(Example {
-                        review: fetched.get(&filed.id)?.clone(),
-                        primary: filed.primary.clone(),
-                        mentions: filed.mentions.clone(),
-                        from_the_top: top_ids.contains(&filed.id),
+                        review: fetched.get(&row.id)?.clone(),
+                        primary: row.primary.clone(),
+                        mentions: row.mentions.clone(),
+                        from_the_top: true,
                     })
                 })
                 .collect();
+
+            for filed in wanted_per_category
+                .get(category.id)
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+            {
+                if quoted.len() >= options.examples {
+                    break;
+                }
+                if quoted.iter().any(|shown| shown.review.id == filed.id) {
+                    continue;
+                }
+                if let Some(review) = fetched.get(&filed.id) {
+                    quoted.push(Example {
+                        review: review.clone(),
+                        primary: filed.primary.clone(),
+                        mentions: filed.mentions.clone(),
+                        from_the_top: top_ids.contains(&filed.id),
+                    });
+                }
+            }
             (category.id.to_owned(), quoted)
         })
         .collect();
