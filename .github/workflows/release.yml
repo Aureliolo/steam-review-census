@@ -27,7 +27,7 @@ jobs:
             binary: census
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --release --locked --target ${{ matrix.target }} --bin census
@@ -43,7 +43,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" \
              "staging/census-${{ matrix.target }}${{ matrix.binary == 'census.exe' && '.exe' || '' }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: build-${{ matrix.target }}
           path: staging/*
@@ -57,9 +57,9 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: staging
           pattern: build-*
@@ -75,7 +75,7 @@ jobs:
           output-file: staging/sbom.cyclonedx.json
           artifact-name: sbom.cyclonedx.json
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: staging/census-*
 
