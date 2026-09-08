@@ -7,6 +7,7 @@ pub mod capture;
 pub mod classify;
 pub mod crawl;
 pub mod embed;
+pub mod evaluate;
 pub mod model;
 pub mod query;
 pub mod shard;
@@ -18,6 +19,7 @@ pub use capture::CaptureWriter;
 pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corpus};
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
+pub use evaluate::{AgreementReport, ReferenceSet, compare};
 pub use model::{EMBEDDING_DIM, MODEL_ID};
 pub use query::{ReviewQuery, SortOrder};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
@@ -60,6 +62,9 @@ pub enum Error {
 
     #[error("no embeddings found at {path}; run `census embed` first")]
     NoEmbeddings { path: std::path::PathBuf },
+
+    #[error("no reference set at {path}")]
+    NoReferenceSet { path: std::path::PathBuf },
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),
