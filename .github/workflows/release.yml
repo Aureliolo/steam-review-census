@@ -20,38 +20,51 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # DirectML reaches NVIDIA, AMD and Intel through DX12 for ~18 MB, so Windows gets
+          # GPU support for every vendor. macOS gets CoreML. Linux ships CPU-only: its GPU
+          # option is CUDA, which is NVIDIA-only and would add roughly 750 MB.
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: census
             asset: census-x86_64-unknown-linux-gnu
+            features: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary: census.exe
-            asset: census-x86_64-pc-windows-msvc.exe
+            asset: census-x86_64-pc-windows-msvc
+            features: "--features directml"
+          # Apple Silicon only: ONNX Runtime publishes no prebuilt binary for Intel macOS,
+          # and building it from source in CI is not worth it for a platform Apple has
+          # stopped shipping.
           - os: macos-latest
             target: aarch64-apple-darwin
             binary: census
             asset: census-aarch64-apple-darwin
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary: census
-            asset: census-x86_64-apple-darwin
+            features: "--features coreml"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - run: rustup target add ${{ matrix.target }}
-      - run: cargo build --release --locked --target ${{ matrix.target }} --bin census
+      - run: cargo build --release --locked --target ${{ matrix.target }} --bin census ${{ matrix.features }}
 
       # Windows binaries gain a SignPath Foundation signature once the project is enrolled.
       # macOS has no free certificate authority, so those assets carry provenance only and
       # Gatekeeper will require an explicit override. SECURITY.md explains the difference.
 
+      # Archived rather than shipped bare: the GPU backends need runtime libraries beside
+      # the binary (DirectML.dll on Windows), and a lone executable would not start.
       - name: Stage asset
         shell: bash
         run: |
-          mkdir -p staging
-          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "staging/${{ matrix.asset }}"
+          mkdir -p "staging/${{ matrix.asset }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "staging/${{ matrix.asset }}/"
+          find "target/${{ matrix.target }}/release" -maxdepth 1 \
+            \( -name '*.dll' -o -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) \
+            -exec cp {} "staging/${{ matrix.asset }}/" \;
+          tar -C staging -czf "staging/${{ matrix.asset }}.tar.gz" "${{ matrix.asset }}"
+          rm -rf "staging/${{ matrix.asset }}"
+          ls -la staging/
 
       - uses: actions/upload-artifact@v7
         with:
@@ -91,7 +104,7 @@ jobs:
 
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-path: staging/census-*
+          subject-path: staging/census-*.tar.gz
 
       - uses: sigstore/cosign-installer@v3
       - name: Sign checksums with cosign
@@ -104,7 +117,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         working-directory: staging
         run: |
-          for asset in census-*; do
+          for asset in census-*.tar.gz; do
             gh attestation verify "$asset" --repo "${{ github.repository }}"
           done
           cosign verify-blob SHA256SUMS \

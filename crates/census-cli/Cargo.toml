@@ -18,5 +18,12 @@ census-core.workspace = true
 clap = { version = "4.6.6", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 
+[features]
+default = []
+directml = ["census-core/directml"]
+coreml = ["census-core/coreml"]
+cuda = ["census-core/cuda"]
+webgpu = ["census-core/webgpu"]
+
 [lints]
 workspace = true

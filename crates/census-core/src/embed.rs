@@ -1,0 +1,482 @@
+//! Turning captured review text into vectors, locally.
+//!
+//! Vectors are stored once per *distinct* review text, not once per review, so repeated
+//! reviews cost nothing to embed twice. Rows join back to the capture on `sha256(review)`.
+
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use arrow::{
+    array::{Array, ArrayRef, FixedSizeListBuilder, Float32Builder, StringBuilder, UInt32Builder},
+    datatypes::{DataType, Field, Schema},
+    record_batch::RecordBatch,
+};
+use ndarray::Array2;
+use ort::{session::Session, value::Tensor};
+use parquet::{
+    arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder},
+    basic::{Compression, ZstdLevel},
+    file::properties::WriterProperties,
+};
+use sha2::{Digest, Sha256};
+use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
+
+use crate::{
+    Error, Result,
+    model::{self, E5_PREFIX, EMBEDDING_DIM, MAX_TOKENS, MODEL_ID},
+};
+
+pub const DEFAULT_BATCH_SIZE: usize = 64;
+
+pub struct Embedder {
+    session: Session,
+    tokenizer: Tokenizer,
+    device_name: &'static str,
+    output_name: String,
+    wants_token_type_ids: bool,
+}
+
+impl std::fmt::Debug for Embedder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Embedder")
+            .field("model", &MODEL_ID)
+            .field("device", &self.device_name)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Embedder {
+    /// Which backend the model actually ended up on.
+    #[must_use]
+    pub fn device(&self) -> &'static str {
+        self.device_name
+    }
+
+    /// # Errors
+    ///
+    /// Fails if the model files are missing, corrupt, or cannot be loaded on any backend.
+    pub fn load(cache_dir: &Path) -> Result<Self> {
+        let (session, device_name) = model::session(cache_dir)?;
+        let mut tokenizer = Tokenizer::from_file(model::tokenizer_path(cache_dir))
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        tokenizer.with_padding(Some(PaddingParams {
+            strategy: PaddingStrategy::BatchLongest,
+            ..PaddingParams::default()
+        }));
+        tokenizer
+            .with_truncation(Some(TruncationParams {
+                max_length: MAX_TOKENS,
+                ..TruncationParams::default()
+            }))
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+
+        // Read the graph's own signature rather than assuming one: exports of the same
+        // model differ in whether they take token_type_ids and in what they name outputs.
+        let wants_token_type_ids = session
+            .inputs()
+            .iter()
+            .any(|input| input.name() == "token_type_ids");
+        let output_name = session
+            .outputs()
+            .first()
+            .ok_or(Error::MalformedPayload {
+                field: "onnx output",
+            })?
+            .name()
+            .to_owned();
+
+        Ok(Self {
+            session,
+            tokenizer,
+            device_name,
+            output_name,
+            wants_token_type_ids,
+        })
+    }
+
+    /// Embeds a batch, mean-pooled over real tokens and L2-normalised.
+    ///
+    /// # Errors
+    ///
+    /// Fails if tokenisation or the forward pass fails.
+    pub fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let prefixed: Vec<String> = texts.iter().map(|t| format!("{E5_PREFIX}{t}")).collect();
+        let encodings = self
+            .tokenizer
+            .encode_batch(prefixed, true)
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+
+        let rows = encodings.len();
+        let cols = encodings.first().map_or(0, |e| e.get_ids().len());
+        let ids: Vec<i64> = encodings
+            .iter()
+            .flat_map(|e| e.get_ids().iter().map(|&id| i64::from(id)))
+            .collect();
+        let mask: Vec<i64> = encodings
+            .iter()
+            .flat_map(|e| e.get_attention_mask().iter().map(|&m| i64::from(m)))
+            .collect();
+
+        let ids_array = Array2::from_shape_vec((rows, cols), ids)?;
+        let mask_array = Array2::from_shape_vec((rows, cols), mask.clone())?;
+
+        let outputs = if self.wants_token_type_ids {
+            let types = Array2::<i64>::zeros((rows, cols));
+            self.session.run(ort::inputs![
+                "input_ids" => Tensor::from_array(ids_array)?,
+                "attention_mask" => Tensor::from_array(mask_array)?,
+                "token_type_ids" => Tensor::from_array(types)?,
+            ])?
+        } else {
+            self.session.run(ort::inputs![
+                "input_ids" => Tensor::from_array(ids_array)?,
+                "attention_mask" => Tensor::from_array(mask_array)?,
+            ])?
+        };
+
+        let hidden = outputs[self.output_name.as_str()]
+            .try_extract_array::<f32>()?
+            .into_dimensionality::<ndarray::Ix3>()?;
+        Ok(pool(&hidden, &mask, rows, cols))
+    }
+}
+
+/// Mean-pools over real tokens, then L2-normalises.
+///
+/// Padding tokens must not contribute, or a short review batched with a long one would get
+/// a vector that depends on its batch neighbours rather than on what it says.
+fn pool(
+    hidden: &ndarray::ArrayView3<'_, f32>,
+    mask: &[i64],
+    rows: usize,
+    cols: usize,
+) -> Vec<Vec<f32>> {
+    let mut out = Vec::with_capacity(rows);
+    for row in 0..rows {
+        let mut acc = vec![0.0_f32; EMBEDDING_DIM];
+        let mut kept = 0.0_f32;
+        for col in 0..cols {
+            if mask[row * cols + col] == 0 {
+                continue;
+            }
+            kept += 1.0;
+            for (dim, value) in acc.iter_mut().enumerate() {
+                *value += hidden[[row, col, dim]];
+            }
+        }
+        let divisor = if kept > 0.0 { kept } else { 1.0 };
+        for value in &mut acc {
+            *value /= divisor;
+        }
+        let norm = acc.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for value in &mut acc {
+                *value /= norm;
+            }
+        }
+        out.push(acc);
+    }
+    out
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EmbedProgress {
+    pub embedded: u64,
+    pub unique_texts: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct EmbedReport {
+    pub app_id: u32,
+    pub reviews: u64,
+    pub unique_texts: u64,
+    pub dim: usize,
+    pub device: &'static str,
+    pub elapsed: Duration,
+    pub path: PathBuf,
+    pub bytes: u64,
+}
+
+impl EmbedReport {
+    /// Share of review texts that were already seen, and so cost nothing to embed.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn dedupe_rate(&self) -> Option<f64> {
+        (self.reviews > 0).then(|| 1.0 - (self.unique_texts as f64 / self.reviews as f64))
+    }
+
+    /// Distinct texts embedded per second.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn texts_per_second(&self) -> f64 {
+        let seconds = self.elapsed.as_secs_f64();
+        if seconds <= 0.0 {
+            return 0.0;
+        }
+        self.unique_texts as f64 / seconds
+    }
+}
+
+/// Embeds the most recent capture for an app.
+///
+/// # Errors
+///
+/// Fails if no capture exists, or if reading, embedding or writing fails.
+pub fn embed_corpus(
+    embedder: &mut Embedder,
+    out_dir: &Path,
+    app_id: u32,
+    batch_size: usize,
+    mut on_progress: impl FnMut(EmbedProgress),
+) -> Result<EmbedReport> {
+    let started = Instant::now();
+    let snapshot = latest_snapshot(out_dir, app_id)?;
+    let (texts, reviews) = distinct_texts(&snapshot)?;
+    let unique_texts = texts.len() as u64;
+
+    let path = snapshot.join("embeddings.parquet");
+    let schema = embedding_schema();
+    let props = WriterProperties::builder()
+        .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .build();
+    let mut writer = ArrowWriter::try_new(
+        std::fs::File::create(&path)?,
+        Arc::clone(&schema),
+        Some(props),
+    )?;
+
+    // Every sequence in a batch is padded to the longest member, so batching a
+    // ten-character review with a three-thousand-character one processes both as though
+    // they were three thousand characters. Sorting by length first makes batches
+    // homogeneous and removes almost all of that waste.
+    let mut ordered: Vec<(String, u32)> = texts.into_iter().collect();
+    ordered.sort_unstable_by_key(|(text, _)| text.len());
+
+    let mut written: u64 = 0;
+    for chunk in ordered.chunks(batch_size.max(1)) {
+        let batch_texts: Vec<String> = chunk.iter().map(|(text, _)| text.clone()).collect();
+        let vectors = embedder.embed(&batch_texts)?;
+        writer.write(&batch_to_record(app_id, chunk, &vectors, &schema)?)?;
+        written = written.saturating_add(chunk.len() as u64);
+        on_progress(EmbedProgress {
+            embedded: written,
+            unique_texts,
+        });
+    }
+    writer.close()?;
+
+    Ok(EmbedReport {
+        app_id,
+        reviews,
+        unique_texts,
+        dim: EMBEDDING_DIM,
+        device: embedder.device(),
+        elapsed: started.elapsed(),
+        bytes: std::fs::metadata(&path)
+            .map(|m| m.len())
+            .unwrap_or_default(),
+        path,
+    })
+}
+
+fn embedding_schema() -> Arc<Schema> {
+    let dim = i32::try_from(EMBEDDING_DIM).unwrap_or(0);
+    Arc::new(Schema::new(vec![
+        Field::new("text_sha256", DataType::Utf8, false),
+        Field::new("appid", DataType::UInt32, false),
+        Field::new("n_reviews", DataType::UInt32, false),
+        Field::new("model", DataType::Utf8, false),
+        // The inner field is nullable to match what FixedSizeListBuilder produces; the
+        // values themselves are never null, since a vector is written or the row is not.
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), dim),
+            false,
+        ),
+    ]))
+}
+
+fn batch_to_record(
+    app_id: u32,
+    chunk: &[(String, u32)],
+    vectors: &[Vec<f32>],
+    schema: &Arc<Schema>,
+) -> Result<RecordBatch> {
+    let dim = i32::try_from(EMBEDDING_DIM).unwrap_or(0);
+    let mut hashes = StringBuilder::new();
+    let mut appids = UInt32Builder::new();
+    let mut counts = UInt32Builder::new();
+    let mut models = StringBuilder::new();
+    let mut embeddings = FixedSizeListBuilder::new(Float32Builder::new(), dim);
+
+    for ((text, n), vector) in chunk.iter().zip(vectors) {
+        hashes.append_value(sha256_hex(text));
+        appids.append_value(app_id);
+        counts.append_value(*n);
+        models.append_value(MODEL_ID);
+        embeddings.values().append_slice(vector);
+        embeddings.append(true);
+    }
+
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(hashes.finish()),
+        Arc::new(appids.finish()),
+        Arc::new(counts.finish()),
+        Arc::new(models.finish()),
+        Arc::new(embeddings.finish()),
+    ];
+    Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
+}
+
+/// Distinct review texts and how many reviews carry each, plus the total review count.
+fn distinct_texts(snapshot: &Path) -> Result<(HashMap<String, u32>, u64)> {
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    let mut reviews = 0_u64;
+
+    for entry in std::fs::read_dir(snapshot)? {
+        let path = entry?.path();
+        let is_shard = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with("shard-") && n.ends_with(".parquet"));
+        if !is_shard {
+            continue;
+        }
+        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&path)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let Some(column) = batch.column_by_name("review") else {
+                continue;
+            };
+            let texts = column
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+                .ok_or(Error::MalformedPayload { field: "review" })?;
+            for i in 0..texts.len() {
+                reviews += 1;
+                if texts.is_null(i) {
+                    continue;
+                }
+                *counts.entry(texts.value(i).to_owned()).or_insert(0) += 1;
+            }
+        }
+    }
+    if counts.is_empty() {
+        return Err(Error::NoCapture {
+            path: snapshot.to_path_buf(),
+        });
+    }
+    Ok((counts, reviews))
+}
+
+/// The newest snapshot directory for an app.
+fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
+    let app_dir = out_dir.join(format!("appid={app_id}"));
+    let mut best: Option<(i64, PathBuf)> = None;
+
+    for entry in std::fs::read_dir(&app_dir).map_err(|_| Error::NoCapture {
+        path: app_dir.clone(),
+    })? {
+        let path = entry?.path();
+        let Some(stamp) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_prefix("snapshot="))
+            .and_then(|n| n.parse::<i64>().ok())
+        else {
+            continue;
+        };
+        if best.as_ref().is_none_or(|(seen, _)| stamp > *seen) {
+            best = Some((stamp, path));
+        }
+    }
+    best.map(|(_, path)| path)
+        .ok_or(Error::NoCapture { path: app_dir })
+}
+
+fn sha256_hex(text: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(64);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_join_key_is_plain_sha256_of_the_review_text() {
+        // These are what `sha256(review)` returns in DuckDB, so a join against the capture
+        // lines up without the caller having to know anything about how rows were keyed.
+        assert_eq!(
+            sha256_hex("good game"),
+            "e192095a02c29325df05003235dba8978751279a7405eee58488604cc5068c43"
+        );
+        assert_eq!(
+            sha256_hex(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn pooling_ignores_padding_and_returns_unit_vectors() {
+        // Two positions, the second masked out. The result must equal the first position
+        // alone, normalised, not the average of both.
+        let mut data = vec![0.0_f32; 2 * EMBEDDING_DIM];
+        data[0] = 3.0;
+        data[1] = 4.0;
+        data[EMBEDDING_DIM] = 100.0;
+        let hidden = ndarray::Array3::from_shape_vec((1, 2, EMBEDDING_DIM), data).unwrap();
+        let pooled = pool(&hidden.view(), &[1, 0], 1, 2);
+
+        assert!((pooled[0][0] - 0.6).abs() < 1e-6, "{:?}", &pooled[0][..2]);
+        assert!((pooled[0][1] - 0.8).abs() < 1e-6);
+        let norm = pooled[0].iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-5, "norm was {norm}");
+    }
+
+    #[test]
+    fn dedupe_rate_reports_the_share_that_cost_nothing() {
+        let report = |reviews, unique| EmbedReport {
+            app_id: 1,
+            reviews,
+            unique_texts: unique,
+            dim: EMBEDDING_DIM,
+            device: "cpu",
+            elapsed: Duration::from_secs(1),
+            path: PathBuf::new(),
+            bytes: 0,
+        };
+        assert_eq!(report(100, 100).dedupe_rate(), Some(0.0));
+        assert_eq!(report(100, 60).dedupe_rate(), Some(0.4));
+        assert_eq!(report(0, 0).dedupe_rate(), None);
+        assert!((report(100, 60).texts_per_second() - 60.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_missing_capture_is_named_rather_than_silently_empty() {
+        let err = latest_snapshot(Path::new("definitely-not-a-corpus-dir"), 1).unwrap_err();
+        assert!(matches!(err, Error::NoCapture { .. }));
+    }
+}
