@@ -6,11 +6,15 @@ pub mod api;
 pub mod capture;
 pub mod crawl;
 pub mod query;
+pub mod shard;
+pub mod state;
 
-pub use api::{Page, QuerySummary, SteamClient};
+pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
 pub use capture::CaptureWriter;
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use query::{ReviewQuery, SortOrder};
+pub use shard::{DEFAULT_SHARD_TARGET, Shard};
+pub use state::CrawlState;
 
 /// Anything that can go wrong while building a corpus.
 #[derive(Debug, thiserror::Error)]
@@ -29,11 +33,19 @@ pub enum Error {
     #[error("review payload missing {field}")]
     MalformedPayload { field: &'static str },
 
+    /// A shard task died rather than returning an error. Reporting a completed crawl here
+    /// would claim coverage the corpus does not have.
+    #[error("a shard task failed: {detail}")]
+    ShardPanicked { detail: String },
+
     #[error(transparent)]
     Parquet(#[from] parquet::errors::ParquetError),
 
     #[error(transparent)]
     Arrow(#[from] arrow::error::ArrowError),
+
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),

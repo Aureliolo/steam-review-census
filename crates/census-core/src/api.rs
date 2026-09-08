@@ -1,17 +1,22 @@
 //! HTTP access to Valve's `appreviews` endpoint.
 
-use std::time::Duration;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use serde::Deserialize;
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use crate::{Error, Result, query::ReviewQuery};
 
 /// Valve documents no rate limit for this endpoint, so the ceiling is unknown and can only
-/// be found by exceeding it. The crawler stays well under measured throughput and treats
-/// any push-back as authoritative rather than probing for the real limit.
+/// be found by exceeding it. The client paces itself and treats any push-back as
+/// authoritative rather than probing for the real limit.
 const MAX_ATTEMPTS: u32 = 5;
 const BACKOFF_BASE: Duration = Duration::from_secs(2);
+pub const DEFAULT_PACE: Duration = Duration::from_millis(250);
 
 /// Totals as Valve reports them for the query's filters, present only on the first page.
 ///
@@ -45,9 +50,13 @@ pub struct Page {
     pub cursor: Option<String>,
 }
 
+/// Paces every request through one shared slot, so raising shard concurrency changes how
+/// the work is ordered but never how hard Valve is hit.
 #[derive(Debug, Clone)]
 pub struct SteamClient {
     http: reqwest::Client,
+    pace: Duration,
+    next_slot: Arc<Mutex<Instant>>,
 }
 
 impl SteamClient {
@@ -55,7 +64,7 @@ impl SteamClient {
     ///
     /// Fails if the HTTP client cannot be constructed, which in practice means a missing or
     /// unusable TLS backend.
-    pub fn new() -> Result<Self> {
+    pub fn new(pace: Duration) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(concat!(
                 "steam-review-census/",
@@ -64,14 +73,32 @@ impl SteamClient {
             ))
             .timeout(Duration::from_secs(60))
             .build()?;
-        Ok(Self { http })
+        Ok(Self {
+            http,
+            pace,
+            next_slot: Arc::new(Mutex::new(Instant::now())),
+        })
+    }
+
+    /// How many reviews Valve reports for a window, without downloading any of them.
+    ///
+    /// # Errors
+    ///
+    /// Propagates transport and throttling failures.
+    pub async fn count(&self, app_id: u32, window: Option<(i64, i64)>) -> Result<u64> {
+        let mut query = ReviewQuery::new(app_id).per_page(0);
+        if let Some((start, end)) = window {
+            query = query.window(start, end);
+        }
+        let page = self.fetch(&query, app_id).await?;
+        Ok(page.query_summary.map_or(0, |s| s.total_reviews))
     }
 
     /// Fetches one page, retrying on throttling and transient server errors.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Throttled`] if Valve keeps refusing after [`MAX_ATTEMPTS`], and
+    /// Returns [`Error::Throttled`] if Valve keeps refusing after five attempts, and
     /// [`Error::NoSuchCorpus`] if it answers `success: 0`.
     pub async fn fetch(&self, query: &ReviewQuery, app_id: u32) -> Result<Page> {
         let url = query.to_url();
@@ -79,6 +106,8 @@ impl SteamClient {
 
         loop {
             attempt += 1;
+            self.wait_turn().await;
+
             let response = self.http.get(&url).send().await?;
             let status = response.status();
 
@@ -102,6 +131,19 @@ impl SteamClient {
             let wait =
                 retry_after(&response).unwrap_or_else(|| BACKOFF_BASE * 2_u32.pow(attempt - 1));
             tokio::time::sleep(wait).await;
+        }
+    }
+
+    async fn wait_turn(&self) {
+        let now = Instant::now();
+        let slot_at = {
+            let mut slot = self.next_slot.lock().await;
+            let at = (*slot).max(now);
+            *slot = at + self.pace;
+            at
+        };
+        if slot_at > now {
+            tokio::time::sleep(slot_at - now).await;
         }
     }
 }

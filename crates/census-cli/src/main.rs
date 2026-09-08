@@ -5,11 +5,11 @@ use std::{
 };
 
 use anyhow::Result;
-use census_core::{CrawlOptions, CrawlReport, SteamClient, crawl};
+use census_core::{CrawlOptions, CrawlReport, DEFAULT_SHARD_TARGET, SteamClient, crawl};
 use clap::{Parser, Subcommand};
 
 /// How often to emit a progress line when stderr is not a terminal.
-const PROGRESS_EVERY_PAGES: u32 = 25;
+const PROGRESS_EVERY_SHARDS: usize = 5;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -28,12 +28,25 @@ enum Command {
     Crawl {
         /// Steam app ID, as it appears in the store URL.
         app_id: u32,
-        /// Directory to write the capture into.
+        /// Directory to write captures and crawl state into.
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
-        /// Milliseconds to wait between pages.
+        /// Milliseconds between requests, enforced globally across all shards.
         #[arg(long, default_value_t = 250)]
         pace_ms: u64,
+        /// Shards to crawl at once. Pacing is global, so this reorders work rather than
+        /// increasing load on Valve.
+        #[arg(long, default_value_t = 4)]
+        concurrency: usize,
+        /// Reviews per shard before a date window is split further.
+        #[arg(long, default_value_t = DEFAULT_SHARD_TARGET)]
+        shard_target: u64,
+        /// Plan a fresh crawl instead of continuing an unfinished one.
+        #[arg(long)]
+        restart: bool,
+        /// Fetch only reviews newer than the last completed crawl.
+        #[arg(long)]
+        top_up: bool,
     },
 }
 
@@ -44,34 +57,44 @@ async fn main() -> Result<()> {
             app_id,
             out,
             pace_ms,
-        } => run_crawl(app_id, out, pace_ms).await,
+            concurrency,
+            shard_target,
+            restart,
+            top_up,
+        } => {
+            let options = CrawlOptions {
+                out_dir: out,
+                concurrency,
+                shard_target,
+                resume: !restart,
+                top_up,
+            };
+            run_crawl(app_id, &options, Duration::from_millis(pace_ms)).await
+        }
     }
 }
 
-async fn run_crawl(app_id: u32, out: PathBuf, pace_ms: u64) -> Result<()> {
-    let client = SteamClient::new()?;
-    let options = CrawlOptions {
-        out_dir: out,
-        page_interval: Duration::from_millis(pace_ms),
-    };
+async fn run_crawl(app_id: u32, options: &CrawlOptions, pace: Duration) -> Result<()> {
+    let client = SteamClient::new(pace)?;
 
     // A crawl of a large corpus runs for hours, so it is often piped to a log, where a
     // carriage-returned progress line becomes one unreadable smear.
     let interactive = std::io::stderr().is_terminal();
 
     eprintln!("crawling app {app_id}");
-    let report = crawl(&client, app_id, &options, |progress| {
+    let report = crawl(&client, app_id, options, |progress| {
         let line = format!(
-            "  page {:<5} {} of {} reviews",
-            progress.pages,
+            "  shard {}/{}  {} of {} reviews",
+            progress.shards_done,
+            progress.shards_total,
             thousands(progress.unique),
             thousands(progress.valve_total)
         );
         if interactive {
             let mut err = std::io::stderr();
-            let _ = write!(err, "\r{line}");
+            let _ = write!(err, "\r{line}   ");
             let _ = err.flush();
-        } else if progress.pages.is_multiple_of(PROGRESS_EVERY_PAGES) {
+        } else if progress.shards_done.is_multiple_of(PROGRESS_EVERY_SHARDS) {
             eprintln!("{line}");
         }
     })
@@ -85,29 +108,39 @@ async fn run_crawl(app_id: u32, out: PathBuf, pace_ms: u64) -> Result<()> {
 }
 
 fn print_report(report: &CrawlReport) {
-    let coverage = report
-        .coverage()
-        .map_or_else(|| "unknown".to_owned(), |c| format!("{:.2}%", c * 100.0));
-
     println!("app {}  ({})", report.app_id, report.review_score_desc);
+    if let Some(from) = report.top_up_from {
+        println!("  mode         top-up, reviews created after {from}");
+    } else if report.resumed {
+        println!("  mode         resumed an unfinished crawl");
+    }
+    println!("  shards       {}", report.shards);
     println!("  pages        {}", report.pages);
-    println!("  fetched      {}", thousands(report.fetched));
     println!("  unique       {}", thousands(report.unique));
-    println!("  duplicates   {}", thousands(report.duplicates()));
+    println!(
+        "  duplicates   {} (this run)",
+        thousands(report.duplicates_this_run)
+    );
     println!(
         "  valve total  {}  ({} up / {} down)",
         thousands(report.valve_total),
         thousands(report.valve_positive),
         thousands(report.valve_negative)
     );
-    println!("  coverage     {coverage}");
-    println!("  stopped      {:?}", report.stopped_because);
+    println!(
+        "  coverage     {}",
+        report.coverage().map_or_else(
+            || "not applicable".to_owned(),
+            |c| format!("{:.2}%", c * 100.0)
+        )
+    );
     println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
-    println!("  capture      {}", report.path.display());
+    println!("  capture      {}", report.dir.display());
 
-    if report.stopped_because != census_core::StopReason::Exhausted {
+    if !report.complete {
         eprintln!(
-            "\nwarning: the walk did not reach the end of the corpus, so coverage is a floor."
+            "\nwarning: some shards did not finish. Completed shards are on disk; \
+             run the same command again to continue."
         );
     }
 }
