@@ -127,12 +127,22 @@ impl CategoryAgreement {
         rate(self.mention_agreed, self.reference_mentions)
     }
 
-    /// `None` only when precision or recall is undefined, never merely because both are
-    /// zero. Returning `None` for a category the classifier gets entirely wrong would drop
-    /// it from the macro average and make the total look better the worse that category is.
+    /// `None` only when there is nothing at all to be right or wrong about: the reference
+    /// set never raises the category and the classifier never files anything under it.
+    ///
+    /// A category the classifier files nothing under, where the reference set does raise it,
+    /// has undefined precision and is nonetheless the worst outcome available. Reporting
+    /// that as unmeasurable drops it from the macro average, which makes the average rise
+    /// the more categories go completely missing.
     #[must_use]
     pub fn f1(&self) -> Option<f64> {
-        let (p, r) = (self.precision()?, self.recall()?);
+        if self.reference_mentions == 0 && self.predicted_mentions == 0 {
+            return None;
+        }
+        let (p, r) = (
+            self.precision().unwrap_or(0.0),
+            self.recall().unwrap_or(0.0),
+        );
         Some(if p + r > 0.0 {
             2.0 * p * r / (p + r)
         } else {
@@ -736,6 +746,35 @@ mod tests {
         let stat = agreement(0, 12, 0);
         assert_eq!(stat.precision(), None, "nothing was claimed");
         assert_eq!(stat.recall(), Some(0.0), "twelve were missed");
+        assert_eq!(
+            stat.f1(),
+            Some(0.0),
+            "filing nothing under a category the labels do raise is the worst available \
+             outcome, and must not leave the category out of the average"
+        );
+    }
+
+    /// The failure the whole shape of `f1` exists to prevent, stated as an inequality: a set
+    /// of anchors that stops finding a category entirely must never score higher for it.
+    #[test]
+    fn losing_a_category_altogether_cannot_improve_the_average() {
+        let categories = |predicted, agreed| AgreementReport {
+            apps: vec![1],
+            produced_by: "test".to_owned(),
+            compared: 100,
+            unmatched: 0,
+            primary_agreement: Some(0.5),
+            anchors: Vec::new(),
+            slices: Vec::new(),
+            categories: vec![agreement(40, 40, 30), agreement(predicted, 20, agreed)],
+        };
+        let found = categories(20, 8).macro_f1().expect("two scored categories");
+        let lost = categories(0, 0).macro_f1().expect("still two categories");
+
+        assert!(
+            lost < found,
+            "giving up on a category scored {lost} against {found} for finding some of it"
+        );
     }
 
     #[test]
