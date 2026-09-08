@@ -20,7 +20,7 @@ pub struct Category {
 
 /// Version of the core spine. Any change to the categories or their descriptions changes
 /// what the numbers mean, so this is recorded alongside every classification.
-pub const CORE_SPINE_VERSION: &str = "core-1";
+pub const CORE_SPINE_VERSION: &str = "core-2";
 
 pub const CORE_SPINE: &[Category] = &[
     Category {
@@ -35,11 +35,24 @@ pub const CORE_SPINE: &[Category] = &[
         description: "The game is broken and buggy. It crashes to desktop, freezes, corrupts \
                       or loses save files, and is full of glitches that block progress.",
     },
+    // Narrow on purpose. Phrased as "how the game plays and whether it is fun" this became
+    // the nearest match for any general discussion and took 47.7% of primaries, which is a
+    // property of the wording rather than a finding about any game.
     Category {
         id: "gameplay",
         label: "Gameplay and mechanics",
-        description: "How the game actually plays. The core loop, the mechanics, the combat \
-                      and systems, whether it is fun to play moment to moment or repetitive.",
+        description: "The systems and mechanics themselves. Combat, movement, crafting, \
+                      building, exploration, progression systems, and whether the mechanics \
+                      are deep or shallow.",
+    },
+    // Reviews that give a verdict and name no aspect are common, and without a home they
+    // contaminate whichever category happens to sit nearest in the embedding space.
+    Category {
+        id: "verdict",
+        label: "Overall verdict only",
+        description: "A verdict with no specific reason given. Great game, terrible game, \
+                      ten out of ten, would recommend, worth every penny, do not buy, \
+                      waste of money, best game ever.",
     },
     Category {
         id: "story",
