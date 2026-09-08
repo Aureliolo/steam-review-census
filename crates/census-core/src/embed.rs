@@ -481,7 +481,14 @@ fn for_each_review_text(snapshot: &Path, mut visit: impl FnMut(&str) -> Result<(
                 if texts.is_null(i) {
                     continue;
                 }
-                visit(texts.value(i))?;
+                // A review with no text says nothing about any category, and its vector is
+                // whatever the model makes of an empty string. Embedding it puts a
+                // meaningless point in the space that the nearest anchor then collects.
+                let text = texts.value(i);
+                if text.trim().is_empty() {
+                    continue;
+                }
+                visit(text)?;
             }
         }
     }

@@ -345,7 +345,6 @@ fn stratify<'a>(
         }
         let mut apps: Vec<u32> = by_app.keys().copied().collect();
         apps.sort_unstable();
-
         let mut picked = 0;
         for round in 0.. {
             let mut advanced = false;

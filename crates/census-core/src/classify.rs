@@ -472,7 +472,7 @@ pub(crate) fn for_each_review(
             let texts = column::<StringArray>(&batch, "review")?;
             let helpful = column::<Float64Array>(&batch, "weighted_vote_score")?;
             for row in 0..batch.num_rows() {
-                if texts.is_null(row) {
+                if texts.is_null(row) || texts.value(row).trim().is_empty() {
                     continue;
                 }
                 visit(ReviewRow {
@@ -493,6 +493,37 @@ pub(crate) fn for_each_review(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_review_with_no_text_is_not_classified_at_all() {
+        // An empty review carries no evidence about any category, but it still embeds to
+        // something, and that something lands on whichever anchor happens to sit nearest.
+        // Across six corpora it put 8,673 blank reviews into a single category, every one of
+        // them, which is a category's rate turned into an artefact of the corpus's silence.
+        let dir = std::env::temp_dir().join("census-blank-review-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("shard-0000.parquet");
+
+        let mut writer = crate::capture::CaptureWriter::create(&path, 1).unwrap();
+        let reviews = [
+            serde_json::json!({"recommendationid": "1", "review": "the frame rate is awful"}),
+            serde_json::json!({"recommendationid": "2", "review": ""}),
+            serde_json::json!({"recommendationid": "3", "review": "   \n  "}),
+            serde_json::json!({"recommendationid": "4", "review": "great game"}),
+        ];
+        writer.write(&reviews.iter().collect::<Vec<_>>()).unwrap();
+        writer.close().unwrap();
+
+        let mut seen = Vec::new();
+        for_each_review(&dir, |row| {
+            seen.push(row.recommendationid);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(seen, vec!["1".to_owned(), "4".to_owned()]);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn a_review_about_one_thing_gets_one_category() {
