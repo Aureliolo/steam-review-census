@@ -1010,6 +1010,61 @@ mod tests {
         }
     }
 
+    /// The same report with a calendar of its own.
+    fn with_months(months: Vec<crate::report::Month>) -> Report {
+        let mut report = sample_report("ordinary text");
+        report.apps[0].classification.months = months;
+        report
+    }
+
+    fn month(label: &str, reviews: u64, bugs: u64) -> crate::report::Month {
+        crate::report::Month {
+            label: label.to_owned(),
+            reviews,
+            positive: reviews / 2,
+            categories: vec![0, bugs],
+        }
+    }
+
+    #[test]
+    fn every_month_gets_a_bar_however_quiet_it_was() {
+        let months = vec![
+            month("2024-01", 400, 40),
+            month("2024-02", 5, 1),
+            month("2024-03", 300, 30),
+            month("2024-04", 200, 20),
+        ];
+        let page = render(&with_months(months));
+
+        assert_eq!(
+            page.matches("<rect class=\"bar\"").count(),
+            4,
+            "a quiet month is a fact about the game and belongs on the chart"
+        );
+        assert!(page.contains("Jan 2024"), "the first month should be named");
+        assert!(page.contains("Apr 2024"), "the last month should be named");
+    }
+
+    #[test]
+    fn a_month_too_small_to_carry_a_rate_stays_out_of_the_sparkline() {
+        // One review in a five-review month is 20% and would set the scale for every month
+        // that has something to say. The categories are the same in both cases; only the
+        // month sizes differ, and only the second should reach the chart.
+        let noisy = vec![
+            month("2024-01", 100, 10),
+            month("2024-02", 5, 5),
+            month("2024-03", 100, 10),
+            month("2024-04", 100, 10),
+        ];
+        let page = render(&with_months(noisy));
+
+        assert!(
+            page.contains("peaking at 10.0%"),
+            "a five-review month set the scale"
+        );
+        assert!(page.contains("Months with fewer than 30 reviews are left out"));
+    }
+
     #[test]
     fn a_review_cannot_break_out_of_the_page_it_is_quoted_in() {
         // Review text is written by strangers and this one is trying. Nothing it contains
