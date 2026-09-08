@@ -25,14 +25,40 @@ The only way to remove the argument is to hold every review and count.
 - Build an overall picture of the game from those category summaries.
 - Click through from any number, anywhere, to the actual reviews behind it.
 
-You choose which model does the sorting, and how deep the analysis goes.
+You choose which model does the sorting, and how closely it reads.
 
-### Categories that reflect how people really write
+### One category, and only more when a review earns it
 
-A thumbs-down review is not always a complaint. "0/10, haven't slept in three days" is
-praise wearing a costume, and counting it as negative quietly poisons every number
-downstream. The reverse happens too: recommendations that are really warnings. Both get
-their own handling rather than being silently miscounted.
+Every review gets a single primary category. That keeps the counts clean: the categories
+add up to the number of reviews, and a percentage means what it appears to mean.
+
+A review that genuinely covers more than one thing also records the other topics it
+touches, so "great simulation, awful interface" is not filed under one of those and
+stripped of the other. A review about a single thing gets a single category and nothing
+else. Secondary topics are recorded when they exist, never invented to fill a slot.
+
+### Depth is how closely each review is read
+
+Every review is analysed. Depth does not decide how many are included, it decides how
+finely each one is taken apart:
+
+- **Shallow** treats a review as one opinion about one thing.
+- **Deep** breaks it into the separate points it makes, so a long review contributes
+  several distinct opinions instead of one blurred average of them.
+
+Deep costs more time and finds more. Neither setting drops a review.
+
+### Ratings that disagree with the text
+
+A thumbs-down is not always a complaint. "0/10, haven't slept in three days" is praise
+wearing a costume, and counting it as negative quietly poisons every number downstream.
+The reverse is just as common: a recommendation that is really a warning not to buy yet.
+
+These are **flagged, not filed away**. The flag records that the rating and the text
+disagree; the review still sorts by what it is actually about, so the praise buried in a
+joke review still counts as praise of whatever it praises. You can then include, exclude
+or inspect the flagged ones deliberately, instead of discovering later that they were
+silently miscounted.
 
 ## Honest limits
 
