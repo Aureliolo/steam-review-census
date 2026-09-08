@@ -1,8 +1,12 @@
 name: release
 
+# Dispatching this builds, checksums, attests and signs exactly as a real release does, but
+# publishes nothing: the release step is gated on a tag push. That keeps the pipeline
+# testable without spending a version number on finding out whether it works.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,12 +23,19 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: census
+            asset: census-x86_64-unknown-linux-gnu
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary: census.exe
+            asset: census-x86_64-pc-windows-msvc.exe
           - os: macos-latest
             target: aarch64-apple-darwin
             binary: census
+            asset: census-aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: census
+            asset: census-x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -32,7 +43,7 @@ jobs:
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --release --locked --target ${{ matrix.target }} --bin census
 
-      # Windows binaries are signed by SignPath Foundation once the project is enrolled.
+      # Windows binaries gain a SignPath Foundation signature once the project is enrolled.
       # macOS has no free certificate authority, so those assets carry provenance only and
       # Gatekeeper will require an explicit override. SECURITY.md explains the difference.
 
@@ -40,8 +51,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p staging
-          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" \
-             "staging/census-${{ matrix.target }}${{ matrix.binary == 'census.exe' && '.exe' || '' }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "staging/${{ matrix.asset }}"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -65,15 +75,19 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
-      - name: Generate checksums
-        working-directory: staging
-        run: sha256sum * > SHA256SUMS
-
       - uses: anchore/sbom-action@v0
         with:
           format: cyclonedx-json
           output-file: staging/sbom.cyclonedx.json
           artifact-name: sbom.cyclonedx.json
+
+      # Checksums are generated after every other asset exists, so they cover the SBOM too.
+      - name: Generate checksums
+        working-directory: staging
+        run: |
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' \
+            | sort | xargs sha256sum > SHA256SUMS
+          cat SHA256SUMS
 
       - uses: actions/attest-build-provenance@v4
         with:
@@ -84,9 +98,40 @@ jobs:
         working-directory: staging
         run: cosign sign-blob --yes SHA256SUMS --bundle SHA256SUMS.cosign.bundle
 
+      # Proves the chain actually verifies, rather than only that the signing step exited 0.
+      - name: Verify provenance and signature
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: staging
+        run: |
+          for asset in census-*; do
+            gh attestation verify "$asset" --repo "${{ github.repository }}"
+          done
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.cosign.bundle \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          sha256sum --check SHA256SUMS
+
+      - name: Summarise
+        working-directory: staging
+        run: |
+          {
+            echo "### Release assets"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo
+              echo "Dry run: nothing was published. Push a \`v*\` tag to release."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Assets are attached in the same call that creates the release: an immutable release
       # locks its assets, so nothing can be added afterwards.
       - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ github.ref_name }}" staging/* --generate-notes --verify-tag
