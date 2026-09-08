@@ -22,7 +22,12 @@ output/
 secrets.*
 credentials.*
 
+# Embedding models are fetched on first run and verified by checksum.
+models/
+*.onnx
+
 # Build and dependency artefacts
+target/
 dist/
 build/
 node_modules/

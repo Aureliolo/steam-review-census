@@ -1,0 +1,92 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: census
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: census.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: census
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }} --bin census
+
+      # Windows binaries are signed by SignPath Foundation once the project is enrolled.
+      # macOS has no free certificate authority, so those assets carry provenance only and
+      # Gatekeeper will require an explicit override. SECURITY.md explains the difference.
+
+      - name: Stage asset
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" \
+             "staging/census-${{ matrix.target }}${{ matrix.binary == 'census.exe' && '.exe' || '' }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: staging/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staging
+          pattern: build-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: staging
+        run: sha256sum * > SHA256SUMS
+
+      - uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: staging/sbom.cyclonedx.json
+          artifact-name: sbom.cyclonedx.json
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: staging/census-*
+
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign checksums with cosign
+        working-directory: staging
+        run: cosign sign-blob --yes SHA256SUMS --bundle SHA256SUMS.cosign.bundle
+
+      # Assets are attached in the same call that creates the release: an immutable release
+      # locks its assets, so nothing can be added afterwards.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" staging/* --generate-notes --verify-tag

@@ -1,0 +1,15 @@
+[package]
+name = "census-core"
+description = "Corpus ingestion, storage and analysis for steam-review-census."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+percent-encoding = "2.3"
+
+[lints]
+workspace = true

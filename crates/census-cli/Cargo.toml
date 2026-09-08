@@ -1,0 +1,19 @@
+[package]
+name = "census-cli"
+description = "Command-line interface for steam-review-census."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "census"
+path = "src/main.rs"
+
+[dependencies]
+census-core.workspace = true
+
+[lints]
+workspace = true
