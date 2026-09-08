@@ -100,6 +100,20 @@ impl Embedder {
 
     /// Embeds a batch, mean-pooled over real tokens and L2-normalised.
     ///
+    /// **A review's vector depends on which reviews were embedded alongside it.** The model
+    /// this project ships is int8, and dynamic quantisation derives its activation scales
+    /// per tensor, which spans the whole batch: the extremes of the batch set the scale
+    /// everything in it is rounded to. Measured on a 2,909-review corpus, batches of 64
+    /// against batches of one gave a mean cosine of 0.997 and put 12.5% of reviews in a
+    /// different category. It is not padding, which grouping by exact token length removes
+    /// without closing the gap, and it is not the execution provider, which reproduces it on
+    /// CPU to three decimal places.
+    ///
+    /// What survives is the aggregate: mention rates across a corpus moved at most 1.6
+    /// percentage points and 0.31 on average, because per-review disagreements largely
+    /// cancel. Batch size is therefore part of the provenance of a corpus rather than a
+    /// tuning knob, and it is recorded alongside the vectors.
+    ///
     /// # Errors
     ///
     /// Fails if tokenisation or the forward pass fails.
@@ -244,39 +258,78 @@ pub fn embed_corpus(
 ) -> Result<EmbedReport> {
     let started = Instant::now();
     let snapshot = latest_snapshot(out_dir, app_id)?;
-    let (texts, reviews) = distinct_texts(&snapshot)?;
-    let unique_texts = texts.len() as u64;
+    let (mut counts, reviews) = text_counts(&snapshot)?;
+    let unique_texts = counts.len() as u64;
 
     let path = snapshot.join("embeddings.parquet");
+    // Written aside and renamed at the end. An interrupted run used to leave an empty
+    // embeddings.parquet behind, which reads as a finished artefact and fails confusingly
+    // everywhere downstream; a partial file under its own name cannot be mistaken for one.
+    let partial = snapshot.join("embeddings.parquet.partial");
     let schema = embedding_schema();
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
         .build();
     let mut writer = ArrowWriter::try_new(
-        std::fs::File::create(&path)?,
+        std::fs::File::create(&partial)?,
         Arc::clone(&schema),
         Some(props),
     )?;
 
-    // Every sequence in a batch is padded to the longest member, so batching a
-    // ten-character review with a three-thousand-character one processes both as though
-    // they were three thousand characters. Sorting by length first makes batches
-    // homogeneous and removes almost all of that waste.
-    let mut ordered: Vec<(String, u32)> = texts.into_iter().collect();
-    ordered.sort_unstable_by_key(|(text, _)| text.len());
-
+    let mut window: Vec<(String, u32)> = Vec::with_capacity(LENGTH_WINDOW);
     let mut written: u64 = 0;
-    for chunk in ordered.chunks(batch_size.max(1)) {
-        let batch_texts: Vec<String> = chunk.iter().map(|(text, _)| text.clone()).collect();
-        let vectors = embedder.embed(&batch_texts)?;
-        writer.write(&batch_to_record(app_id, chunk, &vectors, &schema)?)?;
-        written = written.saturating_add(chunk.len() as u64);
-        on_progress(EmbedProgress {
-            embedded: written,
-            unique_texts,
-        });
-    }
+
+    for_each_review_text(&snapshot, |text| {
+        // Removing rather than looking up means the second and later copies of a repeated
+        // review find nothing and are skipped, and the map shrinks as the corpus is walked.
+        let Some(seen) = counts.remove(&sha256_bytes(text)) else {
+            return Ok(());
+        };
+        window.push((text.to_owned(), seen));
+        if window.len() >= LENGTH_WINDOW {
+            written = written.saturating_add(drain_window(
+                embedder,
+                app_id,
+                batch_size,
+                &schema,
+                &mut writer,
+                &mut window,
+            )?);
+            on_progress(EmbedProgress {
+                embedded: written,
+                unique_texts,
+            });
+        }
+        Ok(())
+    })?;
+    drain_window(
+        embedder,
+        app_id,
+        batch_size,
+        &schema,
+        &mut writer,
+        &mut window,
+    )?;
     writer.close()?;
+    std::fs::rename(&partial, &path)?;
+
+    // Batch size belongs with the vectors, not in a shell history. The int8 model is not
+    // batch-invariant, so two corpora embedded at different batch sizes are not strictly
+    // comparable, and a reader has no other way to find out.
+    std::fs::write(
+        snapshot.join("embeddings.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "model": MODEL_ID,
+            "dimensions": EMBEDDING_DIM,
+            "batch_size": batch_size,
+            "device": embedder.device(),
+            "reviews": reviews,
+            "unique_texts": unique_texts,
+            "note": "Vectors from the int8 model depend on batch size: dynamic quantisation \
+                     takes its activation scales per tensor, and a tensor spans the batch. \
+                     Compare corpora embedded at the same batch size.",
+        }))?,
+    )?;
 
     Ok(EmbedReport {
         app_id,
@@ -290,6 +343,42 @@ pub fn embed_corpus(
             .unwrap_or_default(),
         path,
     })
+}
+
+/// Distinct texts buffered before they are sorted by length and embedded.
+///
+/// Every sequence in a batch is padded to the longest member, so batching a ten-character
+/// review with a three-thousand-character one processes both as though they were three
+/// thousand characters. Sorting the whole corpus by length removes that waste and costs a
+/// corpus-sized allocation; sorting a window of this size removes nearly all of it, because
+/// a window drawn in corpus order has the corpus's own spread of lengths and cutting it into
+/// batches still puts similar lengths together.
+const LENGTH_WINDOW: usize = 16_384;
+
+/// Embeds one window, similar lengths together, and empties it.
+///
+/// Sorting by length keeps padding down, which is worth doing for speed. It is deliberately
+/// not taken further than that: batching reviews of *identical* token length, so that no
+/// batch pads at all, was measured at 1.6 times the cost and moved the vectors no closer to
+/// what the model produces one review at a time. Padding is not what makes them differ.
+fn drain_window(
+    embedder: &mut Embedder,
+    app_id: u32,
+    batch_size: usize,
+    schema: &Arc<Schema>,
+    writer: &mut ArrowWriter<std::fs::File>,
+    window: &mut Vec<(String, u32)>,
+) -> Result<u64> {
+    window.sort_unstable_by_key(|(text, _)| text.len());
+    let mut written = 0_u64;
+    for chunk in window.chunks(batch_size.max(1)) {
+        let texts: Vec<String> = chunk.iter().map(|(text, _)| text.clone()).collect();
+        let vectors = embedder.embed(&texts)?;
+        writer.write(&batch_to_record(app_id, chunk, &vectors, schema)?)?;
+        written = written.saturating_add(chunk.len() as u64);
+    }
+    window.clear();
+    Ok(written)
 }
 
 fn embedding_schema() -> Arc<Schema> {
@@ -342,20 +431,21 @@ fn batch_to_record(
 }
 
 /// Distinct review texts and how many reviews carry each, plus the total review count.
-fn distinct_texts(snapshot: &Path) -> Result<(HashMap<String, u32>, u64)> {
-    let mut counts: HashMap<String, u32> = HashMap::new();
-    let mut reviews = 0_u64;
+/// Visits the text of every review in a snapshot, one at a time.
+fn for_each_review_text(snapshot: &Path, mut visit: impl FnMut(&str) -> Result<()>) -> Result<()> {
+    let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("shard-") && n.ends_with(".parquet"))
+        })
+        .collect();
+    shards.sort();
 
-    for entry in std::fs::read_dir(snapshot)? {
-        let path = entry?.path();
-        let is_shard = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.starts_with("shard-") && n.ends_with(".parquet"));
-        if !is_shard {
-            continue;
-        }
-        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&path)?)?
+    for shard in shards {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&shard)?)?
             .with_batch_size(8192)
             .build()?;
         for batch in reader {
@@ -368,14 +458,32 @@ fn distinct_texts(snapshot: &Path) -> Result<(HashMap<String, u32>, u64)> {
                 .downcast_ref::<arrow::array::StringArray>()
                 .ok_or(Error::MalformedPayload { field: "review" })?;
             for i in 0..texts.len() {
-                reviews += 1;
                 if texts.is_null(i) {
                     continue;
                 }
-                *counts.entry(texts.value(i).to_owned()).or_insert(0) += 1;
+                visit(texts.value(i))?;
             }
         }
     }
+    Ok(())
+}
+
+/// How many reviews share each distinct text, keyed by the hash rather than by the text.
+///
+/// Holding the text costs an allocation the size of the corpus. A million reviews averaging
+/// a few hundred characters is well over a gigabyte, and embedding Cyberpunk 2077 was killed
+/// by the operating system for exactly that. A hash is thirty-two bytes whatever the review
+/// says, and the text is read back from the capture when it is actually needed.
+fn text_counts(snapshot: &Path) -> Result<(HashMap<[u8; 32], u32>, u64)> {
+    let mut counts: HashMap<[u8; 32], u32> = HashMap::new();
+    let mut reviews = 0_u64;
+
+    for_each_review_text(snapshot, |text| {
+        reviews += 1;
+        *counts.entry(sha256_bytes(text)).or_insert(0) += 1;
+        Ok(())
+    })?;
+
     if counts.is_empty() {
         return Err(Error::NoCapture {
             path: snapshot.to_path_buf(),
@@ -552,12 +660,17 @@ fn holds_a_shard(snapshot: &Path) -> bool {
     })
 }
 
-pub(crate) fn sha256_hex(text: &str) -> String {
+/// The raw digest, for keeping in memory. Thirty-two bytes against sixty-four for the hex.
+pub(crate) fn sha256_bytes(text: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
-    let digest = hasher.finalize();
+    hasher.finalize().into()
+}
+
+/// The digest as it is written to disk and joined on.
+pub(crate) fn sha256_hex(text: &str) -> String {
     let mut out = String::with_capacity(64);
-    for byte in digest {
+    for byte in sha256_bytes(text) {
         use std::fmt::Write as _;
         let _ = write!(out, "{byte:02x}");
     }
