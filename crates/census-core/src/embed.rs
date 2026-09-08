@@ -526,12 +526,30 @@ pub(crate) fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
         else {
             continue;
         };
+        // An interrupted crawl leaves a snapshot directory holding nothing, and its stamp is
+        // newer than the completed crawl it was meant to replace. Taking it on age alone
+        // would hide a finished corpus behind an empty one, so a snapshot has to contain at
+        // least one shard before it can shadow anything.
+        if !holds_a_shard(&path) {
+            continue;
+        }
         if best.as_ref().is_none_or(|(seen, _)| stamp > *seen) {
             best = Some((stamp, path));
         }
     }
     best.map(|(_, path)| path)
         .ok_or(Error::NoCapture { path: app_dir })
+}
+
+fn holds_a_shard(snapshot: &Path) -> bool {
+    std::fs::read_dir(snapshot).is_ok_and(|entries| {
+        entries.filter_map(std::result::Result::ok).any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"))
+        })
+    })
 }
 
 pub(crate) fn sha256_hex(text: &str) -> String {
@@ -603,5 +621,28 @@ mod tests {
     fn a_missing_capture_is_named_rather_than_silently_empty() {
         let err = latest_snapshot(Path::new("definitely-not-a-corpus-dir"), 1).unwrap_err();
         assert!(matches!(err, Error::NoCapture { .. }));
+    }
+
+    #[test]
+    fn an_interrupted_crawl_does_not_hide_the_finished_one_behind_it() {
+        // Restarting a crawl creates its snapshot directory before it fetches anything, so
+        // an interrupted restart leaves an empty directory stamped later than the corpus it
+        // was replacing. Age alone would pick the empty one and every later command would
+        // report a corpus that is not there.
+        let root = std::env::temp_dir().join("census-snapshot-precedence");
+        let app = root.join("appid=1");
+        let complete = app.join("snapshot=100");
+        let abandoned = app.join("snapshot=200");
+        std::fs::create_dir_all(&complete).unwrap();
+        std::fs::create_dir_all(&abandoned).unwrap();
+        std::fs::write(complete.join("shard-0000.parquet"), b"not really parquet").unwrap();
+
+        assert_eq!(latest_snapshot(&root, 1).unwrap(), complete);
+
+        // Once the restart writes a shard, it is the newer corpus and does take precedence.
+        std::fs::write(abandoned.join("shard-0000.parquet"), b"not really parquet").unwrap();
+        assert_eq!(latest_snapshot(&root, 1).unwrap(), abandoned);
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }
