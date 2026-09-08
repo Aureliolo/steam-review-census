@@ -39,6 +39,12 @@ pub struct ReferenceLabel {
     /// the randomly drawn subset estimates what the corpus looks like.
     #[serde(default)]
     pub subset: String,
+    /// Whether whoever produced the label said the call was genuinely contested.
+    ///
+    /// Disagreement on these says as much about the taxonomy as about the classifier, so
+    /// mixing them into one figure hides which of the two is at fault.
+    #[serde(default)]
+    pub ambiguous: bool,
 }
 
 /// A reference set as it is stored on disk.
@@ -154,6 +160,8 @@ pub struct AgreementReport {
     pub primary_agreement: Option<f64>,
     /// Agreement within each sampling subset, with how many reviews each contributed.
     pub by_subset: Vec<(String, u64, Option<f64>)>,
+    /// Agreement split by whether the reference labeller called the review contested.
+    pub by_ambiguity: Vec<(String, u64, Option<f64>)>,
     pub categories: Vec<CategoryAgreement>,
 }
 
@@ -211,6 +219,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
     let mut unmatched = 0_u64;
     let mut primary_agreed = 0_u64;
     let mut subsets: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut ambiguity: HashMap<String, (u64, u64)> = HashMap::new();
 
     for label in &reference.labels {
         let Some(predicted) = predictions.get(&label.id) else {
@@ -227,9 +236,17 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         }
         let entry = subsets.entry(label.subset.clone()).or_insert((0, 0));
         entry.0 += 1;
+        let contested = if label.ambiguous {
+            "contested"
+        } else {
+            "clear"
+        };
+        let flagged = ambiguity.entry(contested.to_owned()).or_insert((0, 0));
+        flagged.0 += 1;
         if label.primary == predicted.primary {
             primary_agreed += 1;
             entry.1 += 1;
+            flagged.1 += 1;
             if let Some(&slot) = index.get(label.primary.as_str()) {
                 stats[slot].primary_agreed += 1;
             }
@@ -259,6 +276,11 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         .map(|(name, (n, hit))| (name, n, rate(hit, n)))
         .collect();
     by_subset.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut by_ambiguity: Vec<(String, u64, Option<f64>)> = ambiguity
+        .into_iter()
+        .map(|(name, (n, hit))| (name, n, rate(hit, n)))
+        .collect();
+    by_ambiguity.sort_by(|a, b| a.0.cmp(&b.0));
 
     Ok(AgreementReport {
         app_id,
@@ -267,6 +289,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
         unmatched,
         primary_agreement: rate(primary_agreed, compared),
         by_subset,
+        by_ambiguity,
         categories: stats,
     })
 }
@@ -388,6 +411,7 @@ mod tests {
             unmatched: 0,
             primary_agreement: Some(0.5),
             by_subset: Vec::new(),
+            by_ambiguity: Vec::new(),
             categories: vec![agreement(100, 100, 100), agreement(1, 10, 0)],
         };
         // Corpus-weighted this would look near perfect; unweighted it does not.
@@ -409,6 +433,7 @@ mod tests {
                 ironic: false,
                 confidence: "high".to_owned(),
                 subset: "random".to_owned(),
+                ambiguous: false,
             }],
         };
         assert_eq!(set.unknown_categories(), vec!["not-a-category".to_owned()]);
