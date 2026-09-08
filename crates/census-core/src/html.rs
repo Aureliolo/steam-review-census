@@ -45,8 +45,9 @@ pub fn render(report: &Report) -> String {
     let _ = writeln!(out, "<style>{STYLE}</style>");
     out.push_str("</head>\n<body>\n");
 
+    out.push_str("<a class=\"skip\" href=\"#main\">Skip to the numbers</a>\n");
     page_header(&mut out, report);
-    out.push_str("<main>\n");
+    out.push_str("<main id=\"main\">\n");
     contents(&mut out, report);
     overview(&mut out, report);
     for app in &report.apps {
@@ -666,8 +667,11 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
     let long = text.chars().count() > PREVIEW_CHARS;
     let _ = write!(
         out,
-        "<div class=\"text{}\"><p>{}</p></div>",
+        "<div class=\"text{}\"><p{}>{}</p></div>",
         if long { " long" } else { "" },
+        // The page is in English and most of the reviews on it are not. Saying so is what
+        // lets a screen reader pronounce a Chinese review as Chinese rather than as English.
+        bcp47(&example.review.language).map_or_else(String::new, |tag| format!(" lang=\"{tag}\"")),
         escape(text)
     );
     if long {
@@ -884,6 +888,47 @@ const FOOTER_LIMITS: [&str; 4] = [
     "The top of the pile is Steam's own ordering, which changes over time. A capture is a \
      photograph of it, not a permanent fact.",
 ];
+
+/// Steam's own name for a language as a BCP 47 tag.
+///
+/// Steam uses names of its own ("schinese", "koreana", "brazilian"), and a page that repeats
+/// those tells a screen reader nothing. Unknown names get no tag rather than a guess: an
+/// element inheriting the page's English is a smaller error than one claiming to be a
+/// language it is not.
+fn bcp47(steam: &str) -> Option<&'static str> {
+    Some(match steam {
+        "english" => "en",
+        "schinese" => "zh-Hans",
+        "tchinese" => "zh-Hant",
+        "japanese" => "ja",
+        "koreana" => "ko",
+        "thai" => "th",
+        "bulgarian" => "bg",
+        "czech" => "cs",
+        "danish" => "da",
+        "german" => "de",
+        "greek" => "el",
+        "spanish" => "es",
+        "latam" => "es-419",
+        "finnish" => "fi",
+        "french" => "fr",
+        "hungarian" => "hu",
+        "indonesian" => "id",
+        "italian" => "it",
+        "dutch" => "nl",
+        "norwegian" => "no",
+        "polish" => "pl",
+        "portuguese" => "pt",
+        "brazilian" => "pt-BR",
+        "romanian" => "ro",
+        "russian" => "ru",
+        "swedish" => "sv",
+        "turkish" => "tr",
+        "ukrainian" => "uk",
+        "vietnamese" => "vi",
+        _ => return None,
+    })
+}
 
 fn escape(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
