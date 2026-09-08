@@ -239,7 +239,8 @@ pub fn mcnemar_exact(gained: u64, lost: u64) -> Option<f64> {
 
 #[derive(Debug, Clone)]
 pub struct AgreementReport {
-    pub app_id: u32,
+    /// The games behind this comparison. One per game evaluated, several once pooled.
+    pub apps: Vec<u32>,
     pub produced_by: String,
     pub compared: u64,
     /// Reference labels with no matching classification, usually because the corpus was
@@ -273,6 +274,91 @@ impl AgreementReport {
             reason = "the taxonomy has a few dozen categories at most"
         )]
         (!scores.is_empty()).then(|| scores.iter().sum::<f64>() / scores.len() as f64)
+    }
+}
+
+/// Sums several games' comparisons into one.
+///
+/// Six sets of a hundred held-out reviews are a six-hundred-review measurement, and the
+/// pooled figure is the one worth quoting: at a hundred reviews the honest band around a
+/// rate is about twenty points wide, which hides most of what any change does. Pooling also
+/// stops one game's idiosyncrasies from reading as a property of the classifier.
+///
+/// Categories are summed as counts rather than averaged as rates, so a category with four
+/// mentions in one game and forty in another counts for what it actually is.
+#[must_use]
+pub fn pooled(reports: &[AgreementReport]) -> AgreementReport {
+    let mut categories: Vec<CategoryAgreement> = CORE_SPINE
+        .iter()
+        .map(|c| CategoryAgreement {
+            id: c.id,
+            label: c.label,
+            reference_primary: 0,
+            predicted_primary: 0,
+            primary_agreed: 0,
+            reference_mentions: 0,
+            predicted_mentions: 0,
+            mention_agreed: 0,
+        })
+        .collect();
+    let mut slices: Vec<Slice> = Vec::new();
+    let mut apps = Vec::new();
+    let mut anchors: Vec<String> = Vec::new();
+    let mut produced: Vec<String> = Vec::new();
+    let (mut compared, mut unmatched, mut agreed) = (0, 0, 0);
+
+    for report in reports {
+        apps.extend(report.apps.iter().copied());
+        anchors.extend(report.anchors.iter().cloned());
+        produced.push(report.produced_by.clone());
+        compared += report.compared;
+        unmatched += report.unmatched;
+        for from in &report.categories {
+            // Matched by id rather than by position: a report from another build may hold a
+            // different set of categories, and adding a row into the wrong category is the
+            // kind of mistake that produces a plausible number.
+            let Some(into) = categories.iter_mut().find(|into| into.id == from.id) else {
+                continue;
+            };
+            into.reference_primary += from.reference_primary;
+            into.predicted_primary += from.predicted_primary;
+            into.primary_agreed += from.primary_agreed;
+            into.reference_mentions += from.reference_mentions;
+            into.predicted_mentions += from.predicted_mentions;
+            into.mention_agreed += from.mention_agreed;
+        }
+        agreed += report
+            .categories
+            .iter()
+            .map(|c| c.primary_agreed)
+            .sum::<u64>();
+        for slice in &report.slices {
+            match slices
+                .iter_mut()
+                .find(|into| into.subset == slice.subset && into.contested == slice.contested)
+            {
+                Some(into) => {
+                    into.compared += slice.compared;
+                    into.agreed += slice.agreed;
+                }
+                None => slices.push(slice.clone()),
+            }
+        }
+    }
+
+    anchors.sort_unstable();
+    anchors.dedup();
+    produced.sort_unstable();
+    produced.dedup();
+    AgreementReport {
+        apps,
+        produced_by: produced.join("; "),
+        compared,
+        unmatched,
+        primary_agreement: rate(agreed, compared),
+        anchors,
+        slices,
+        categories,
     }
 }
 
@@ -380,7 +466,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
     anchors.sort_unstable();
 
     Ok(AgreementReport {
-        app_id,
+        apps: vec![app_id],
         produced_by: reference.produced_by.clone(),
         compared,
         unmatched,
@@ -613,7 +699,7 @@ mod tests {
     #[test]
     fn macro_f1_lets_a_rare_category_drag_the_score_down() {
         let report = AgreementReport {
-            app_id: 1,
+            apps: vec![1],
             produced_by: "test".to_owned(),
             compared: 100,
             unmatched: 0,
@@ -625,6 +711,55 @@ mod tests {
         // Corpus-weighted this would look near perfect; unweighted it does not.
         let macro_f1 = report.macro_f1().unwrap();
         assert!(macro_f1 < 0.55, "macro f1 was {macro_f1}");
+    }
+
+    #[test]
+    fn pooling_adds_counts_and_never_averages_rates() {
+        let game = |app: u32, compared, agreed, hits| AgreementReport {
+            apps: vec![app],
+            produced_by: "test".to_owned(),
+            compared,
+            unmatched: 1,
+            primary_agreement: Some(0.0),
+            anchors: vec!["fitted:1".to_owned()],
+            slices: vec![
+                Slice {
+                    subset: "random".to_owned(),
+                    contested: None,
+                    compared,
+                    agreed,
+                },
+                Slice {
+                    subset: "random".to_owned(),
+                    contested: Some(false),
+                    compared,
+                    agreed,
+                },
+            ],
+            categories: vec![CategoryAgreement {
+                id: "bugs",
+                label: "Bugs and crashes",
+                reference_primary: compared,
+                predicted_primary: compared,
+                primary_agreed: hits,
+                reference_mentions: compared,
+                predicted_mentions: compared,
+                mention_agreed: hits,
+            }],
+        };
+        // A game where nine of ten agree and one where one of ninety does. Averaging the two
+        // rates would call that 50%; the truth is ten of a hundred.
+        let pooled = pooled(&[game(1, 10, 9, 9), game(2, 90, 1, 1)]);
+
+        assert_eq!(pooled.apps, vec![1, 2]);
+        assert_eq!(pooled.compared, 100);
+        assert_eq!(pooled.unmatched, 2);
+        assert_eq!(pooled.primary_agreement, Some(0.1));
+        assert_eq!(pooled.anchors, vec!["fitted:1".to_owned()]);
+        assert_eq!(pooled.slices.len(), 2, "slices merged by subset and cut");
+        assert_eq!(pooled.slices[0].compared, 100);
+        assert_eq!(pooled.slices[0].agreed, 10);
+        assert_eq!(pooled.categories[1].reference_mentions, 100);
     }
 
     #[test]

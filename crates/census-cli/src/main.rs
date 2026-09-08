@@ -188,8 +188,11 @@ enum Command {
 
     /// Compare stored classifications against a reference set.
     Evaluate {
-        /// Steam app ID to evaluate.
-        app_id: u32,
+        /// Steam app IDs to evaluate. Several are reported one by one and then pooled,
+        /// which is the figure worth quoting: one game's hundred held-out reviews carry a
+        /// band twenty points wide.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
         /// Directory holding the capture and its classifications.
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
@@ -346,15 +349,43 @@ async fn main() -> Result<()> {
             batch_size,
         ),
         Command::Evaluate {
-            app_id,
+            app_ids,
             out,
             reference,
-        } => run_evaluate(app_id, &out, reference),
+        } => run_evaluate(&app_ids, &out, reference.as_ref()),
     }
 }
 
-fn run_evaluate(app_id: u32, out: &std::path::Path, reference: Option<PathBuf>) -> Result<()> {
-    let dir = reference.unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
+fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathBuf>) -> Result<()> {
+    if reference.is_some() && app_ids.len() > 1 {
+        anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
+    }
+    let mut reports = Vec::with_capacity(app_ids.len());
+    let mut verified = true;
+    for (index, &app_id) in app_ids.iter().enumerate() {
+        if index > 0 {
+            println!();
+        }
+        let (report, human_verified) = evaluate_one(app_id, out, reference)?;
+        print_agreement(&report, human_verified);
+        verified &= human_verified;
+        reports.push(report);
+    }
+    if reports.len() > 1 {
+        println!("\npooled over {} games", reports.len());
+        print_agreement(&census_core::evaluate::pooled(&reports), verified);
+    }
+    Ok(())
+}
+
+fn evaluate_one(
+    app_id: u32,
+    out: &std::path::Path,
+    reference: Option<&PathBuf>,
+) -> Result<(census_core::AgreementReport, bool)> {
+    let dir = reference
+        .cloned()
+        .unwrap_or_else(|| census_core::evaluate::default_reference_dir(app_id));
     let set = census_core::ReferenceSet::load(&dir)?;
 
     let unknown = set.unknown_categories();
@@ -372,9 +403,7 @@ fn run_evaluate(app_id: u32, out: &std::path::Path, reference: Option<PathBuf>) 
         );
     }
 
-    let report = census_core::compare(&set, out, app_id)?;
-    print_agreement(&report, set.human_verified);
-    Ok(())
+    Ok((census_core::compare(&set, out, app_id)?, set.human_verified))
 }
 
 fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) {
@@ -383,7 +412,7 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     } else {
         "agreement"
     };
-    println!("app {}", report.app_id);
+    println!("app {}", apps(&report.apps));
     println!("  reference    {}", report.produced_by);
     println!("  compared     {}", thousands(report.compared));
     if report.unmatched > 0 {
