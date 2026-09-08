@@ -413,12 +413,20 @@ fn top_of_the_pile(out: &mut String, app: &AppReport) {
     out.push_str("<h3>The top of the pile</h3>\n");
     let _ = writeln!(
         out,
-        "<p class=\"note\">The {} reviews Steam ranks as most helpful, which is roughly what \
-         a reader sees before deciding. Every rate above is measured against the whole corpus \
+        "<p class=\"note\">The {} reviews Steam ranks as most helpful, which is roughly what a \
+         reader sees before deciding. Every rate above is measured against the whole corpus \
          instead.</p>",
         thousands(app.classification.top_helpful)
     );
+    // A native disclosure rather than a scripted one: it folds a long list away without the
+    // page needing to work for it, and it still opens when scripting is off.
+    let _ = writeln!(
+        out,
+        "<details class=\"pile\">\n<summary>Read all {} of them</summary>",
+        thousands(app.classification.top_helpful)
+    );
     reviews(out, app, &app.top);
+    out.push_str("</details>\n");
 }
 
 fn reviews(out: &mut String, app: &AppReport, examples: &[Example]) {

@@ -473,6 +473,26 @@ tr.panel > td {
   padding: 0.5rem 0.9rem 1.25rem;
 }
 
+details.pile {
+  margin-bottom: 1rem;
+}
+
+details.pile > summary {
+  cursor: pointer;
+  display: inline-block;
+  font-size: 0.9rem;
+  color: var(--accent);
+  padding: 0.35rem 0;
+}
+
+details.pile > summary:hover {
+  text-decoration: underline;
+}
+
+details.pile[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
 ol.reviews {
   list-style: none;
   margin: 0;
