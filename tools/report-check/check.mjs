@@ -222,6 +222,26 @@ const PROBE = `(function () {
     }
   }
 
+  // A control nobody can name is a control nobody can use, and the ones that open each row
+  // are built by this script rather than rendered, so no Rust test ever sees them.
+  var named = function (el) {
+    var label = el.getAttribute('aria-label');
+    if (label && label.trim().length > 0) { return true; }
+    if (el.id) {
+      var tag = document.querySelector('label[for="' + el.id + '"]');
+      if (tag && tag.textContent.trim().length > 0) { return true; }
+    }
+    return el.textContent.replace(/\\s+/g, ' ').trim().length > 0;
+  };
+  var nameless = [];
+  Array.prototype.forEach.call(
+    document.querySelectorAll('button, a[href], input, summary, svg[role="img"]'),
+    function (el) {
+      if (!named(el)) { nameless.push(el.tagName.toLowerCase() + '.' + (el.className.baseVal || el.className || '?')); }
+    }
+  );
+  check('something on the page can be used and not named: ' + nameless.join(', '), nameless.length === 0);
+
   // A bar in the chart is a bar because its height is the number it stands for, and height on
   // an SVG shape is geometry a stylesheet can overrule. A rule written for a box elsewhere in
   // the page reaches these too and flattens every month to the same few pixels, which no Rust
