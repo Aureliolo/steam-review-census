@@ -33,10 +33,15 @@ pub const MAX_TOKENS: usize = 512;
 /// means re-embedding, which is why `census fit` can embed a reference set directly: a
 /// candidate can be measured on labelled reviews before a corpus is committed to it.
 ///
-/// All four were measured that way, leave-one-game-out over six reference sets and 600
-/// held-out reviews. "descriptions" is the zero-setup path with no labels at all; "unseen
-/// game" is anchors fitted on the other five games and never on the one being judged, which
-/// is the figure that decides this.
+/// All four were measured that way on 2026-09-08, leave-one-game-out over six reference sets
+/// and 600 held-out reviews. "descriptions" is the zero-setup path with no labels at all;
+/// "unseen game" is anchors fitted on the other five games and never on the one being judged,
+/// which is the figure that decides this.
+///
+/// The fitting has moved on since, so the absolute figures below no longer match what the
+/// tool prints today. What the table is for is the comparison between the four, which was
+/// made under one configuration on one set of reviews, and every candidate was given the
+/// same one.
 ///
 /// | encoder | dimensions | descriptions | unseen game | against e5-small |
 /// |---------|-----------|--------------|-------------|------------------|
