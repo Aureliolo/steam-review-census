@@ -375,12 +375,20 @@ fn game(out: &mut String, app: &AppReport, several: bool) {
 fn facts(out: &mut String, app: &AppReport) {
     let crawl = &app.crawl;
     out.push_str("<dl class=\"facts\">\n");
-    fact(out, "Reviews", &thousands(app.classification.reviews));
+    // Two different numbers, and a reader who sees only the smaller one beside a coverage
+    // figure taken over the larger one is left to work out why they disagree. Rates are over
+    // what was counted; coverage is over what was captured, blank reviews included.
     fact(
         out,
-        "Of Valve's total",
+        "Reviews counted",
+        &thousands(app.classification.reviews),
+    );
+    fact(
+        out,
+        "Captured",
         &format!(
-            "{} ({})",
+            "{} of the {} Valve reports ({})",
+            thousands(crawl.rows_unique),
             thousands(crawl.valve_total_reviews),
             coverage(crawl.coverage)
         ),
@@ -388,7 +396,7 @@ fn facts(out: &mut String, app: &AppReport) {
     if !crawl.review_score_desc.is_empty() {
         fact(out, "Steam calls it", &crawl.review_score_desc);
     }
-    fact(out, "Captured", &crate::time::day(crawl.snapshot_unix));
+    fact(out, "Snapshot", &crate::time::day(crawl.snapshot_unix));
     out.push_str("</dl>\n");
 }
 
@@ -1742,6 +1750,10 @@ mod tests {
         report.apps[0].classification.unmatched = 4;
 
         let page = render(&report);
+        assert!(
+            page.contains("1,010 of the 1,000 Valve reports"),
+            "the two numbers a reader has to reconcile are not both on the page"
+        );
         assert!(
             page.contains("Reviews with no text"),
             "the blanks go unmentioned"
