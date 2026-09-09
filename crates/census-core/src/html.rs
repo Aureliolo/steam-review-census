@@ -458,16 +458,21 @@ fn over_time(out: &mut String, app: &AppReport) {
     }
     let first = crate::time::month_name(&months[0].label);
     let last = crate::time::month_name(&months[months.len() - 1].label);
-    let tallest = months.iter().map(|m| m.reviews).max().unwrap_or(1).max(1);
+    // The chart is drawn against its own busiest month and nothing else says how big that is,
+    // which leaves every bar on it a shape with no size.
+    let peak = months.iter().max_by_key(|month| month.reviews);
+    let tallest = peak.map_or(1, |month| month.reviews).max(1);
 
     out.push_str("<h3>When it was said</h3>\n");
     let _ = writeln!(
         out,
-        "<p class=\"note\">Reviews per month, {} to {}. The line is the share of each month \
-         that recommended the game, from none at the bottom to all at the top; the dashed \
-         line is half. Point at a month to read it.</p>",
+        "<p class=\"note\">Reviews per month, {} to {}, against a busiest month of {} in {}. \
+         The line is the share of each month that recommended the game, from none at the \
+         bottom to all at the top; the dashed line is half. Point at a month to read it.</p>",
         escape(&first),
-        escape(&last)
+        escape(&last),
+        thousands(tallest),
+        escape(&peak.map_or_else(String::new, |month| crate::time::month_name(&month.label)))
     );
 
     #[expect(
@@ -577,7 +582,9 @@ fn categories(out: &mut String, app: &AppReport) {
          overstates a category: 0\u{d7} means none of those few dozen reviews raised it, which \
          is weak evidence rather than proof of absence. <strong>Recommended</strong> is the \
          share of the reviews raising a category that still recommended the game, against \
-         this game's own baseline. Select a row to read the reviews behind it.</p>\n",
+         this game's own baseline, marked warm or cold only where the gap is wider than the \
+         number of reviews behind it can explain. Select a row to read the reviews behind \
+         it.</p>\n",
     );
     // Otherwise the two identical columns on those rows look like a mistake.
     let alone: Vec<&str> = CORE_SPINE
@@ -689,7 +696,7 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
     rate_cell(out, app.rate(category.primary_count));
     rate_cell(out, app.top_rate(category.top_mention_count));
     bias_cell(out, app.bias(category));
-    verdict_cell(out, category.positive_share(), app.positive_baseline());
+    verdict_cell(out, category, app.positive_baseline());
     out.push_str("</tr>\n");
 
     if has_examples {
@@ -892,8 +899,13 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
 ///
 /// Shown against the corpus baseline, because a category where 80% recommend the game is
 /// only interesting once a reader knows whether 80% is high or low for that game.
-fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
-    let Some(share) = share else {
+///
+/// Coloured against the interval the count is entitled to rather than against a fixed
+/// distance from the baseline. Eight reviews all recommending the game is 100% and says
+/// nothing; a fixed threshold paints it the same green as a thousand reviews at 98%, which
+/// is the one reading the column exists to prevent.
+fn verdict_cell(out: &mut String, category: &CategoryCount, baseline: Option<f64>) {
+    let Some(share) = category.positive_share() else {
         let _ = write!(
             out,
             "<td class=\"num\" data-value=\"-1\">{}</td>",
@@ -901,9 +913,10 @@ fn verdict_cell(out: &mut String, share: Option<f64>, baseline: Option<f64>) {
         );
         return;
     };
-    let tone = match baseline {
-        Some(baseline) if share > baseline + 0.05 => " warmer",
-        Some(baseline) if share < baseline - 0.05 => " colder",
+    let spread = crate::evaluate::wilson(category.positive_mentions, category.mention_count);
+    let tone = match (baseline, spread) {
+        (Some(baseline), Some((low, _))) if low > baseline => " warmer",
+        (Some(baseline), Some((_, high))) if high < baseline => " colder",
         _ => "",
     };
     let _ = write!(
@@ -1799,6 +1812,51 @@ mod tests {
         assert_eq!(coverage(0.5), "50.0%");
     }
 
+    /// Every review raising a category recommending the game is 100% whether that is eight
+    /// reviews or a thousand, and only one of the two is a warm subject.
+    #[test]
+    fn a_verdict_share_is_called_warm_only_when_the_count_can_carry_it() {
+        let warmth = |mentions: u64, positive: u64| {
+            let mut report = sample_report("ordinary text");
+            let app = &mut report.apps[0];
+            app.classification.reviews = 1_000;
+            app.classification.positive = 700;
+            app.classification.categories[1].mention_count = mentions;
+            app.classification.categories[1].positive_mentions = positive;
+            let row = render(&report)
+                .split_once("data-name=\"performance\"")
+                .expect("no performance row")
+                .1
+                .split_once("</tr>")
+                .expect("the row never ends")
+                .0
+                .to_owned();
+            assert!(row.contains("100.0%"), "the share itself is missing: {row}");
+            (row.contains("warmer"), row.contains("colder"))
+        };
+
+        assert_eq!(
+            warmth(8, 8),
+            (false, false),
+            "eight reviews were called a warm subject against a 70% baseline"
+        );
+        assert_eq!(
+            warmth(400, 400),
+            (true, false),
+            "four hundred reviews were not"
+        );
+    }
+
+    /// Bars drawn against the busiest month say nothing about size until that month does.
+    #[test]
+    fn the_chart_says_how_big_the_month_it_is_drawn_against_was() {
+        let page = render(&sample_report("ordinary text"));
+        assert!(
+            page.contains("against a busiest month of 600 in Feb 2024"),
+            "the chart has no scale on it"
+        );
+    }
+
     /// Marking a game as the one that talks about a subject most is a claim, and on a row
     /// nobody raises there is nothing to claim: three reviews in a million beat two.
     #[test]
@@ -1896,9 +1954,17 @@ mod tests {
     #[test]
     fn a_cell_with_no_number_says_so_out_loud() {
         let mut out = String::new();
+        let unraised = crate::report::CategoryCount {
+            id: "performance".to_owned(),
+            label: "Performance".to_owned(),
+            primary_count: 0,
+            mention_count: 0,
+            top_mention_count: 0,
+            positive_mentions: 0,
+        };
         rate_cell(&mut out, None);
         bias_cell(&mut out, None);
-        verdict_cell(&mut out, None, Some(0.8));
+        verdict_cell(&mut out, &unraised, Some(0.8));
 
         assert!(
             !out.contains('\u{2014}'),
