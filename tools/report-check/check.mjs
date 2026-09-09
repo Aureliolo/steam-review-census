@@ -248,6 +248,24 @@ const PROBE = `(function () {
     }
   }
 
+  // The table of corpora sorts on the same machinery, and its numbers are the ones a string
+  // comparison gets most wrong: a million-review corpus sorts below a two-thousand one.
+  var corpora = document.querySelector('table.corpora');
+  var bySize = corpora && corpora.querySelector('thead th.num button.sort');
+  if (bySize) {
+    bySize.click();
+    var sizes = [];
+    Array.prototype.forEach.call(corpora.tBodies[0].rows, function (r) {
+      var cell = r.children[1];
+      if (cell && cell.getAttribute('data-value') !== null) {
+        sizes.push(parseFloat(cell.getAttribute('data-value')));
+      }
+    });
+    check('the corpora do not reorder by size', sizes.length > 1 && sizes.every(function (v, i) {
+      return i === 0 || sizes[i - 1] >= v;
+    }));
+  }
+
   // Wide things belong in the containers built to scroll them. Anything reaching past the
   // page pans the whole document sideways, which on a phone moves every column of text on
   // every line, and nothing in the markup shows it.
