@@ -333,18 +333,23 @@ table.matrix .num {
   font-variant-numeric: tabular-nums;
 }
 
-/* The summary of a row, so it is read before the grid rather than found in it. A name here is
-   a Steam title and wraps for the same reason the column headings do. */
+/* The summary of a row, so it is read before the grid rather than found in it. The rate comes
+   first so that every one of them sits at the same place down the column; a Steam title runs
+   to forty characters and wraps after it, for the same reason the column headings do. */
 table.matrix .leader {
   white-space: normal;
-  min-width: 9rem;
-  max-width: 13rem;
+  min-width: 12rem;
+  max-width: 14rem;
   border-right: 1px solid var(--line-strong);
 }
 
 table.matrix .leader b {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+table.matrix .leader a {
+  font-size: 0.82rem;
 }
 
 table.matrix thead th a {

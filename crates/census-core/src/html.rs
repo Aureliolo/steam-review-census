@@ -307,10 +307,10 @@ fn matrix(out: &mut String, report: &Report) {
             Some((app, rate)) => {
                 let _ = write!(
                     out,
-                    "<td class=\"leader\"><a href=\"#app-{}\">{}</a> <b>{}</b></td>",
+                    "<td class=\"leader\"><b>{}</b> <a href=\"#app-{}\">{}</a></td>",
+                    percent(rate),
                     app.app_id(),
-                    escape(&app.crawl.title()),
-                    percent(rate)
+                    escape(&app.crawl.title())
                 );
             }
             None => {
