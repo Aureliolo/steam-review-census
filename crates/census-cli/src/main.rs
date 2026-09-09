@@ -40,7 +40,7 @@ enum Model {
     /// snowflake-arctic-embed-m-v2.0. 768 dimensions, Apache-2.0.
     ArcticM2,
     /// gte-multilingual-base. 768 dimensions, Apache-2.0. The most accurate of the four,
-    /// measured leave-one-game-out against six reference sets.
+    /// measured leave-one-game-out against the reference sets.
     #[default]
     GteBase,
 }
