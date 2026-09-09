@@ -100,9 +100,6 @@ pub struct Example {
     /// Index into [`CORE_SPINE`].
     pub primary: usize,
     pub secondary: Vec<usize>,
-    /// The game this review was written about, which the search folds by. Zero where the
-    /// caller does not know or does not care, and then the folds are dealt round-robin.
-    pub game: u32,
 }
 
 /// One category's anchor, with enough provenance to say what it was built from.
@@ -435,7 +432,6 @@ impl Anchors {
 pub fn to_examples<S: std::hash::BuildHasher>(
     labels: &[ReferenceLabel],
     vectors: &HashMap<String, Vec<f32>, S>,
-    app_id: u32,
 ) -> Vec<Example> {
     let slot: HashMap<&str, usize> = CORE_SPINE
         .iter()
@@ -454,7 +450,6 @@ pub fn to_examples<S: std::hash::BuildHasher>(
                     .iter()
                     .filter_map(|id| slot.get(id.as_str()).copied())
                     .collect(),
-                game: app_id,
             })
         })
         .collect()
@@ -550,9 +545,6 @@ pub struct FitOutcome {
     /// What the blend was chosen to win. The other figure is a cost, not a claim.
     pub objective: Objective,
     pub folds: usize,
-    /// Whether each fold held out a whole game, which is what makes the figure above a
-    /// statement about a game the settings have not seen rather than about these ones.
-    pub by_game: bool,
     pub examples: usize,
 }
 
@@ -578,7 +570,7 @@ pub fn search(
     calibration: Calibration,
     objective: Objective,
 ) -> FitOutcome {
-    let split = fold_of(examples, folds.max(2).min(examples.len().max(2)));
+    let folds = folds.max(2).min(examples.len().max(2));
     let margins: &[f32] = match objective {
         // The margin cannot change which category scores highest, so trying it here would
         // only spend folds to arrive back where it started.
@@ -591,7 +583,7 @@ pub fn search(
             descriptions,
             examples,
             centroid,
-            &split,
+            folds,
             params,
             margins,
             objective,
@@ -671,8 +663,7 @@ pub fn search(
         mention_macro_f1,
         baseline_macro_f1,
         objective,
-        folds: split.folds,
-        by_game: split.by_game,
+        folds,
         examples: examples.len(),
     }
 }
@@ -709,7 +700,7 @@ fn across_margins(
     descriptions: &Anchors,
     examples: &[Example],
     centroid: &[f32],
-    split: &Split,
+    folds: usize,
     params: FitParams,
     margins: &[f32],
     objective: Objective,
@@ -718,22 +709,17 @@ fn across_margins(
     let mut total = vec![0_u64; margins.len()];
     let mut confusion = vec![vec![Counts::default(); CORE_SPINE.len()]; margins.len()];
 
-    for fold in 0..split.folds {
+    for fold in 0..folds {
         let train: Vec<Example> = examples
             .iter()
-            .zip(&split.held)
-            .filter(|(_, at)| **at != fold)
-            .map(|(example, _)| example.clone())
+            .enumerate()
+            .filter(|(index, _)| index % folds != fold)
+            .map(|(_, example)| example.clone())
             .collect();
         let mut fitted = descriptions.fit(&train, &[], params);
         fitted.prepare(params.scoring, centroid);
 
-        for example in examples
-            .iter()
-            .zip(&split.held)
-            .filter(|(_, at)| **at == fold)
-            .map(|(example, _)| example)
-        {
+        for example in examples.iter().skip(fold).step_by(folds) {
             let sims = fitted.similarities(&example.vector);
             for (slot, &margin) in margins.iter().enumerate() {
                 let (primary, mentions) = crate::classify::assign(&sims, margin);
@@ -758,50 +744,6 @@ fn across_margins(
             .collect(),
         Objective::Mentions => confusion.iter().map(|counts| macro_f1(counts)).collect(),
     }
-}
-
-/// Which fold each example is held out in, and how many folds that comes to.
-///
-/// By game wherever the labels come from more than one. The question these anchors are asked
-/// in the end is about a game nobody labelled, and dealing one game's reviews across every
-/// fold never asks it: a setting that works only by having seen this game's vocabulary scores
-/// as well as one that would carry, and the search then picks it. Measured across the six
-/// reference sets, folding by review chose a repulsion that gained a point on the games it
-/// could see and lost nearly three on the game it could not.
-///
-/// Round-robin otherwise, which is right for a single game: the reference set arrives grouped
-/// by predicted category, so dealing examples out in turn gives every fold nearly the same
-/// class balance, and random assignment would not at these counts.
-fn fold_of(examples: &[Example], folds: usize) -> Split {
-    let mut games: Vec<u32> = examples.iter().map(|example| example.game).collect();
-    games.sort_unstable();
-    games.dedup();
-
-    if games.len() < 2 {
-        return Split {
-            folds,
-            by_game: false,
-            held: (0..examples.len()).map(|at| at % folds).collect(),
-        };
-    }
-    Split {
-        folds: games.len(),
-        by_game: true,
-        held: examples
-            .iter()
-            .map(|example| games.binary_search(&example.game).unwrap_or(0))
-            .collect(),
-    }
-}
-
-/// How the examples were dealt into folds, and what that says about the figures they made.
-struct Split {
-    folds: usize,
-    /// Whether each fold holds out a whole game. What the search then chooses is a setting
-    /// that carries to a game it has not seen, rather than one that fits the six it has.
-    by_game: bool,
-    /// The fold each example is held out in, in the order the examples arrived.
-    held: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -969,7 +911,6 @@ mod tests {
                 vector: unit(300),
                 primary: 0,
                 secondary: vec![],
-                game: 0,
             })
             .collect();
         let fitted = descriptions().fit(&examples, &[1], FitParams::default());
@@ -990,7 +931,6 @@ mod tests {
                 vector: unit(300),
                 primary: 1,
                 secondary: vec![],
-                game: 0,
             })
             .collect();
         let fitted = descriptions().fit(&many, &[1], FitParams::default());
@@ -1007,7 +947,6 @@ mod tests {
             vector: unit(300),
             primary: 5,
             secondary: vec![2],
-            game: 0,
         }];
         let params = FitParams {
             secondary_weight: 0.5,
@@ -1025,7 +964,6 @@ mod tests {
             vector: unit(300),
             primary: 4,
             secondary: vec![9],
-            game: 0,
         }];
         let fitted = descriptions().fit(&examples, &[1], FitParams::default());
         for anchor in &fitted.categories {
@@ -1070,7 +1008,6 @@ mod tests {
             vector: unit(300),
             primary: 0,
             secondary: vec![],
-            game: 0,
         }];
         let fitted = descriptions().fit(&examples, &[296_970], FitParams::default());
         fitted.save(&path).unwrap();
@@ -1256,7 +1193,6 @@ mod tests {
                 vector: plane(0.5, 0.6 + f32::from(index) * 0.001),
                 primary: 1,
                 secondary: vec![],
-                game: 0,
             })
             .collect();
 
@@ -1317,7 +1253,6 @@ mod tests {
                 primary: 1,
                 // Every category the anchors might reasonably pick is a real mention here.
                 secondary: (0..CORE_SPINE.len()).filter(|slot| *slot != 1).collect(),
-                game: 0,
             })
             .collect();
         let params = FitParams {
@@ -1354,47 +1289,6 @@ mod tests {
         assert!(anchors.categories.iter().all(|a| a.bias == 0.0));
         assert!((anchors.similarities(&review)[3] - 1.0).abs() < 1e-6);
         assert!(anchors.similarities(&review)[4].abs() < 1e-6);
-    }
-
-    /// The question these anchors are asked in the end is about a game nobody labelled, and
-    /// a fold holding some of a game's reviews while training on the rest never asks it.
-    #[test]
-    fn a_game_is_never_split_across_the_folds_that_choose_the_settings() {
-        let from = |game: u32, count: usize| {
-            (0..count).map(move |index| Example {
-                vector: unit(index % 4),
-                primary: index % 4,
-                secondary: vec![],
-                game,
-            })
-        };
-        let across: Vec<Example> = from(7, 5).chain(from(11, 5)).chain(from(13, 5)).collect();
-
-        let split = fold_of(&across, 5);
-        assert_eq!(
-            split.folds, 3,
-            "three games should make three folds, not five"
-        );
-        assert!(split.by_game, "the folds are meant to be games");
-        for game in [7, 11, 13] {
-            let mine: Vec<usize> = across
-                .iter()
-                .zip(&split.held)
-                .filter(|(example, _)| example.game == game)
-                .map(|(_, at)| *at)
-                .collect();
-            assert!(
-                mine.windows(2).all(|pair| pair[0] == pair[1]),
-                "game {game} was dealt across folds {mine:?}"
-            );
-        }
-
-        // One game has nothing to hold out by, so the folds go back to round robin.
-        let alone: Vec<Example> = from(7, 10).collect();
-        let split = fold_of(&alone, 5);
-        assert_eq!(split.folds, 5);
-        assert!(!split.by_game, "one game has nothing to hold out by");
-        assert_eq!(split.held, vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
     }
 
     #[test]
@@ -1472,7 +1366,6 @@ mod tests {
                 vector: unit(index % 4),
                 primary: index % 4,
                 secondary: vec![],
-                game: 0,
             })
             .collect()
     }

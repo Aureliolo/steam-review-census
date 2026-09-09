@@ -825,8 +825,8 @@ fn load_game(
     };
     Ok(GameLabels {
         app_id,
-        training: census_core::anchors::to_examples(&split(false), &vectors, app_id),
-        holdout: census_core::anchors::to_examples(&split(true), &vectors, app_id),
+        training: census_core::anchors::to_examples(&split(false), &vectors),
+        holdout: census_core::anchors::to_examples(&split(true), &vectors),
         centroid,
     })
 }
@@ -1376,13 +1376,8 @@ fn print_fit(
     );
     println!("  anchors      {}", path.display());
     println!(
-        "\n  {}-fold cross-validation, {}:",
-        outcome.folds,
-        if outcome.by_game {
-            "each fold holding out a whole game, which is what chose the settings above"
-        } else {
-            "on training reviews each fold did not see"
-        }
+        "\n  {}-fold cross-validation, on training reviews each fold did not see:",
+        outcome.folds
     );
     let baseline_note = "descriptions alone, at their best";
     println!(
