@@ -472,7 +472,7 @@ fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathB
     }
     // Every game is compared before any of them is printed. Printing as they arrived meant a
     // set missing its fourth reference left three tables on screen and no pooled figure,
-    // which is the one worth quoting and the reason for naming six games at once.
+    // which is the one worth quoting and the reason for naming several games at once.
     let mut reports = Vec::with_capacity(app_ids.len());
     let mut verified = true;
     for &app_id in app_ids {
