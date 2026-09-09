@@ -87,6 +87,11 @@ every category counts the same however rare it is, and the fit reports what the 
 would have scored on the same held-back reviews, so the decision is a measurement rather than
 an opinion.
 
+Some categories are defined by what a review does *not* say, and a prototype built only from
+its own examples cannot tell those apart: a bare verdict and a joke are both short and about
+nothing in particular. So each anchor is also pushed away from the reviews it is measured to
+take off other categories, by an amount the fit chooses and can choose to be nothing.
+
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,
 balance is difficulty, animation speed is graphics, port requests are compatibility, sequel
@@ -137,6 +142,11 @@ Three rules keep those figures honest:
 - **Every rate carries a 95% interval.** Reference sets are small. At fifty reviews the honest
   band around a rate is roughly twenty-five points wide, and a bare percentage invites
   conclusions the counts cannot support.
+- **A category that is wrong says what it is wrong about.** Knowing a category scores badly
+  says nothing about what to do; knowing it is read as one particular other category is a
+  boundary the taxonomy has not settled, and no amount of fitting will settle it. Every
+  evaluation names the category each one is most often mistaken for, where that is a pattern
+  rather than a single review.
 - **Every row says how well it is measured, not just the page.** One agreement figure for a
   whole taxonomy hides the shape of the error: the same run finds nine mentions in ten of one
   category and one in five of another. Each category carries its own precision and recall
