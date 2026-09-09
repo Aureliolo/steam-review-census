@@ -846,10 +846,13 @@ fn top_of_the_pile(out: &mut String, app: &AppReport) {
     );
     // A native disclosure rather than a scripted one: it folds a long list away without the
     // page needing to work for it, and it still opens when scripting is off.
+    // Counted from what is about to be listed rather than from what was measured, since a
+    // review whose text has gone missing would otherwise leave the summary claiming one more
+    // than the reader can find.
     let _ = writeln!(
         out,
         "<details class=\"pile\">\n<summary>Read all {} of them</summary>",
-        thousands(app.classification.top_helpful)
+        thousands(app.top.len() as u64)
     );
     reviews(out, app, &app.top);
     out.push_str("</details>\n");
