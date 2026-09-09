@@ -135,8 +135,10 @@ fn filter(out: &mut String, report: &Report) {
     let showing = format!(
         "all {} of them{}",
         CORE_SPINE.len(),
+        // Not "in every table": a report of several games also carries one comparing the
+        // corpora themselves, which has no categories in it to narrow.
         if report.apps.len() > 1 {
-            ", in every table"
+            ", everywhere they appear"
         } else {
             ""
         }
