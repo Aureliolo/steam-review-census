@@ -1482,7 +1482,7 @@ fn print_classification(report: &census_core::ClassifyReport) {
             format!("fitted on {}", apps(&report.anchors_fitted_from))
         }
     );
-    println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
+    println!("  elapsed      {}", elapsed(report.elapsed));
     println!("  assignments  {}", report.path.display());
 
     let mut categories = report.categories.clone();
@@ -1491,9 +1491,15 @@ fn print_classification(report: &census_core::ClassifyReport) {
             .total_cmp(&a.mention_rate(report.reviews))
     });
 
+    // The size of the top of the pile is a setting, so the column that reports it is named
+    // after what actually ran rather than after the default.
     println!(
         "\n{:<30} {:>9} {:>9} {:>9} {:>7}",
-        "category", "mention%", "primary%", "top50%", "bias"
+        "category",
+        "mention%",
+        "primary%",
+        format!("top{}%", report.top_helpful),
+        "bias"
     );
     println!("{}", "-".repeat(68));
     for stat in &categories {
@@ -1594,7 +1600,7 @@ async fn run_embed(
             .map_or_else(|| "n/a".to_owned(), |r| format!("{:.1}%", r * 100.0))
     );
     println!("  dimensions     {}", report.dim);
-    println!("  elapsed        {:.1}s", report.elapsed.as_secs_f64());
+    println!("  elapsed        {}", elapsed(report.elapsed));
     println!("  size           {} MB", report.bytes / 1_048_576);
     println!("  embeddings     {}", report.path.display());
     println!("\njoin to the capture on sha256(review) = text_sha256");
