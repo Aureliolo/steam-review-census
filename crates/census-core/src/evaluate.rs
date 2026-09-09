@@ -1045,6 +1045,49 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// A manifest quotes these figures, and reading them out of JSON is the alternative to
+    /// retyping them off a terminal. Renaming a field here silently empties a manifest.
+    #[test]
+    fn a_comparison_serialises_the_figures_a_manifest_quotes() {
+        let report = AgreementReport {
+            apps: vec![7],
+            produced_by: "a fixture".to_owned(),
+            compared: 100,
+            unmatched: 0,
+            primary_agreement: Some(0.54),
+            anchors: vec!["fitted:7".to_owned()],
+            slices: vec![Slice {
+                subset: "random".to_owned(),
+                contested: Some(true),
+                compared: 30,
+                agreed: 10,
+            }],
+            categories: vec![CategoryAgreement {
+                id: "bugs",
+                label: "Bugs and crashes",
+                reference_primary: 12,
+                predicted_primary: 11,
+                primary_agreed: 9,
+                reference_mentions: 20,
+                predicted_mentions: 18,
+                mention_agreed: 15,
+                taken_as: vec![1, 2],
+            }],
+        };
+
+        let written: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&report).unwrap()).unwrap();
+        assert_eq!(written["apps"][0], 7);
+        assert_eq!(written["compared"], 100);
+        assert!((written["primary_agreement"].as_f64().unwrap() - 0.54).abs() < 1e-9);
+        assert_eq!(written["slices"][0]["subset"], "random");
+        assert_eq!(written["slices"][0]["contested"], true);
+        assert_eq!(written["slices"][0]["agreed"], 10);
+        assert_eq!(written["categories"][0]["id"], "bugs");
+        assert_eq!(written["categories"][0]["mention_agreed"], 15);
+        assert_eq!(written["categories"][0]["reference_mentions"], 20);
+    }
+
     #[test]
     fn unknown_categories_in_a_reference_set_are_reported() {
         let set = ReferenceSet {
