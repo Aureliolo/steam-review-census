@@ -103,7 +103,12 @@ const PROGRESS_EVERY_TEXTS: u64 = 5_000;
 #[command(
     name = "census",
     version,
-    about = "Count what Steam reviewers actually say, rather than what the loudest ones say."
+    about = "Count what Steam reviewers actually say, rather than what the loudest ones say.",
+    after_help = "The first four commands are the pipeline, in order: crawl a game, embed it, \
+                  classify it, read it. The rest are how the classifier is measured and \
+                  improved, and none of them is needed to get a report out.\n\n\
+                  Nothing leaves this machine. Reviews are downloaded from Valve and \
+                  everything after that happens locally, including the model."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -163,9 +168,24 @@ enum Command {
     /// Sort embedded reviews into the core-spine categories and report what players say.
     Classify(ClassifyArgs),
 
-    /// Fit category anchors from a reference set, so categories are represented by reviews
-    /// people wrote rather than by descriptions of the topic.
-    Fit(FitArgs),
+    /// Render a self-contained page from what a classification found.
+    Report {
+        /// Steam app IDs to report on. Several become one page, a section each.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their classifications.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Where to write the page.
+        #[arg(long, default_value = "census-report.html")]
+        to: PathBuf,
+        /// Reviews quoted per category, as the evidence behind its rate.
+        #[arg(long, default_value_t = census_core::report::DEFAULT_EXAMPLES)]
+        examples: usize,
+        /// Changing this quotes different reviews. The same seed always quotes the same ones.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
 
     /// Draw the reviews a reference set will be labelled from, reproducibly.
     Sample {
@@ -215,24 +235,9 @@ enum Command {
         allow_incomplete: bool,
     },
 
-    /// Render a self-contained page from what a classification found.
-    Report {
-        /// Steam app IDs to report on. Several become one page, a section each.
-        #[arg(required = true, num_args = 1..)]
-        app_ids: Vec<u32>,
-        /// Directory holding the captures and their classifications.
-        #[arg(short, long, default_value = "data")]
-        out: PathBuf,
-        /// Where to write the page.
-        #[arg(long, default_value = "census-report.html")]
-        to: PathBuf,
-        /// Reviews quoted per category, as the evidence behind its rate.
-        #[arg(long, default_value_t = census_core::report::DEFAULT_EXAMPLES)]
-        examples: usize,
-        /// Changing this quotes different reviews. The same seed always quotes the same ones.
-        #[arg(long, default_value_t = 1)]
-        seed: u64,
-    },
+    /// Fit category anchors from a reference set, so categories are represented by reviews
+    /// people wrote rather than by descriptions of the topic.
+    Fit(FitArgs),
 
     /// Compare stored classifications against a reference set.
     Evaluate {
