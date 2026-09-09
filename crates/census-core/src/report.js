@@ -201,6 +201,17 @@
     if (!panel || !panel.classList.contains('panel')) {
       return;
     }
+    // A narrowed page has this row off screen entirely, and scrolling to something with no
+    // box is the same as doing nothing. Being asked for a category is a good enough reason
+    // to stop hiding it.
+    if (panel.classList.contains('filtered-out')) {
+      var input = document.querySelector('[data-filter-input]');
+      if (input) {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+      }
+    }
+
     var row = panel.previousElementSibling;
     var button = row && row.querySelector('button.disclose');
     if (button && row.getAttribute('data-expands') === id) {

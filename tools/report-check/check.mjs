@@ -224,8 +224,16 @@ const PROBE = `(function () {
     var target = document.getElementById(link.getAttribute('href').slice(1));
     check('the finding points at nothing', Boolean(target));
     if (target) {
+      // Asked for while the page is narrowed to something else, the row still has to appear.
+      if (input) {
+        input.value = 'zzzzzz';
+        input.dispatchEvent(new Event('input'));
+        check('the filter did not narrow the target away', target.classList.contains('filtered-out'));
+      }
       window.location.hash = link.getAttribute('href');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
+      check('a link into the evidence lands on a row the filter is still hiding',
+        !target.classList.contains('filtered-out'));
       check('a link into the evidence lands on a closed row', target.hidden === false);
       var opened = target.previousElementSibling.querySelector('button.disclose');
       check('a row opened by a link does not say so',
