@@ -126,6 +126,8 @@ const PROBE = `(function () {
     var rows = visible('table.categories tbody tr.row');
     // Only a report of several games has one, and a report of one game must still work.
     var matrix = visible('table.matrix tbody tr');
+    // The one table on the page with no categories in it, so the one the filter leaves whole.
+    var corpora = document.querySelectorAll('table.corpora tbody tr').length;
     check('nothing is on screen to filter', rows > 0);
 
     input.value = 'price';
@@ -133,6 +135,8 @@ const PROBE = `(function () {
     check('filtering narrows no category table', visible('table.categories tbody tr.row') < rows);
     check('filtering narrows no cross-game matrix',
       matrix === 0 || visible('table.matrix tbody tr') < matrix);
+    check('filtering takes games out of the table comparing the corpora',
+      visible('table.corpora tbody tr') === corpora);
     check('a filtered row keeps its panel on screen', (function () {
       return Array.prototype.every.call(panels, function (p) {
         var row = p.previousElementSibling;
