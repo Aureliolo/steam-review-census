@@ -47,7 +47,7 @@ pub struct Category {
 
 /// Version of the core spine. Any change to the categories or their descriptions changes
 /// what the numbers mean, so this is recorded alongside every classification.
-pub const CORE_SPINE_VERSION: &str = "core-3";
+pub const CORE_SPINE_VERSION: &str = "core-4";
 
 pub const CORE_SPINE: &[Category] = &[
     Category {
@@ -81,7 +81,8 @@ pub const CORE_SPINE: &[Category] = &[
         boundary: Some(
             "Naming the genre or comparing the game to another one belongs to genre. Whether \
              options are balanced against each other belongs to difficulty. How much game \
-             there is belongs to content.",
+             there is belongs to content. A system the game never explains belongs to \
+             tutorial, however good the system itself is.",
         ),
         alone: false,
     },
@@ -96,9 +97,10 @@ pub const CORE_SPINE: &[Category] = &[
                       XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like \
                       this, it reminds me of the old games in the genre.",
         boundary: Some(
-            "Naming what kind of game it is, or which games it resembles, belongs here. As \
+            "Naming what kind of game it is, or which games it resembles, belongs here, and \
+             that includes calling it a co-op game or comparing it to other co-op games. As \
              soon as a review says a mechanic is deep, shallow, satisfying or broken, that \
-             part is gameplay.",
+             part is gameplay, and whether the co-op itself works is multiplayer.",
         ),
         alone: false,
     },
@@ -130,9 +132,9 @@ pub const CORE_SPINE: &[Category] = &[
                       the publisher did elsewhere.",
         boundary: Some(
             "A joke that still makes a point about the game belongs to whatever it is joking \
-             about, most often gameplay or difficulty, and a protest that names something the \
-             publisher requires belongs to policy. This is only for reviews from which a \
-             reader would learn nothing at all.",
+             about, most often gameplay or difficulty, and a protest about anything this \
+             game's publisher or platform did belongs to policy. This is only for reviews from \
+             which a reader would learn nothing at all.",
         ),
         alone: true,
     },
@@ -189,7 +191,8 @@ pub const CORE_SPINE: &[Category] = &[
                       randomness deciding the outcome, and whether it is too easy or punishing.",
         boundary: Some(
             "Balance complaints belong here rather than to gameplay, including when they name \
-             a specific mechanic as overpowered or useless.",
+             a specific mechanic as overpowered or useless. Being lost because nothing was \
+             explained belongs to tutorial.",
         ),
         alone: false,
     },
@@ -231,7 +234,8 @@ pub const CORE_SPINE: &[Category] = &[
                       co-op, player counts, whether lobbies are dead and whether cheaters ruin it.",
         boundary: Some(
             "Servers, matchmaking and connection quality belong here. What the other players \
-             are like belongs to community.",
+             are like belongs to community, and calling the game co-op as a kind of game \
+             belongs to genre.",
         ),
         alone: false,
     },
@@ -267,9 +271,9 @@ pub const CORE_SPINE: &[Category] = &[
                       DRM and kernel-level anti-cheat, launcher requirements, price rises, \
                       and terms that changed after people had bought it.",
         boundary: Some(
-            "A requirement or restriction placed on the player belongs here even when the \
-             review is angry and brief. A protest that names no requirement at all, and would \
-             tell a reader nothing, is offtopic.",
+            "Anything the publisher or the platform decided belongs here, including a protest \
+             that is angry and brief and names no particular term. Only a protest about \
+             something with no connection to this game at all belongs to offtopic.",
         ),
         alone: false,
     },
@@ -281,7 +285,7 @@ pub const CORE_SPINE: &[Category] = &[
                       hardware, and asking for it on a console or handheld.",
         boundary: Some(
             "Asking for a port to another platform belongs here. Asking for a sequel belongs \
-             to verdict.",
+             to verdict, and anything about playing it in a headset belongs to VR.",
         ),
         alone: false,
     },
@@ -307,6 +311,54 @@ pub const CORE_SPINE: &[Category] = &[
         boundary: Some(
             "Whether a language exists and how well it reads belongs here. Subtitles as an \
              accommodation, in a language that is already supported, belong to accessibility.",
+        ),
+        alone: false,
+    },
+    // Asked for by three labellers independently across the core-3 sets, which is the
+    // strongest signal any reference set has produced. It was being split between gameplay
+    // and difficulty, and "the tutorial explains nothing" is neither a mechanic nor a
+    // question of balance.
+    Category {
+        id: "tutorial",
+        label: "Tutorial and learning",
+        description: "How the game teaches itself. The tutorial, the first hour, systems that \
+                      are never explained, the learning curve, reading a wiki to understand \
+                      anything, and whether a new player is left to work it out alone.",
+        boundary: Some(
+            "Whether the game explains itself belongs here. Whether it is hard once you do \
+             understand it belongs to difficulty, and whether the systems themselves are any \
+             good belongs to gameplay.",
+        ),
+        alone: false,
+    },
+    // A licence is most visible when it lapses: a team, a driver or a song that was in last
+    // year's release and is not in this one. That had been landing in content, which is about
+    // how much game there is, and in monetisation, which is about what is sold on top.
+    Category {
+        id: "licensing",
+        label: "Licensed content",
+        description: "Real names and the rights to them. Real teams, players, clubs and kits, \
+                      real cars and tracks, licensed music, a licence lost or gained between \
+                      releases, and how faithful the game is to the thing it is adapting.",
+        boundary: Some(
+            "A real name being present, missing or wrong belongs here. What is sold on top of \
+             the game belongs to monetisation, and whether an adaptation is well written \
+             belongs to story.",
+        ),
+        alone: false,
+    },
+    // Kept out of compatibility, which is about whether a game runs at all. A review of a
+    // headset game is about comfort, tracking and standing inside the thing, and none of that
+    // is a system requirement.
+    Category {
+        id: "vr",
+        label: "VR and headsets",
+        description: "Playing it in a headset. Room scale and seated play, motion sickness and \
+                      comfort options, tracking and the controllers in your hands, how \
+                      convincing it is to be inside it, and which headsets it works with.",
+        boundary: Some(
+            "Anything about being in a headset belongs here, including whether a given headset \
+             is supported. How the game looks on a monitor belongs to graphics.",
         ),
         alone: false,
     },

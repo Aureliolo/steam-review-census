@@ -1,4 +1,4 @@
-Categories (spine core-3). Each review gets exactly one primary category, plus any others it genuinely also covers.
+Categories (spine core-4). Each review gets exactly one primary category, plus any others it genuinely also covers.
 
 Performance (performance)
   The game runs badly. Low frame rate, stuttering, frame drops, poor optimisation, long loading times, and it struggles even on good hardware.
@@ -9,11 +9,11 @@ Bugs and crashes (bugs)
 
 Gameplay and mechanics (gameplay)
   The systems and mechanics themselves. Combat, movement, crafting, building, exploration, progression systems, and whether the mechanics are deep or shallow.
-  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty. How much game there is belongs to content.
+  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty. How much game there is belongs to content. A system the game never explains belongs to tutorial, however good the system itself is.
 
 Genre and comparisons (genre)
   What kind of game this is. A roguelike, turn-based tactics, a management sim, a deckbuilder, a soulslike. It plays like FTL, it is XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like this, it reminds me of the old games in the genre.
-  RULE: Naming what kind of game it is, or which games it resembles, belongs here. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay.
+  RULE: Naming what kind of game it is, or which games it resembles, belongs here, and that includes calling it a co-op game or comparing it to other co-op games. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay, and whether the co-op itself works is multiplayer.
 
 Overall verdict only (verdict)
   A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, worth every penny, do not buy, waste of money, best game ever, I find this game childish, please make a sequel.
@@ -22,7 +22,7 @@ Overall verdict only (verdict)
 
 Says nothing about the game (offtopic)
   The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
-  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest that names something the publisher requires belongs to policy. This is only for reviews from which a reader would learn nothing at all.
+  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest about anything this game's publisher or platform did belongs to policy. This is only for reviews from which a reader would learn nothing at all.
   ONLY: this is the whole label. A review here covers nothing else, so it never takes a second category.
 
 Story and writing (story)
@@ -42,7 +42,7 @@ Controls and interface (controls)
 
 Difficulty and balance (difficulty)
   How hard the game is and whether it is fair. Difficulty spikes, grinding, whether the options are balanced against each other, luck and randomness deciding the outcome, and whether it is too easy or punishing.
-  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless.
+  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless. Being lost because nothing was explained belongs to tutorial.
 
 Amount of content (content)
   How much game there is. Length, how many hours it lasts, replay value, whether runs differ from one another, whether it gets repetitive, and whether it feels finished or thin and runs out of things to do.
@@ -57,7 +57,7 @@ Monetisation and DLC (monetisation)
 
 Multiplayer and online (multiplayer)
   Playing with or against other people. Matchmaking, servers, lag and ping, co-op, player counts, whether lobbies are dead and whether cheaters ruin it.
-  RULE: Servers, matchmaking and connection quality belong here. What the other players are like belongs to community.
+  RULE: Servers, matchmaking and connection quality belong here. What the other players are like belongs to community, and calling the game co-op as a kind of game belongs to genre.
 
 Community and players (community)
   The people who play it. Whether the community is welcoming or toxic, griefing and harassment, and what the playerbase is like.
@@ -68,11 +68,11 @@ Updates and developer support (updates)
 
 Publisher and platform policy (policy)
   Decisions taken by the publisher or the platform rather than by the game. Needing a second account to play, region locks and delistings, DRM and kernel-level anti-cheat, launcher requirements, price rises, and terms that changed after people had bought it.
-  RULE: A requirement or restriction placed on the player belongs here even when the review is angry and brief. A protest that names no requirement at all, and would tell a reader nothing, is offtopic.
+  RULE: Anything the publisher or the platform decided belongs here, including a protest that is angry and brief and names no particular term. Only a protest about something with no connection to this game at all belongs to offtopic.
 
 Hardware and compatibility (compatibility)
   Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
-  RULE: Asking for a port to another platform belongs here. Asking for a sequel belongs to verdict.
+  RULE: Asking for a port to another platform belongs here. Asking for a sequel belongs to verdict, and anything about playing it in a headset belongs to VR.
 
 Accessibility and options (accessibility)
   Settings and accommodations. Subtitles, colourblind modes, remappable controls, difficulty options, text size, and the settings players need in order to play at all.
@@ -81,4 +81,16 @@ Accessibility and options (accessibility)
 Language and localisation (language)
   Which languages the game is in and how good the translation is. No English, no Chinese, machine translation, a language dropped in an update, subtitles only in some languages, playing anyway with a dictionary.
   RULE: Whether a language exists and how well it reads belongs here. Subtitles as an accommodation, in a language that is already supported, belong to accessibility.
+
+Tutorial and learning (tutorial)
+  How the game teaches itself. The tutorial, the first hour, systems that are never explained, the learning curve, reading a wiki to understand anything, and whether a new player is left to work it out alone.
+  RULE: Whether the game explains itself belongs here. Whether it is hard once you do understand it belongs to difficulty, and whether the systems themselves are any good belongs to gameplay.
+
+Licensed content (licensing)
+  Real names and the rights to them. Real teams, players, clubs and kits, real cars and tracks, licensed music, a licence lost or gained between releases, and how faithful the game is to the thing it is adapting.
+  RULE: A real name being present, missing or wrong belongs here. What is sold on top of the game belongs to monetisation, and whether an adaptation is well written belongs to story.
+
+VR and headsets (vr)
+  Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, how convincing it is to be inside it, and which headsets it works with.
+  RULE: Anything about being in a headset belongs here, including whether a given headset is supported. How the game looks on a monitor belongs to graphics.
 
