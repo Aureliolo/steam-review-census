@@ -407,8 +407,50 @@ pub fn labelling_brief() -> String {
         }
         brief.push('\n');
     }
+    brief.push_str(FIELDS);
     brief
 }
+
+/// What every label carries besides its categories.
+///
+/// Generated with the categories and for the same reason. The boundaries were written down
+/// because labellers disagreed about them; these were left to whatever each batch was told,
+/// and one of them decides how a headline figure is reported. `ambiguous` is what splits
+/// agreement into clear-cut and contested, and across the core-3 sets it marked between 21%
+/// and 35% of a game depending on who labelled it, which is a spread no property of the
+/// reviews explains.
+///
+/// `ironic` is a claim about the words, not about the rating. The labeller is never shown
+/// whether the reviewer recommended the game, so that they cannot be led by it, which means
+/// they cannot report that the two disagree either. They say what the text does; joining
+/// that to the rating is arithmetic and belongs to the tool.
+const FIELDS: &str = "\
+Every label also carries four judgements about the review itself. None of them changes which
+category it belongs to.
+
+primary
+  The one category the review is most about. Exactly one, always.
+
+secondary
+  Every other category the review genuinely also covers. Leave it empty when the review is
+  about one thing. Never add a category to fill space.
+
+ironic
+  The text says the opposite of what it appears to say. \"0/10, I have not slept in three
+  days\" is praise; \"10/10 would lose my save file again\" is a complaint. Judge this from
+  the words alone. You are not told whether the reviewer recommended the game, so that you
+  cannot be led by it.
+
+confidence
+  How sure you are of the primary category: high, medium or low. This one is about you.
+
+ambiguous
+  Whether the call is genuinely contested: two categories fit and the rules above do not
+  settle which. This one is about the review and the taxonomy rather than about you, and it
+  is the judgement that is read back. Agreement is reported separately for the reviews
+  marked here, because disagreement on them says as much about the taxonomy as about the
+  classifier.
+";
 
 #[cfg(test)]
 mod tests {
@@ -493,6 +535,26 @@ mod tests {
                 assert!(brief.contains(rule), "{}'s rule missing", category.id);
             }
         }
+    }
+
+    /// The judgements besides the categories were left to whatever each batch of labellers
+    /// was told, and one of them decides how a headline figure is reported.
+    #[test]
+    fn the_brief_says_what_the_other_judgements_mean() {
+        let brief = labelling_brief();
+        for field in ["primary", "secondary", "ironic", "confidence", "ambiguous"] {
+            assert!(
+                brief.contains(&format!("\n{field}\n")),
+                "{field} goes unexplained"
+            );
+        }
+        // The two are asked in the same breath and mean opposite things: one is a fact about
+        // the labeller, the other a fact about the taxonomy. Only the second is read back.
+        assert!(
+            brief.contains("This one is about you.")
+                && brief.contains("about the review and the taxonomy rather than about you"),
+            "confidence and ambiguous are not told apart, which is the whole difficulty"
+        );
     }
 
     #[test]

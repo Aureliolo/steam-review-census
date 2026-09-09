@@ -29,8 +29,18 @@ pub struct ReferenceLabel {
     pub primary: String,
     #[serde(default)]
     pub secondary: Vec<String>,
+    /// Whether the text says the opposite of what it appears to say.
+    ///
+    /// A claim about the words alone. The labeller is never shown whether the reviewer
+    /// recommended the game, so this cannot be, and must not be read as, a report that the
+    /// rating and the text disagree: that is this flag joined to the rating, and the join is
+    /// the tool's job.
     #[serde(default)]
     pub ironic: bool,
+    /// How sure the labeller was of the primary category: high, medium or low.
+    ///
+    /// About the labeller, where [`Self::ambiguous`] is about the review. Recorded and not
+    /// yet read by anything.
     #[serde(default)]
     pub confidence: String,
     /// How this review entered the sample. A set stratified by predicted category

@@ -124,9 +124,12 @@ A thumbs-down is not always a complaint. "0/10, haven't slept in three days" is 
 a costume, and counting it as negative quietly poisons every number downstream. The reverse is
 just as common: a recommendation that is really a warning not to buy yet.
 
-These are **flagged, not filed away**. The flag records that the rating and the text disagree;
-the review still sorts by what it is actually about, so the praise buried in a joke review
-still counts as praise of whatever it praises. You can then include, exclude or inspect the
+These are **flagged, not filed away**. What a labeller flags is what the text does, judged
+from the words alone: they are never shown whether the reviewer recommended the game, so that
+they cannot be led by it, and so they are in no position to report that the two disagree.
+Putting that flag next to the rating is what finds the disagreement, and that is arithmetic
+rather than a judgement. The review still sorts by what it is actually about, so the praise
+buried in a joke review still counts as praise of whatever it praises. You can then include, exclude or inspect the
 flagged ones deliberately, instead of discovering later that they were silently miscounted.
 
 ## How it knows whether it is right

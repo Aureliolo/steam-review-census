@@ -94,3 +94,28 @@ VR and headsets (vr)
   Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, how convincing it is to be inside it, and which headsets it works with.
   RULE: Anything about being in a headset belongs here, including whether a given headset is supported. How the game looks on a monitor belongs to graphics.
 
+Every label also carries four judgements about the review itself. None of them changes which
+category it belongs to.
+
+primary
+  The one category the review is most about. Exactly one, always.
+
+secondary
+  Every other category the review genuinely also covers. Leave it empty when the review is
+  about one thing. Never add a category to fill space.
+
+ironic
+  The text says the opposite of what it appears to say. "0/10, I have not slept in three
+  days" is praise; "10/10 would lose my save file again" is a complaint. Judge this from
+  the words alone. You are not told whether the reviewer recommended the game, so that you
+  cannot be led by it.
+
+confidence
+  How sure you are of the primary category: high, medium or low. This one is about you.
+
+ambiguous
+  Whether the call is genuinely contested: two categories fit and the rules above do not
+  settle which. This one is about the review and the taxonomy rather than about you, and it
+  is the judgement that is read back. Agreement is reported separately for the reviews
+  marked here, because disagreement on them says as much about the taxonomy as about the
+  classifier.
