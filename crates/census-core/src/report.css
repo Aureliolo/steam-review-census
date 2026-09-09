@@ -677,6 +677,14 @@ tr.panel > td {
   padding: 0.5rem 0.9rem 1.25rem;
 }
 
+/* The evidence under a row is read at the width of the screen, not at the width of a table
+   that scrolls sideways. On a phone the table is twice the viewport, and every line of every
+   review ran off the side of it; the width of the page is 68rem of wrap inside whatever the
+   window is, less its padding. The 52rem is the measure long prose is read at anyway. */
+tr.panel > td > * {
+  max-width: min(52rem, calc(min(68rem, 100vw) - 3rem));
+}
+
 details.pile,
 details.legend {
   margin-bottom: 1rem;

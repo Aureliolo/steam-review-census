@@ -163,6 +163,15 @@ const PROBE = `(function () {
     check('opening one row opens others', Array.prototype.filter.call(panels, function (p) {
       return !p.hidden;
     }).length === 1);
+    // The panel is a cell in a table that scrolls sideways, so its content is laid out at the
+    // width of the table unless something says otherwise, and on a narrow screen that puts
+    // most of every quoted review off the side of the page.
+    var quoted = panel.querySelector('.text p') || panel.querySelector('p');
+    if (quoted) {
+      check('a quoted review is laid out wider than the screen it is read on',
+        Math.round(quoted.getBoundingClientRect().width) <= document.documentElement.clientWidth);
+    }
+
     row.click();
     check('a row cannot be closed again', panel.hidden === true);
 
