@@ -235,8 +235,11 @@ enum Command {
         allow_incomplete: bool,
     },
 
-    /// Fit category anchors from a reference set, so categories are represented by reviews
-    /// people wrote rather than by descriptions of the topic.
+    /// Fit category anchors from labelled reviews, so a category is what people wrote about it
+    ///
+    /// A written description of a topic is prose about that topic and reviews about it are
+    /// not, so a category with labelled examples is defined by them and one without falls
+    /// back to its description.
     Fit(FitArgs),
 
     /// Compare stored classifications against a reference set.
@@ -551,7 +554,9 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     println!("{}", "-".repeat(96));
     for stat in &categories {
         let fmt = |v: Option<f64>| v.map_or_else(|| "    -".to_owned(), |x| format!("{x:.2}"));
-        println!(
+        // Trimmed, because most rows have nothing in the last column and a line of trailing
+        // spaces is something anyone piping this to a file has to strip back out.
+        let row = format!(
             "{:<30} {:>8} {:>10} {:>8} {:>7}   {}",
             stat.label,
             stat.reference_mentions,
@@ -561,6 +566,7 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
             stat.mistaken_for()
                 .map_or_else(String::new, |(label, count)| format!("{label} ({count})"))
         );
+        println!("{}", row.trim_end());
     }
     println!(
         "\n\"Most often read as\" counts only the main subject, and only where the classifier\n\
@@ -1680,10 +1686,11 @@ fn print_slices(slices: &[census_core::Slice], measure: &str) {
             ("stratified", None) => "  <- enriched for rare categories; also fitting data",
             _ => "",
         };
-        println!(
+        let row = format!(
             "    {name:<14} n={:<5} {rate:>6}{interval:<16}{note}",
             slice.compared
         );
+        println!("{}", row.trim_end());
     }
 }
 
