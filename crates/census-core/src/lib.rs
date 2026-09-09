@@ -74,7 +74,7 @@ pub enum Error {
     #[error("no classifications found at {path}; run `census classify` first")]
     NoClassifications { path: std::path::PathBuf },
 
-    #[error("no reference set at {path}")]
+    #[error("no reference set at {path}; run `census sample` then `census ingest` first")]
     NoReferenceSet { path: std::path::PathBuf },
 
     #[error("no fitted anchors at {path}; run `census fit` first")]

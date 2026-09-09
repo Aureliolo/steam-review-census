@@ -650,6 +650,9 @@ async fn run_classify(args: ClassifyArgs) -> Result<()> {
         precision,
         model_dir,
     } = args;
+    // Before the encoder, which is several hundred megabytes and a wait, and which a game
+    // that was never crawled has no use for.
+    census_core::embed::latest_snapshot(&out, app_id)?;
     let anchors = load_anchors(
         app_id,
         anchors,
@@ -960,6 +963,13 @@ async fn run_fit(args: FitArgs) -> Result<()> {
     let holdout = holdout.as_str();
     if reference.is_some() && app_ids.len() > 1 {
         anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
+    }
+
+    // Before the model, and for every game rather than the first: a fit across six corpora
+    // that dies on the fifth has spent the download and the load to say what one look at the
+    // directory would have said.
+    for &app_id in &app_ids {
+        census_core::embed::latest_snapshot(&out, app_id)?;
     }
 
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
@@ -1507,6 +1517,9 @@ async fn run_embed(
     encoder: census_core::Encoder,
     precision: census_core::model::Precision,
 ) -> Result<()> {
+    // Before the model, which on a first run is a download, and which a game that was never
+    // crawled has no use for.
+    census_core::embed::latest_snapshot(out, app_id)?;
     let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
     let interactive = std::io::stderr().is_terminal();
 

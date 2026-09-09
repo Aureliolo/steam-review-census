@@ -771,7 +771,16 @@ pub fn corpus_encoder(out_dir: &Path, app_id: u32) -> Result<String> {
 }
 
 /// The newest snapshot directory for an app.
-pub(crate) fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
+///
+/// Public so a command can look for the corpus before it loads a model. Finding out that a
+/// game was never crawled after several hundred megabytes of encoder have come off disk costs
+/// the wait and says nothing this could not have said at once.
+///
+/// # Errors
+///
+/// Fails if the app has no directory, or none of its snapshots holds a shard with anything
+/// in it, which is what an interrupted crawl leaves behind.
+pub fn latest_snapshot(out_dir: &Path, app_id: u32) -> Result<PathBuf> {
     let app_dir = out_dir.join(format!("appid={app_id}"));
     let mut best: Option<(i64, PathBuf)> = None;
 
