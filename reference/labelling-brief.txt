@@ -87,12 +87,12 @@ Tutorial and learning (tutorial)
   RULE: Whether the game explains itself belongs here. Whether it is hard once you do understand it belongs to difficulty, and whether the systems themselves are any good belongs to gameplay.
 
 Licensed content (licensing)
-  Real names and the rights to them. Real teams, players, clubs and kits, real cars and tracks, licensed music, a licence lost or gained between releases, and how faithful the game is to the thing it is adapting.
-  RULE: A real name being present, missing or wrong belongs here. What is sold on top of the game belongs to monetisation, and whether an adaptation is well written belongs to story.
+  Whether the game has the real names. Real teams, players, clubs and kits, real cars and tracks, licensed music, a licence lost or gained between releases, and how faithful the game is to the thing it is adapting.
+  RULE: A real name being present, missing or wrong belongs here. What is sold on top of the game belongs to monetisation, whether an adaptation is well written belongs to story, and a protest about a licence agreement, terms of service or an account belongs to policy.
 
 VR and headsets (vr)
-  Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, how convincing it is to be inside it, and which headsets it works with.
-  RULE: Anything about being in a headset belongs here, including whether a given headset is supported. How the game looks on a monitor belongs to graphics.
+  Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, whether it was built for a headset or is a flat game bolted into one, and which headsets it works with.
+  RULE: Anything about being in a headset belongs here, including whether a given headset is supported. A flat game called immersive is not this: immersion belongs to whatever creates it, most often graphics or story. How the game looks on a monitor belongs to graphics.
 
 Every label also carries four judgements about the review itself. None of them changes which
 category it belongs to.

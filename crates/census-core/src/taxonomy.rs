@@ -337,13 +337,14 @@ pub const CORE_SPINE: &[Category] = &[
     Category {
         id: "licensing",
         label: "Licensed content",
-        description: "Real names and the rights to them. Real teams, players, clubs and kits, \
+        description: "Whether the game has the real names. Real teams, players, clubs and kits, \
                       real cars and tracks, licensed music, a licence lost or gained between \
                       releases, and how faithful the game is to the thing it is adapting.",
         boundary: Some(
             "A real name being present, missing or wrong belongs here. What is sold on top of \
-             the game belongs to monetisation, and whether an adaptation is well written \
-             belongs to story.",
+             the game belongs to monetisation, whether an adaptation is well written belongs \
+             to story, and a protest about a licence agreement, terms of service or an account \
+             belongs to policy.",
         ),
         alone: false,
     },
@@ -354,11 +355,14 @@ pub const CORE_SPINE: &[Category] = &[
         id: "vr",
         label: "VR and headsets",
         description: "Playing it in a headset. Room scale and seated play, motion sickness and \
-                      comfort options, tracking and the controllers in your hands, how \
-                      convincing it is to be inside it, and which headsets it works with.",
+                      comfort options, tracking and the controllers in your hands, whether it \
+                      was built for a headset or is a flat game bolted into one, and which \
+                      headsets it works with.",
         boundary: Some(
             "Anything about being in a headset belongs here, including whether a given headset \
-             is supported. How the game looks on a monitor belongs to graphics.",
+             is supported. A flat game called immersive is not this: immersion belongs to \
+             whatever creates it, most often graphics or story. How the game looks on a \
+             monitor belongs to graphics.",
         ),
         alone: false,
     },
