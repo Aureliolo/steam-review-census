@@ -832,7 +832,7 @@ ul.languages {
 
 ul.languages li {
   display: grid;
-  grid-template-columns: 8rem 1fr 5rem;
+  grid-template-columns: 8rem 1fr 3.5rem 5rem;
   align-items: center;
   gap: 0.75rem;
   font-size: 0.88rem;
@@ -843,10 +843,18 @@ ul.languages .bar {
   height: 6px;
 }
 
+ul.languages .lang-share,
 ul.languages .lang-count {
   text-align: right;
-  color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
+}
+
+ul.languages .lang-share {
+  font-weight: 600;
+}
+
+ul.languages .lang-count {
+  color: var(--ink-faint);
 }
 
 .back {

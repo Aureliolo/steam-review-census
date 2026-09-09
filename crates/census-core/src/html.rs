@@ -1118,15 +1118,7 @@ fn languages(out: &mut String, app: &AppReport) {
         .find(|(name, _)| name == "english")
         .map_or(0, |(_, count)| *count);
 
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "review counts are far below 2^53"
-    )]
-    let not_english = if total > 0 {
-        (total - english) as f64 / total as f64
-    } else {
-        0.0
-    };
+    let not_english = share_of(total - english, total);
 
     out.push_str("<h3>What language it was said in</h3>\n");
     let _ = writeln!(
@@ -1149,17 +1141,28 @@ fn languages(out: &mut String, app: &AppReport) {
             reason = "review counts are far below 2^53"
         )]
         let fill = *count as f64 / widest as f64;
+        // A share as well as a count, the way every other table on the page reads. Six
+        // thousand reviews is a different thing in a corpus of thirty thousand and in one of
+        // a million, and nothing else on the row says which of those this is.
         let _ = writeln!(
             out,
             "<li><span class=\"lang-name\">{}</span>\
              <span class=\"bar\" style=\"--fill:{fill:.4}\"></span>\
-             <span class=\"lang-count\">{}</span></li>",
+             <span class=\"lang-share\">{}</span><span class=\"lang-count\">{}</span></li>",
             escape(&language_name(name)),
+            percent(share_of(*count, total)),
             thousands(*count)
         );
     }
     out.push_str("</ul>\n");
 
+    let tail: u64 = app
+        .classification
+        .languages
+        .iter()
+        .skip(LANGUAGES_SHOWN)
+        .map(|(_, count)| count)
+        .sum();
     let rest = app
         .classification
         .languages
@@ -1168,8 +1171,22 @@ fn languages(out: &mut String, app: &AppReport) {
     if rest > 0 {
         let _ = writeln!(
             out,
-            "<p class=\"note\">and {rest} more languages with fewer reviews each.</p>"
+            "<p class=\"note\">and {rest} more languages, {} of the corpus between them.</p>",
+            percent(share_of(tail, total))
         );
+    }
+}
+
+/// A share, where a denominator of nothing is nothing rather than a division by zero.
+fn share_of(part: u64, whole: u64) -> f64 {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    if whole > 0 {
+        part as f64 / whole as f64
+    } else {
+        0.0
     }
 }
 
@@ -2135,6 +2152,24 @@ mod tests {
             escape("<script>alert(\"x\" & 'y')</script>"),
             "&lt;script&gt;alert(&quot;x&quot; &amp; &#39;y&#39;)&lt;/script&gt;"
         );
+    }
+
+    /// Six thousand reviews is a different thing in a corpus of thirty thousand and in one
+    /// of a million, and a bar says which is bigger but never how much of the whole it is.
+    #[test]
+    fn every_language_says_how_much_of_the_corpus_it_is() {
+        let page = render(&sample_report("ordinary text"));
+        let list = page
+            .split_once("<ul class=\"languages\">")
+            .expect("no languages")
+            .1
+            .split_once("</ul>")
+            .expect("the list never ends")
+            .0;
+        // 600 English and 400 Chinese of a thousand.
+        assert!(list.contains(">60.0%<"), "English has no share: {list}");
+        assert!(list.contains(">40.0%<"), "Chinese has no share: {list}");
+        assert!(list.contains(">600<") && list.contains(">400<"), "{list}");
     }
 
     #[test]
