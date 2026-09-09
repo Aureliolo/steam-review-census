@@ -250,6 +250,19 @@ const PROBE = `(function () {
   check('the page itself pans sideways',
     document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
+  // The only links off this page are the ones back to the review on Steam, and a new window
+  // opened without saying so keeps a handle on the one it came from and tells the site it
+  // arrived from where. A page holding a corpus that never left the machine says neither.
+  var out = document.querySelectorAll('a[target="_blank"]');
+  check('nothing on the page links back to where its numbers came from', out.length > 0);
+  check('a link opens a window that can reach back into this page', Array.prototype.every.call(
+    out,
+    function (a) {
+      var rel = a.getAttribute('rel') || '';
+      return rel.indexOf('noopener') !== -1 && rel.indexOf('noreferrer') !== -1;
+    }
+  ));
+
   // Headings are how anything not reading the page top to bottom moves around it, and a
   // level skipped puts a section under something it does not belong to.
   var levels = Array.prototype.map.call(

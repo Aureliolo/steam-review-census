@@ -36,6 +36,12 @@ Chrome is found in the usual places per platform, or wherever `CHROME_PATH` says
 check in it is a promise the page makes in its own prose; if you change what the page says
 it does, change the check with it.
 
+Two of those promises are watched rather than read. The page is reloaded with the network
+being listened to and fails on any request but the file itself, because a stylesheet pulling
+a font would pass any amount of reading the markup for URLs. And every piece of text on it is
+measured against whatever is composited behind it, in both themes, because a palette is a set
+of tokens until a browser draws it.
+
 ## What is held to a higher bar
 
 This tool exists to make a percentage mean what it appears to mean, so anything affecting a
