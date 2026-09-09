@@ -34,6 +34,12 @@ const SPARK_HEIGHT: f64 = 40.0;
 /// something to say.
 const ENOUGH_FOR_A_RATE: u64 = 30;
 
+/// A rate below which no game can be said to talk about a subject more than another.
+///
+/// It is the point at which the page stops printing a number and prints "less than" instead,
+/// which is the same judgement: under it there is a rate, and there is nothing to rank.
+const TOO_SMALL_TO_RANK: f64 = 0.001;
+
 /// Renders the whole report.
 #[must_use]
 pub fn render(report: &Report) -> String {
@@ -150,12 +156,20 @@ fn overview(out: &mut String, report: &Report) {
         out,
         "<p class=\"note\">Mention rates for {} reviews of {} games. Read down a column for \
          one game and across a row to see which games a subject belongs to. Deeper shading is \
-         a higher rate and the outlined cell is the highest in its row; the rates are not \
-         comparable to any other corpus.</p>",
+         a higher rate, and a cell is outlined where one game raises a subject more than every \
+         other by more than rounding; the rates are not comparable to any other corpus.</p>",
         thousands(total),
         report.apps.len()
     );
 
+    matrix(out, report);
+    widest_apart(out, report);
+    pooled_agreement(out, report);
+    out.push_str("</div>\n</section>\n");
+}
+
+/// Every category against every game, loudest subject first.
+fn matrix(out: &mut String, report: &Report) {
     let mut order: Vec<(&str, &str, u64)> = Vec::new();
     for category in CORE_SPINE {
         let pooled: u64 = report
@@ -196,14 +210,7 @@ fn overview(out: &mut String, report: &Report) {
                     .and_then(|c| app.rate(c.mention_count))
             })
             .collect();
-        // Which game a subject belongs to most is the question a reader brings to a row, and
-        // reading it off six shades of the same colour is guesswork.
-        let loudest = rates
-            .iter()
-            .enumerate()
-            .filter_map(|(index, rate)| rate.map(|rate| (index, rate)))
-            .max_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(index, _)| index);
+        let loudest = belongs_to(&rates);
 
         let _ = write!(
             out,
@@ -241,9 +248,32 @@ fn overview(out: &mut String, report: &Report) {
         out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n</div>\n");
-    widest_apart(out, report);
-    pooled_agreement(out, report);
-    out.push_str("</div>\n</section>\n");
+}
+
+/// The game a row belongs to, where the table can honestly say there is one.
+///
+/// Which game a subject belongs to is the question a reader brings to a row, and reading it
+/// off six shades of the same colour is guesswork. Two things have to hold before the table
+/// answers it. The rate has to be one the page prints as a number rather than as "less than":
+/// three reviews in a million beating two is not a subject belonging to a game. And the
+/// leader has to be told apart from the runner-up in the figures actually printed, because a
+/// reader who sees the same number twice with one of them outlined is being shown a rounding
+/// difference dressed as a finding.
+fn belongs_to(rates: &[Option<f64>]) -> Option<usize> {
+    let (best, highest) = rates
+        .iter()
+        .enumerate()
+        .filter_map(|(index, rate)| rate.map(|rate| (index, rate)))
+        .max_by(|a, b| a.1.total_cmp(&b.1))?;
+    if highest < TOO_SMALL_TO_RANK {
+        return None;
+    }
+    let leader = percent(highest);
+    rates
+        .iter()
+        .enumerate()
+        .all(|(index, rate)| index == best || rate.is_none_or(|rate| percent(rate) != leader))
+        .then_some(best)
 }
 
 /// The one finding only a table of several games can carry.
@@ -277,9 +307,12 @@ fn widest_apart(out: &mut String, report: &Report) {
         }
     }
 
-    let Some((_, label, most, high, least, low)) = widest else {
+    let Some((spread, label, most, high, least, low)) = widest else {
         return;
     };
+    if spread < TOO_SMALL_TO_RANK {
+        return;
+    }
     let _ = writeln!(
         out,
         "<p class=\"headline\">The subject these games disagree about most is \
@@ -1764,6 +1797,70 @@ mod tests {
             "an honest figure needs no hedging"
         );
         assert_eq!(coverage(0.5), "50.0%");
+    }
+
+    /// Marking a game as the one that talks about a subject most is a claim, and on a row
+    /// nobody raises there is nothing to claim: three reviews in a million beat two.
+    #[test]
+    fn a_subject_nobody_raises_has_no_game_it_belongs_to() {
+        let mut report = two_games();
+        for (app, mentions) in report.apps.iter_mut().zip([3_u64, 2]) {
+            app.classification.reviews = 100_000;
+            // Performance is the row that exists only because five reviews in two hundred
+            // thousand mention it.
+            app.classification.categories[1].mention_count = mentions;
+        }
+        // Bugs is loud on both games and loudest on one of them, so it keeps its outline.
+        report.apps[1].classification.categories[0].mention_count = 300;
+
+        let matrix = |report: &Report| {
+            render(report)
+                .split_once("<table class=\"matrix\">")
+                .expect("no matrix")
+                .1
+                .split_once("</table>")
+                .expect("the matrix never ends")
+                .0
+                .to_owned()
+        };
+        let performance = |grid: &str| {
+            grid.split_once("<th scope=\"row\">Performance</th>")
+                .expect("no performance row")
+                .1
+                .split_once("</tr>")
+                .expect("the row never ends")
+                .0
+                .to_owned()
+        };
+
+        let grid = matrix(&report);
+        assert!(
+            grid.contains("heat loudest"),
+            "a rate worth ranking is not marked"
+        );
+        assert!(
+            !performance(&grid).contains("loudest"),
+            "three reviews in a hundred thousand were called a game's subject"
+        );
+
+        report.apps[0].classification.categories[1].mention_count = 4_000;
+        assert!(
+            performance(&matrix(&report)).contains("loudest"),
+            "a game that does raise the subject is not marked"
+        );
+
+        // Both print 4.0%, so which of them is ahead is a difference the reader cannot see.
+        report.apps[1].classification.categories[1].mention_count = 3_999;
+        let tied = performance(&matrix(&report));
+        assert_eq!(
+            tied.matches("4.0%").count(),
+            2,
+            "the tie is not on the page"
+        );
+        assert!(
+            !tied.contains("loudest"),
+            "one review in a hundred thousand was drawn as a finding"
+        );
     }
 
     /// A grid of six columns leaves the reader to find the interesting row. The section
