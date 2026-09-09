@@ -997,6 +997,23 @@ fn trust(out: &mut String, app: &AppReport) {
             ),
         );
     }
+    // The capture holds more rows than any rate is taken over, and a reader who subtracts
+    // the two deserves the difference named rather than left to guess at it.
+    let blank = app
+        .crawl
+        .rows_unique
+        .saturating_sub(app.classification.reviews)
+        .saturating_sub(app.classification.unmatched);
+    if blank > 0 {
+        fact(
+            out,
+            "Reviews with no text",
+            &format!(
+                "{} (a rating and nothing else, counted in no rate)",
+                thousands(blank)
+            ),
+        );
+    }
     out.push_str("</dl>\n");
 
     match app.agreement.as_ref() {
@@ -1473,6 +1490,36 @@ mod tests {
                 "a panel named itself: {opening}"
             );
         }
+    }
+
+    /// A capture holding more rows than the rates are taken over is normal and invites
+    /// exactly one question, so the page answers it rather than leaving the reader to
+    /// subtract two numbers and wonder.
+    #[test]
+    fn the_gap_between_what_was_captured_and_what_was_counted_is_named() {
+        let mut report = sample_report("ordinary text");
+        report.apps[0].crawl.rows_unique = 1_010;
+        report.apps[0].classification.reviews = 1_000;
+        report.apps[0].classification.unmatched = 4;
+
+        let page = render(&report);
+        assert!(
+            page.contains("Reviews with no text"),
+            "the blanks go unmentioned"
+        );
+        assert!(
+            page.contains("6 (a rating and nothing else"),
+            "wrong blank count"
+        );
+        assert!(page.contains("Reviews with no vector"));
+
+        report.apps[0].crawl.rows_unique = 1_000;
+        report.apps[0].classification.unmatched = 0;
+        let tidy = render(&report);
+        assert!(
+            !tidy.contains("Reviews with no text"),
+            "a capture with nothing missing should say nothing"
+        );
     }
 
     #[test]
