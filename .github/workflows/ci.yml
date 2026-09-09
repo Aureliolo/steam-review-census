@@ -54,3 +54,7 @@ jobs:
       # is a different page and gets driven too.
       - run: cargo run -p census-core --example sample-report -- one.html --one-game
       - run: node tools/report-check/check.mjs one.html
+      # A census of a genre is dozens of games, and that is where the cross-game table stops
+      # fitting on a screen at all. Four games never exercise it.
+      - run: cargo run -p census-core --example sample-report -- many.html --games 36
+      - run: node tools/report-check/check.mjs many.html
