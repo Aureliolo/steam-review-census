@@ -667,7 +667,10 @@ fn over_time(out: &mut String, app: &AppReport) {
 
     let _ = writeln!(
         out,
-        "</svg>\n<figcaption><span>{}</span><span>{}</span></figcaption>\n</figure>",
+        // The two ends of the axis sit at the two ends of the caption, and read as one word
+        // to anything that hears the page rather than seeing it.
+        "</svg>\n<figcaption><span>{}</span><span class=\"read-aloud\"> to </span>\
+         <span>{}</span></figcaption>\n</figure>",
         escape(&first),
         escape(&last)
     );
