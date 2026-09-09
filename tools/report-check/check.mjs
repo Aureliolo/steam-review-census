@@ -115,13 +115,15 @@ const PROBE = `(function () {
   if (input && count) {
     var everything = count.textContent;
     var rows = visible('table.categories tbody tr.row');
+    // Only a report of several games has one, and a report of one game must still work.
     var matrix = visible('table.matrix tbody tr');
-    check('nothing is on screen to filter', rows > 0 && matrix > 0);
+    check('nothing is on screen to filter', rows > 0);
 
     input.value = 'price';
     input.dispatchEvent(new Event('input'));
     check('filtering narrows no category table', visible('table.categories tbody tr.row') < rows);
-    check('filtering narrows no cross-game matrix', visible('table.matrix tbody tr') < matrix);
+    check('filtering narrows no cross-game matrix',
+      matrix === 0 || visible('table.matrix tbody tr') < matrix);
     check('a filtered row keeps its panel on screen', (function () {
       return Array.prototype.every.call(panels, function (p) {
         var row = p.previousElementSibling;

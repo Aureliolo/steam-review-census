@@ -48,3 +48,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo run -p census-core --example sample-report -- report.html
       - run: node tools/report-check/check.mjs report.html
+      # A report of one game has no cross-game matrix and no contents to come back to, so it
+      # is a different page and gets driven too.
+      - run: cargo run -p census-core --example sample-report -- one.html --one-game
+      - run: node tools/report-check/check.mjs one.html

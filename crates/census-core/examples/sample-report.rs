@@ -24,12 +24,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "sample-report.html".to_owned())
         .into();
+    // A report of one game has no cross-game matrix and no contents, and is a different page
+    // to drive. Both shapes ship, so both are worth being able to render.
+    let alone = std::env::args().any(|argument| argument == "--one-game");
+    let mut apps = vec![game(7, "A Measured Game", true)];
+    if !alone {
+        apps.push(game(11, "An Unmeasured Game", false));
+    }
     let report = Report {
         generated_unix: 1_760_000_000,
-        apps: vec![
-            game(7, "A Measured Game", true),
-            game(11, "An Unmeasured Game", false),
-        ],
+        apps,
     };
     std::fs::write(&path, census_core::html::render(&report))?;
     println!("{}", path.display());
