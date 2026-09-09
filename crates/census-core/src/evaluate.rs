@@ -59,10 +59,13 @@ pub struct ReferenceLabel {
 
 /// A reference set as it is stored on disk.
 ///
-/// Split across two files on purpose. `manifest.json` is written by hand and says where the
-/// labels came from; `labels.json` is generated. Keeping the provenance out of the
-/// generated file makes it harder to lose track of what produced a set, which is the one
-/// fact that determines what its numbers may be called.
+/// Split across two files on purpose. `manifest.json` says where the labels came from;
+/// `labels.json` is generated. Keeping the provenance out of the generated file makes it
+/// harder to lose track of what produced a set, which is the one fact that determines what
+/// its numbers may be called.
+///
+/// Provenance is written by hand. The taxonomy is not: `census ingest` records it, because a
+/// version typed beside labels a program wrote drifts from them in both directions.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReferenceSet {
     pub app_id: u32,

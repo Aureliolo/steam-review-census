@@ -723,6 +723,14 @@ fn run_ingest(
     }
     let path = census_core::sample::write_labels(&dir, &labels)?;
     println!("  labels       {}", path.display());
+    let was = census_core::sample::record_taxonomy(&dir, app_id)?;
+    if was != census_core::CORE_SPINE_VERSION {
+        println!(
+            "  taxonomy     {} (was {})",
+            census_core::CORE_SPINE_VERSION,
+            if was.is_empty() { "unset" } else { &was }
+        );
+    }
     Ok(())
 }
 

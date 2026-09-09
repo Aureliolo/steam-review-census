@@ -32,7 +32,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     Error, Result,
     evaluate::ReferenceLabel,
-    taxonomy::{CONFIDENCE, CORE_SPINE},
+    taxonomy::{CONFIDENCE, CORE_SPINE, CORE_SPINE_VERSION},
 };
 
 /// How many reviews to draw, and how to spread them.
@@ -284,6 +284,50 @@ pub fn write_labels(dir: &Path, labels: &[ReferenceLabel]) -> Result<std::path::
     let path = dir.join("labels.json");
     std::fs::write(&path, serde_json::to_vec_pretty(labels)?)?;
     Ok(path)
+}
+
+/// A reference set's manifest as it is written back, with everything else carried through.
+///
+/// Only the taxonomy is the tool's to write. Who produced the labels, whether a person has
+/// checked them and what the set is for are provenance, and provenance a program fills in for
+/// itself is provenance nobody wrote down.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Manifest {
+    app_id: u32,
+    produced_by: String,
+    spine_version: String,
+    #[serde(default)]
+    human_verified: bool,
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Records in the manifest which taxonomy these labels were checked against.
+///
+/// The version had to be typed by hand beside labels a program wrote, and the two drift in
+/// both directions: a manifest still naming the old spine makes a fresh set unusable, and one
+/// updated ahead of the labels makes a stale set look current, which is worse because
+/// everything downstream then runs. `ingest` is the only place that sees the labels and the
+/// taxonomy at the same moment, so it is the place that can say.
+///
+/// # Errors
+///
+/// Fails if the manifest cannot be read, parsed or written.
+pub fn record_taxonomy(dir: &Path, app_id: u32) -> Result<String> {
+    let path = dir.join("manifest.json");
+    let mut manifest = match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice::<Manifest>(&bytes)?,
+        Err(_) => Manifest {
+            app_id,
+            produced_by: String::new(),
+            spine_version: String::new(),
+            human_verified: false,
+            rest: serde_json::Map::new(),
+        },
+    };
+    let was = std::mem::replace(&mut manifest.spine_version, CORE_SPINE_VERSION.to_owned());
+    std::fs::write(&path, serde_json::to_vec_pretty(&manifest)?)?;
+    Ok(was)
 }
 
 /// Merges returned labels into a reference set, checking them against the drawn sample.
@@ -570,6 +614,33 @@ mod tests {
             "a set whose judgements went missing was called clean"
         );
         assert!(labels[0].ambiguous, "the judgement that was made was lost");
+    }
+
+    /// The taxonomy a set was labelled against decides whether fitting from it is allowed at
+    /// all, and it was typed by hand beside labels a program wrote. Everything else in the
+    /// manifest says who produced the labels, which no program is in a position to claim.
+    #[test]
+    fn recording_the_taxonomy_leaves_the_provenance_beside_it_alone() {
+        let dir = std::env::temp_dir().join("census-manifest-taxonomy");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("manifest.json"),
+            r#"{"app_id":7,"produced_by":"three people and an argument",
+                "spine_version":"core-1","human_verified":true,
+                "notes":["the one thing nobody should lose"]}"#,
+        )
+        .unwrap();
+
+        let was = record_taxonomy(&dir, 7).unwrap();
+        let written = std::fs::read_to_string(dir.join("manifest.json")).unwrap();
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(was, "core-1", "the version it replaced is not reported");
+        let back: serde_json::Value = serde_json::from_str(&written).unwrap();
+        assert_eq!(back["spine_version"], CORE_SPINE_VERSION);
+        assert_eq!(back["produced_by"], "three people and an argument");
+        assert_eq!(back["human_verified"], true);
+        assert_eq!(back["notes"][0], "the one thing nobody should lose");
     }
 
     #[test]
