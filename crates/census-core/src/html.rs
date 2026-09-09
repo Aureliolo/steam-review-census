@@ -528,25 +528,27 @@ fn headline(out: &mut String, app: &AppReport) {
     out.push_str("\n</p>\n");
 }
 
-/// Reviews per month, and how many of them recommended the game.
-///
-/// A mention rate is one number for a corpus that took years to gather. A game review-bombed
-/// for a fortnight and quiet since produces much the same rate as one grumbled about steadily
-/// for a decade, and a reader shown only the rate cannot tell which they are looking at.
-///
-/// Drawn as inline SVG: a chart that fetched a plotting library would not be a self-contained
-/// page, and this one is two shapes.
 /// The month the line falls furthest, as a sentence rather than as a shape to point at.
 ///
 /// Months too small to carry a rate are left out for the same reason they are left out of the
 /// sparkline: four reviews and one thumb up is 25% and is not the month a game was hated in.
-fn worst_month(months: &[crate::report::Month]) -> String {
+///
+/// A game whose launch month is both its busiest and its angriest, which is most of the ones
+/// worth reporting on, would otherwise have that month and its size named twice in three
+/// lines.
+fn worst_month(months: &[crate::report::Month], busiest: Option<&crate::report::Month>) -> String {
     let coldest = months
         .iter()
         .filter(|month| month.reviews >= ENOUGH_FOR_A_RATE)
         .filter_map(|month| month.positive_share().map(|share| (month, share)))
         .min_by(|a, b| a.1.total_cmp(&b.1));
     coldest.map_or_else(String::new, |(month, share)| {
+        if busiest.is_some_and(|peak| peak.label == month.label) {
+            return format!(
+                " It falls furthest in that same month, when {} of them recommended the game.",
+                percent(share)
+            );
+        }
         format!(
             " It falls furthest in {}, when {} of {} reviews recommended the game.",
             escape(&crate::time::month_name(&month.label)),
@@ -556,6 +558,14 @@ fn worst_month(months: &[crate::report::Month]) -> String {
     })
 }
 
+/// Reviews per month, and how many of them recommended the game.
+///
+/// A mention rate is one number for a corpus that took years to gather. A game review-bombed
+/// for a fortnight and quiet since produces much the same rate as one grumbled about steadily
+/// for a decade, and a reader shown only the rate cannot tell which they are looking at.
+///
+/// Drawn as inline SVG: a chart that fetched a plotting library would not be a self-contained
+/// page, and this one is two shapes.
 fn over_time(out: &mut String, app: &AppReport) {
     let months = &app.classification.months;
     if months.len() < 2 {
@@ -582,7 +592,7 @@ fn over_time(out: &mut String, app: &AppReport) {
         // The dip in that line is what a reader looks for and the one thing on the chart a
         // pointer is needed to read. It costs a clause to say, and a pointer is a thing not
         // every reader has.
-        worst_month(months)
+        worst_month(months, peak)
     );
 
     #[expect(
@@ -2018,9 +2028,27 @@ mod tests {
             page.contains("against a busiest month of 600 in Feb 2024"),
             "the chart has no scale on it"
         );
+        // The busiest month is also the angriest here, as it is on most games worth reporting
+        // on, and naming it and its size twice in three lines reads as a mistake.
         assert!(
-            page.contains("falls furthest in Feb 2024, when 63.3% of 600 reviews recommended"),
+            page.contains("falls furthest in that same month, when 63.3% of them recommended"),
             "the chart's low point can only be reached with a pointer"
+        );
+        let note = page
+            .split_once("Reviews per month,")
+            .expect("no chart")
+            .1
+            .split_once("</p>")
+            .expect("the note never ends")
+            .0;
+        assert!(
+            !note.contains("furthest in Feb 2024"),
+            "the busiest month is named again as the angriest: {note}"
+        );
+        assert_eq!(
+            note.matches("600").count(),
+            1,
+            "the size of that month is given twice: {note}"
         );
 
         // Four reviews and none of them a thumb up is 0% and is not the month a game was
