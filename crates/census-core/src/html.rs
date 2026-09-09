@@ -498,6 +498,20 @@ fn categories(out: &mut String, app: &AppReport) {
          share of the reviews raising a category that still recommended the game, against \
          this game's own baseline. Select a row to read the reviews behind it.</p>\n",
     );
+    // Otherwise the two identical columns on those rows look like a mistake.
+    let alone: Vec<&str> = CORE_SPINE
+        .iter()
+        .filter(|category| category.alone)
+        .map(|category| category.label)
+        .collect();
+    if !alone.is_empty() {
+        let _ = writeln!(
+            out,
+            "<p class=\"note\">{} are claims that no aspect was named, so nothing else can be \
+             true of the same review and their mention rate is their main-subject share.</p>",
+            escape(&alone.join(" and "))
+        );
+    }
 
     let mut rows: Vec<&CategoryCount> = app.classification.categories.iter().collect();
     rows.sort_by_key(|category| std::cmp::Reverse(category.mention_count));
