@@ -391,7 +391,11 @@ pub fn labelling_brief() -> String {
 
     let mut brief = format!(
         "Categories (spine {CORE_SPINE_VERSION}). Each review gets exactly one primary \
-         category, plus any others it genuinely also covers.\n\n"
+         category, plus any others it genuinely also covers.\n\n\
+         You are shown the text of a review and nothing else: not which game it is, not \
+         whether the reviewer recommended it, not what the classifier guessed. The tool being \
+         measured sorts reviews from their text alone, so a label made from more than that \
+         would measure what you were told rather than how well it reads.\n\n"
     );
     for category in CORE_SPINE {
         let _ = writeln!(

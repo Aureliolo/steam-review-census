@@ -1,5 +1,7 @@
 Categories (spine core-4). Each review gets exactly one primary category, plus any others it genuinely also covers.
 
+You are shown the text of a review and nothing else: not which game it is, not whether the reviewer recommended it, not what the classifier guessed. The tool being measured sorts reviews from their text alone, so a label made from more than that would measure what you were told rather than how well it reads.
+
 Performance (performance)
   The game runs badly. Low frame rate, stuttering, frame drops, poor optimisation, long loading times, and it struggles even on good hardware.
   RULE: Frame rate and stuttering belong here. How the animation itself looks, and how fast it plays out, belong to graphics.

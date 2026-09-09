@@ -424,6 +424,12 @@ pub fn ingest(
 /// withheld: a labeller shown a proposed answer agrees with it far more often than one
 /// reading the review cold, and a reference set that inherits the classifier's mistakes
 /// cannot measure them.
+///
+/// Which game it is stays out for a different reason, and it costs something real: a review
+/// of a headset game saying only that it is immersive is unlabelable without knowing the
+/// game, and a labeller who knew would file it correctly. But the classifier reads the text
+/// and nothing else, so a label made from more than that measures the difference in what the
+/// two were shown rather than how well the classifier reads.
 #[derive(Debug, Clone, Serialize)]
 pub struct LabellingItem<'a> {
     pub id: &'a str,
