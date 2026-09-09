@@ -453,6 +453,22 @@ pub fn write_batches(
     }
     let batches = dir.join("batches");
     std::fs::create_dir_all(&batches)?;
+    // A smaller draw than last time leaves the tail of the last one on disk, and those files
+    // look exactly like work to hand out. The labels come back naming reviews the sample does
+    // not contain, which `ingest` catches and nobody's afternoon gets back.
+    if let Ok(entries) = std::fs::read_dir(&batches) {
+        for stale in entries.filter_map(std::result::Result::ok) {
+            let path = stale.path();
+            let named = path.extension().is_some_and(|kind| kind == "json")
+                && path
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("batch-"));
+            if named {
+                std::fs::remove_file(&path)?;
+            }
+        }
+    }
 
     let mut written = 0;
     for (index, chunk) in mine.chunks(batch_size).enumerate() {
@@ -620,6 +636,41 @@ mod tests {
             "a set whose judgements went missing was called clean"
         );
         assert!(labels[0].ambiguous, "the judgement that was made was lost");
+    }
+
+    /// A sample drawn again is a different sample, and the batches on disk have to be the one
+    /// that was drawn. A leftover from a larger draw is indistinguishable from work to hand
+    /// out, and comes back as labels for reviews nobody sampled.
+    #[test]
+    fn drawing_a_smaller_sample_does_not_leave_the_last_one_to_be_labelled() {
+        let dir = std::env::temp_dir().join("census-stale-batches");
+        std::fs::create_dir_all(dir.join("batches")).unwrap();
+        let drawn = |count: usize| -> Vec<SampledReview> {
+            (0..count)
+                .map(|slot| SampledReview {
+                    id: format!("r{slot}"),
+                    app_id: 7,
+                    subset: "random".to_owned(),
+                    predicted: "bugs".to_owned(),
+                    review: "something a person wrote".to_owned(),
+                })
+                .collect()
+        };
+
+        assert_eq!(write_batches(&dir, 7, &drawn(9), 3).unwrap(), 3);
+        assert_eq!(write_batches(&dir, 7, &drawn(3), 3).unwrap(), 1);
+        let left: Vec<String> = std::fs::read_dir(dir.join("batches"))
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        std::fs::remove_dir_all(&dir).ok();
+
+        assert_eq!(
+            left,
+            vec!["batch-000.json".to_owned()],
+            "a batch from the larger draw is still waiting to be labelled"
+        );
     }
 
     /// The taxonomy a set was labelled against decides whether fitting from it is allowed at
