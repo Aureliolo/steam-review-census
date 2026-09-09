@@ -13,8 +13,9 @@
     "smoothing": 4.0,
     "secondary_weight": 0.5,
     "mention_margin": 0.015,
-    "calibrate": false
+    "scoring": "raw"
   },
+  "centre": null,
   "categories": [
     {
       "id": "performance",

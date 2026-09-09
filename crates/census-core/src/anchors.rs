@@ -65,9 +65,8 @@ pub struct FitParams {
     pub secondary_weight: f32,
     /// How close to the best match another category must score to count as mentioned.
     pub mention_margin: f32,
-    /// Whether to score categories by how far above their own average a review sits, rather
-    /// than by raw similarity. See [`Anchors::calibrate`].
-    pub calibrate: bool,
+    /// What the corpus mean is used for before categories compete. See [`Scoring`].
+    pub scoring: Scoring,
 }
 
 impl Default for FitParams {
@@ -76,7 +75,7 @@ impl Default for FitParams {
             smoothing: DEFAULT_SMOOTHING,
             secondary_weight: DEFAULT_SECONDARY_WEIGHT,
             mention_margin: crate::classify::DEFAULT_MENTION_MARGIN,
-            calibrate: true,
+            scoring: Scoring::Bias,
         }
     }
 }
@@ -117,6 +116,10 @@ pub struct Anchors {
     #[serde(default)]
     pub fitted_from: Vec<u32>,
     pub params: Option<FitParams>,
+    /// The corpus mean subtracted from every review before it is compared, when the set was
+    /// fitted with [`Scoring::Centred`].
+    #[serde(default)]
+    pub centre: Option<Vec<f32>>,
     pub categories: Vec<Anchor>,
 }
 
@@ -141,6 +144,7 @@ impl Anchors {
             model: embedder.encoder().id().to_owned(),
             fitted_from: Vec::new(),
             params: None,
+            centre: None,
             categories: CORE_SPINE
                 .iter()
                 .zip(vectors)
@@ -203,7 +207,21 @@ impl Anchors {
             model: self.model.clone(),
             fitted_from: app_ids.to_vec(),
             params: Some(params),
+            centre: None,
             categories,
+        }
+    }
+
+    /// Applies whatever the fitted scoring needs the corpus mean for.
+    ///
+    /// One place, because a set fitted with one treatment and scored under another is not a
+    /// worse answer but a meaningless one, and three callers each remembering to do it is
+    /// three chances to forget.
+    pub fn prepare(&mut self, scoring: Scoring, centroid: &[f32]) {
+        match scoring {
+            Scoring::Raw => {}
+            Scoring::Bias => self.calibrate(centroid),
+            Scoring::Centred => self.centre_on(centroid),
         }
     }
 
@@ -238,14 +256,42 @@ impl Anchors {
         }
     }
 
-    /// How far above its own corpus average each category scores this review.
+    /// Moves the origin to the corpus mean, so what is compared is what makes a review
+    /// unlike the others rather than what every review has in common.
     ///
-    /// Identical to plain cosine similarity for an uncalibrated set, whose biases are zero.
+    /// The centre has to be kept, because the same subtraction has to be done to every
+    /// review the set is later run over, and an anchor set is used long after the corpus
+    /// mean that produced it has been forgotten.
+    pub fn centre_on(&mut self, centroid: &[f32]) {
+        if centroid.len() != self.dimensions() {
+            return;
+        }
+        for anchor in &mut self.categories {
+            for (slot, mean) in anchor.vector.iter_mut().zip(centroid) {
+                *slot -= mean;
+            }
+            normalise(&mut anchor.vector);
+            anchor.bias = 0.0;
+        }
+        self.centre = Some(centroid.to_vec());
+    }
+
+    /// How strongly each category matches this review, on whatever scale the set was fitted
+    /// with. Plain cosine similarity for a set that was fitted with neither treatment.
     #[must_use]
     pub fn similarities(&self, vector: &[f32]) -> Vec<f32> {
+        let Some(centre) = self.centre.as_ref().filter(|c| c.len() == vector.len()) else {
+            return self
+                .categories
+                .iter()
+                .map(|anchor| dot(&anchor.vector, vector) - anchor.bias)
+                .collect();
+        };
+        let mut moved: Vec<f32> = vector.iter().zip(centre).map(|(v, m)| v - m).collect();
+        normalise(&mut moved);
         self.categories
             .iter()
-            .map(|anchor| dot(&anchor.vector, vector) - anchor.bias)
+            .map(|anchor| dot(&anchor.vector, &moved))
             .collect()
     }
 
@@ -352,20 +398,50 @@ pub fn to_examples<S: std::hash::BuildHasher>(
 pub enum Calibration {
     #[default]
     Search,
-    Always,
-    Never,
+    Only(Scoring),
 }
 
 impl Calibration {
-    fn candidates(self) -> impl Iterator<Item = bool> {
+    fn candidates(self) -> impl Iterator<Item = Scoring> {
         match self {
-            Self::Search => [false, true].as_slice(),
-            Self::Always => [true].as_slice(),
-            Self::Never => [false].as_slice(),
+            Self::Search => [Scoring::Raw, Scoring::Bias, Scoring::Centred].as_slice(),
+            Self::Only(Scoring::Raw) => [Scoring::Raw].as_slice(),
+            Self::Only(Scoring::Bias) => [Scoring::Bias].as_slice(),
+            Self::Only(Scoring::Centred) => [Scoring::Centred].as_slice(),
         }
         .iter()
         .copied()
     }
+}
+
+/// How a review's distance from a category is turned into a score the categories compete on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scoring {
+    /// Plain cosine similarity to the anchor.
+    #[default]
+    Raw,
+    /// Each anchor's own mean similarity to the corpus subtracted from its score, so a
+    /// category is scored by how far above its own average a review sits.
+    Bias,
+    /// The corpus mean removed from both sides before they are compared.
+    ///
+    /// Sentence embeddings share a strong common direction: every review is somewhat similar
+    /// to every category, and the categories nearest that direction collect reviews that are
+    /// not about them.
+    ///
+    /// Its numerator ranks exactly as [`Scoring::Bias`] does, because the two extra terms it
+    /// picks up are the same for every category. What makes it a different answer is the
+    /// division that follows: each category is scaled by how far its own anchor sits from
+    /// the corpus mean, which is a per-category factor rather than a per-category offset.
+    ///
+    /// Measured and rejected on 2026-09-09 across the six reference sets under
+    /// gte-multilingual-base: 50.5% primary agreement and 0.458 mention macro F1 on the 600
+    /// held-back reviews, against 54.2% and 0.498 for raw similarity. It stays a candidate
+    /// because the search re-answers the question for every corpus and every encoder, and
+    /// the reason it loses here is a property of this embedding space rather than of the
+    /// method.
+    Centred,
 }
 
 /// Whether an anchor set picks the same primary category as the labels, review by review.
@@ -397,7 +473,6 @@ pub struct FitOutcome {
     /// Held-out primary agreement of the unfitted descriptions, on the same folds.
     pub baseline_agreement: f64,
     /// Whether the description-only baseline was better off calibrated too.
-    pub baseline_calibrated: bool,
     /// Held-out mention macro F1 of the chosen blend and margin.
     pub mention_macro_f1: f64,
     pub baseline_macro_f1: f64,
@@ -443,13 +518,13 @@ pub fn search(
     let mut best = (f64::NEG_INFINITY, FitParams::default());
     for &smoothing in SMOOTHING_GRID {
         for &secondary_weight in SECONDARY_GRID {
-            for calibrate in calibration.candidates() {
+            for scoring in calibration.candidates() {
                 for &mention_margin in margins {
                     let params = FitParams {
                         smoothing,
                         secondary_weight,
                         mention_margin,
-                        calibrate,
+                        scoring,
                     };
                     let found = score(params, objective);
                     if found > best.0 {
@@ -461,19 +536,26 @@ pub fn search(
     }
 
     // The description-only baseline is searched over everything that is not the blend
-    // itself, so neither the margin nor the calibration can be credited to fitting when it
-    // would have helped the descriptions just as much.
+    // itself, so neither the margin nor the treatment of the corpus mean can be credited to
+    // fitting when it would have helped the descriptions just as much. Each figure takes the
+    // best the descriptions manage on that question, rather than reporting one setting on
+    // both, which would flatter fitting on whichever question the setting was not chosen for.
     let flat = FitParams {
         smoothing: f32::INFINITY,
         secondary_weight: 0.0,
         ..FitParams::default()
     };
-    let mut baseline = (f64::NEG_INFINITY, flat);
-    for calibrate in calibration.candidates() {
-        let params = FitParams { calibrate, ..flat };
-        let found = score(params, objective);
-        if found > baseline.0 {
-            baseline = (found, params);
+    let mut baseline_agreement = f64::NEG_INFINITY;
+    let mut baseline_macro_f1 = f64::NEG_INFINITY;
+    for scoring in calibration.candidates() {
+        let params = FitParams { scoring, ..flat };
+        baseline_agreement = baseline_agreement.max(score(params, Objective::Primary));
+        for &mention_margin in MARGIN_GRID {
+            let params = FitParams {
+                mention_margin,
+                ..params
+            };
+            baseline_macro_f1 = baseline_macro_f1.max(score(params, Objective::Mentions));
         }
     }
 
@@ -489,7 +571,6 @@ pub fn search(
         found
     };
     let (mention_macro_f1, mention_margin) = best_margin(best.1);
-    let (baseline_macro_f1, _) = best_margin(baseline.1);
     let params = FitParams {
         mention_margin,
         ..best.1
@@ -500,8 +581,7 @@ pub fn search(
         // Reported rather than selected on, so a blend chosen for one question still says
         // plainly what it cost the other.
         primary_agreement: score(params, Objective::Primary),
-        baseline_agreement: score(baseline.1, Objective::Primary),
-        baseline_calibrated: baseline.1.calibrate,
+        baseline_agreement,
         mention_macro_f1,
         baseline_macro_f1,
         objective,
@@ -550,9 +630,7 @@ fn cross_validate(
             .map(|(_, example)| example.clone())
             .collect();
         let mut fitted = descriptions.fit(&train, &[], params);
-        if params.calibrate {
-            fitted.calibrate(centroid);
-        }
+        fitted.prepare(params.scoring, centroid);
 
         for example in examples.iter().skip(fold).step_by(folds) {
             let sims = fitted.similarities(&example.vector);
@@ -707,6 +785,7 @@ mod tests {
             model: crate::model::Encoder::E5Small.id().to_owned(),
             fitted_from: Vec::new(),
             params: None,
+            centre: None,
             categories: CORE_SPINE
                 .iter()
                 .enumerate()
@@ -944,6 +1023,57 @@ mod tests {
         assert!(
             (before.0 - before.1 - (after.0 - after.1)).abs() < 1e-6,
             "subtracting a constant should not change a gap"
+        );
+    }
+
+    /// Centring earns its place only if it can reach an answer calibrating cannot, and the
+    /// two agree on everything except the scale each category is divided by.
+    #[test]
+    fn centring_reaches_an_answer_calibrating_cannot() {
+        // A common direction every review and every anchor shares, which is what makes a
+        // broad category the nearest thing to reviews that are not about it.
+        // Two slots no category's own anchor sits in, so nothing but this arrangement
+        // decides the answer. The corpus mean lies along the second of them.
+        let (across, along) = (DIM - 2, DIM - 1);
+        let plane = |x: f32, y: f32| {
+            let mut vector = vec![0.0_f32; DIM];
+            vector[across] = x;
+            vector[along] = y;
+            vector
+        };
+
+        let mut anchors = descriptions();
+        anchors.categories[1].vector = plane(1.0, 0.0);
+        anchors.categories[2].vector = plane(0.0, 1.0);
+        // Mostly what every review has in common, with a little of its own.
+        let review = plane(0.436, 0.9);
+        let centroid = plane(0.0, 0.5);
+
+        let mut calibrated = anchors.clone();
+        calibrated.prepare(Scoring::Bias, &centroid);
+        let mut centred = anchors.clone();
+        centred.prepare(Scoring::Centred, &centroid);
+
+        // The two differ only by a per-category divisor, so a review they order differently
+        // is the entire justification for offering both.
+        let gap = |set: &Anchors| {
+            let sims = set.similarities(&review);
+            sims[2] - sims[1]
+        };
+        assert!(
+            gap(&calibrated) * gap(&centred) < 0.0,
+            "calibrated put the two categories {:?} and centred {:?}, which is the same \
+             answer twice",
+            gap(&calibrated),
+            gap(&centred)
+        );
+        assert!(
+            centred.centre.is_some(),
+            "the centre has to be kept, or the same subtraction cannot be done again"
+        );
+        assert!(
+            calibrated.centre.is_none(),
+            "calibrating needs nothing of the corpus at scoring time"
         );
     }
 

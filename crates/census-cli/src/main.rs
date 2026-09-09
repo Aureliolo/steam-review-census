@@ -60,6 +60,7 @@ impl From<Model> for census_core::Encoder {
 enum Calibrate {
     Search,
     On,
+    Centred,
     Off,
 }
 
@@ -67,8 +68,9 @@ impl From<Calibrate> for census_core::anchors::Calibration {
     fn from(value: Calibrate) -> Self {
         match value {
             Calibrate::Search => Self::Search,
-            Calibrate::On => Self::Always,
-            Calibrate::Off => Self::Never,
+            Calibrate::On => Self::Only(census_core::anchors::Scoring::Bias),
+            Calibrate::Centred => Self::Only(census_core::anchors::Scoring::Centred),
+            Calibrate::Off => Self::Only(census_core::anchors::Scoring::Raw),
         }
     }
 }
@@ -1000,9 +1002,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
             objective,
         );
         let mut anchors = descriptions.fit(&examples, &app_ids, outcome.params);
-        if outcome.params.calibrate {
-            anchors.calibrate(&centroid);
-        }
+        anchors.prepare(outcome.params.scoring, &centroid);
         (outcome, anchors)
     };
     let (outcome, fitted) = search(select.into());
@@ -1250,9 +1250,7 @@ fn measure_transfer(
                 select.into(),
             );
             let mut anchors = descriptions.fit(examples, &[game.app_id], outcome.params);
-            if outcome.params.calibrate {
-                anchors.calibrate(&game.centroid);
-            }
+            anchors.prepare(outcome.params.scoring, &game.centroid);
             anchors
         };
 
@@ -1349,11 +1347,11 @@ fn print_fit(
     println!("  secondary    {}", outcome.params.secondary_weight);
     println!("  margin       {}", outcome.params.mention_margin);
     println!(
-        "  calibration  {}",
-        if outcome.params.calibrate {
-            "on"
-        } else {
-            "off"
+        "  scoring      {}",
+        match outcome.params.scoring {
+            census_core::anchors::Scoring::Raw => "raw similarity",
+            census_core::anchors::Scoring::Bias => "each category against its own average",
+            census_core::anchors::Scoring::Centred => "the corpus mean removed from both sides",
         }
     );
     println!(
@@ -1370,11 +1368,7 @@ fn print_fit(
         "\n  {}-fold cross-validation, on training reviews each fold did not see:",
         outcome.folds
     );
-    let baseline_note = if outcome.baseline_calibrated {
-        "descriptions alone, also calibrated"
-    } else {
-        "descriptions alone"
-    };
+    let baseline_note = "descriptions alone, at their best";
     println!(
         "    primary agreement  {:.1}%  ({baseline_note}: {:.1}%)",
         outcome.primary_agreement * 100.0,
