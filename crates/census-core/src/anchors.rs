@@ -568,9 +568,6 @@ pub fn search(
     objective: Objective,
 ) -> FitOutcome {
     let folds = folds.max(2).min(examples.len().max(2));
-    let score = |params, objective| {
-        cross_validate(descriptions, examples, centroid, folds, params, objective)
-    };
     let margins: &[f32] = match objective {
         // The margin cannot change which category scores highest, so trying it here would
         // only spend folds to arrive back where it started.
@@ -578,23 +575,54 @@ pub fn search(
         Objective::Mentions => MARGIN_GRID,
     };
 
+    let sweep = |params, margins: &[f32], objective| {
+        across_margins(
+            descriptions,
+            examples,
+            centroid,
+            folds,
+            params,
+            margins,
+            objective,
+        )
+    };
+    let best_of = |params: FitParams, margins: &[f32], objective| {
+        sweep(params, margins, objective)
+            .into_iter()
+            .zip(margins)
+            .fold((f64::NEG_INFINITY, params), |best, (found, &margin)| {
+                if found > best.0 {
+                    (
+                        found,
+                        FitParams {
+                            mention_margin: margin,
+                            ..params
+                        },
+                    )
+                } else {
+                    best
+                }
+            })
+    };
+
     let mut best = (f64::NEG_INFINITY, FitParams::default());
     for &smoothing in SMOOTHING_GRID {
         for &secondary_weight in SECONDARY_GRID {
             for scoring in calibration.candidates() {
-                for &mention_margin in margins {
-                    for &repulsion in REPULSION_GRID {
-                        let params = FitParams {
+                for &repulsion in REPULSION_GRID {
+                    let found = best_of(
+                        FitParams {
                             smoothing,
                             secondary_weight,
-                            mention_margin,
+                            mention_margin: margins[0],
                             scoring,
                             repulsion,
-                        };
-                        let found = score(params, objective);
-                        if found > best.0 {
-                            best = (found, params);
-                        }
+                        },
+                        margins,
+                        objective,
+                    );
+                    if found.0 > best.0 {
+                        best = found;
                     }
                 }
             }
@@ -615,38 +643,19 @@ pub fn search(
     let mut baseline_macro_f1 = f64::NEG_INFINITY;
     for scoring in calibration.candidates() {
         let params = FitParams { scoring, ..flat };
-        baseline_agreement = baseline_agreement.max(score(params, Objective::Primary));
-        for &mention_margin in MARGIN_GRID {
-            let params = FitParams {
-                mention_margin,
-                ..params
-            };
-            baseline_macro_f1 = baseline_macro_f1.max(score(params, Objective::Mentions));
-        }
+        baseline_agreement =
+            baseline_agreement.max(best_of(params, &[params.mention_margin], Objective::Primary).0);
+        baseline_macro_f1 =
+            baseline_macro_f1.max(best_of(params, MARGIN_GRID, Objective::Mentions).0);
     }
 
-    let best_margin = |mut params: FitParams| {
-        let mut found = (f64::NEG_INFINITY, params.mention_margin);
-        for &candidate in MARGIN_GRID {
-            params.mention_margin = candidate;
-            let f1 = score(params, Objective::Mentions);
-            if f1 > found.0 {
-                found = (f1, candidate);
-            }
-        }
-        found
-    };
-    let (mention_macro_f1, mention_margin) = best_margin(best.1);
-    let params = FitParams {
-        mention_margin,
-        ..best.1
-    };
+    let (mention_macro_f1, params) = best_of(best.1, MARGIN_GRID, Objective::Mentions);
 
     FitOutcome {
         params,
         // Reported rather than selected on, so a blend chosen for one question still says
         // plainly what it cost the other.
-        primary_agreement: score(params, Objective::Primary),
+        primary_agreement: sweep(params, &[params.mention_margin], Objective::Primary)[0],
         baseline_agreement,
         mention_macro_f1,
         baseline_macro_f1,
@@ -673,20 +682,29 @@ pub enum Objective {
     Mentions,
 }
 
+/// One blend against every margin at once, returning a score per margin.
+///
 /// Round-robin folds. The reference set arrives grouped by predicted category, so dealing
 /// examples out in turn gives every fold nearly the same class balance, which random
 /// assignment would not at these counts: several categories have five examples in total.
-fn cross_validate(
+///
+/// Nothing about an anchor depends on the margin: it decides which of the finished vectors a
+/// review is judged to be near enough to, and even the repulsion pass reads the nearest one
+/// with no margin at all. Fitting the folds once and scoring each margin against the same
+/// vectors is the same measurement for a seventh of the arithmetic, which is most of what a
+/// search spends its time on.
+fn across_margins(
     descriptions: &Anchors,
     examples: &[Example],
     centroid: &[f32],
     folds: usize,
     params: FitParams,
+    margins: &[f32],
     objective: Objective,
-) -> f64 {
-    let mut agreed = 0_u64;
-    let mut total = 0_u64;
-    let mut confusion = vec![Counts::default(); CORE_SPINE.len()];
+) -> Vec<f64> {
+    let mut agreed = vec![0_u64; margins.len()];
+    let mut total = vec![0_u64; margins.len()];
+    let mut confusion = vec![vec![Counts::default(); CORE_SPINE.len()]; margins.len()];
 
     for fold in 0..folds {
         let train: Vec<Example> = examples
@@ -700,22 +718,28 @@ fn cross_validate(
 
         for example in examples.iter().skip(fold).step_by(folds) {
             let sims = fitted.similarities(&example.vector);
-            let (primary, mentions) = crate::classify::assign(&sims, params.mention_margin);
-            match objective {
-                Objective::Primary => {
-                    total += 1;
-                    if primary == example.primary {
-                        agreed += 1;
+            for (slot, &margin) in margins.iter().enumerate() {
+                let (primary, mentions) = crate::classify::assign(&sims, margin);
+                match objective {
+                    Objective::Primary => {
+                        total[slot] += 1;
+                        if primary == example.primary {
+                            agreed[slot] += 1;
+                        }
                     }
+                    Objective::Mentions => tally(&mut confusion[slot], example, mentions),
                 }
-                Objective::Mentions => tally(&mut confusion, example, mentions),
             }
         }
     }
 
     match objective {
-        Objective::Primary => ratio(agreed, total),
-        Objective::Mentions => macro_f1(&confusion),
+        Objective::Primary => agreed
+            .iter()
+            .zip(&total)
+            .map(|(hit, seen)| ratio(*hit, *seen))
+            .collect(),
+        Objective::Mentions => confusion.iter().map(|counts| macro_f1(counts)).collect(),
     }
 }
 
