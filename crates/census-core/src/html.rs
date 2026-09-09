@@ -241,8 +241,56 @@ fn overview(out: &mut String, report: &Report) {
         out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n</div>\n");
+    widest_apart(out, report);
     pooled_agreement(out, report);
     out.push_str("</div>\n</section>\n");
+}
+
+/// The one finding only a table of several games can carry.
+///
+/// Every game's own section opens with a sentence; this one opened with a grid and left the
+/// reader to find the interesting row. What a cross-game view is for is the subject that
+/// belongs to one game and not the others, so that is what it now says.
+fn widest_apart(out: &mut String, report: &Report) {
+    let rate = |app: &AppReport, id: &str| {
+        app.classification
+            .categories
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| app.rate(c.mention_count))
+    };
+
+    let mut widest: Option<(f64, &str, &AppReport, f64, &AppReport, f64)> = None;
+    for category in CORE_SPINE {
+        let mut rates: Vec<(&AppReport, f64)> = report
+            .apps
+            .iter()
+            .filter_map(|app| rate(app, category.id).map(|found| (app, found)))
+            .collect();
+        rates.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let (Some(low), Some(high)) = (rates.first(), rates.last()) else {
+            continue;
+        };
+        let spread = high.1 - low.1;
+        if widest.is_none_or(|(found, ..)| spread > found) {
+            widest = Some((spread, category.label, high.0, high.1, low.0, low.1));
+        }
+    }
+
+    let Some((_, label, most, high, least, low)) = widest else {
+        return;
+    };
+    let _ = writeln!(
+        out,
+        "<p class=\"headline\">The subject these games disagree about most is \
+         <strong>{}</strong>: {} of {} reviews raise it, against {} of {}. A rate is about \
+         one corpus, and this is what that means.</p>",
+        escape(&label.to_lowercase()),
+        percent(high),
+        escape(&most.crawl.title()),
+        percent(low),
+        escape(&least.crawl.title())
+    );
 }
 
 /// What the classifier is measured to get wrong, over every game at once.
@@ -1716,6 +1764,36 @@ mod tests {
             "an honest figure needs no hedging"
         );
         assert_eq!(coverage(0.5), "50.0%");
+    }
+
+    /// A grid of six columns leaves the reader to find the interesting row. The section
+    /// says which one it is, and a report of one game has no such row to name.
+    #[test]
+    fn a_report_of_several_games_says_what_they_disagree_about() {
+        let mut report = two_games();
+        // Bugs is level across both; performance is the row that separates them.
+        report.apps[1].classification.categories[1].mention_count = 20;
+
+        let page = render(&report);
+        let finding = page
+            .split_once("<h2>Across these games</h2>")
+            .expect("no cross-game section")
+            .1
+            .split_once("</section>")
+            .expect("the section never ends")
+            .0;
+        assert!(
+            finding.contains("disagree about most is <strong>performance</strong>"),
+            "the wrong row was named: {finding}"
+        );
+        assert!(finding.contains("A Game &lt;&amp; Friends&gt;"));
+        assert!(finding.contains("Another Game"));
+
+        let alone = render(&sample_report("ordinary text"));
+        assert!(
+            !alone.contains("disagree about most"),
+            "one game cannot disagree with itself"
+        );
     }
 
     #[test]
