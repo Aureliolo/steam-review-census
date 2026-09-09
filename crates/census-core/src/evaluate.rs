@@ -113,7 +113,7 @@ impl ReferenceSet {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CategoryAgreement {
     pub id: &'static str,
     pub label: &'static str,
@@ -216,7 +216,7 @@ fn rate(part: u64, whole: u64) -> Option<f64> {
 /// the classifier rarely picks. Once anchors are fitted the nesting matters more still: the
 /// stratified subset is training data, and any figure computed over it says what the
 /// anchors memorised rather than what they know.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Slice {
     pub subset: String,
     /// `None` for the subset taken whole, otherwise whether the labeller called the reviews
@@ -302,7 +302,7 @@ pub fn mcnemar_exact(gained: u64, lost: u64) -> Option<f64> {
     Some((2.0 * tail).min(1.0))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AgreementReport {
     /// The games behind this comparison. One per game evaluated, several once pooled.
     pub apps: Vec<u32>,

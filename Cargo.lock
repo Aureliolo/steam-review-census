@@ -490,6 +490,7 @@ dependencies = [
  "anyhow",
  "census-core",
  "clap",
+ "serde_json",
  "tokio",
 ]
 

@@ -255,6 +255,10 @@ enum Command {
         /// Reference set directory, holding manifest.json and labels.json.
         #[arg(long)]
         reference: Option<PathBuf>,
+        /// Write the comparison as JSON instead of tables, so a manifest can quote figures
+        /// nobody retyped.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -423,7 +427,8 @@ async fn main() -> Result<()> {
             app_ids,
             out,
             reference,
-        } => run_evaluate(&app_ids, &out, reference.as_ref()),
+            json,
+        } => run_evaluate(&app_ids, &out, reference.as_ref(), json),
     }
 }
 
@@ -466,7 +471,12 @@ fn run_report(
     Ok(())
 }
 
-fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathBuf>) -> Result<()> {
+fn run_evaluate(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    reference: Option<&PathBuf>,
+    json: bool,
+) -> Result<()> {
     if reference.is_some() && app_ids.len() > 1 {
         anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
     }
@@ -480,17 +490,34 @@ fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathB
         verified &= human_verified;
         reports.push((report, human_verified));
     }
-    for (index, (report, human_verified)) in reports.iter().enumerate() {
-        if index > 0 {
-            println!();
+    if !json {
+        for (index, (report, human_verified)) in reports.iter().enumerate() {
+            if index > 0 {
+                println!();
+            }
+            print_agreement(report, *human_verified);
         }
-        print_agreement(report, *human_verified);
     }
     let reports: Vec<census_core::AgreementReport> =
         reports.into_iter().map(|(report, _)| report).collect();
-    if reports.len() > 1 {
+    let pooled = (reports.len() > 1).then(|| census_core::evaluate::pooled(&reports));
+    if json {
+        // A manifest quoting figures read off a terminal block is a manifest with a typo in
+        // it, and one has already reached a shipped file. Thirty-six of them is thirty-six
+        // chances at the same mistake.
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "human_verified": verified,
+                "apps": reports,
+                "pooled": pooled,
+            }))?
+        );
+        return Ok(());
+    }
+    if let Some(pooled) = pooled {
         println!("\npooled over {} games", reports.len());
-        print_agreement(&census_core::evaluate::pooled(&reports), verified);
+        print_agreement(&pooled, verified);
     }
     Ok(())
 }
