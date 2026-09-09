@@ -1441,6 +1441,7 @@ mod tests {
             reference_mentions,
             predicted_mentions: mention_agreed,
             mention_agreed,
+            taken_as: Vec::new(),
         };
 
         assert!(

@@ -112,9 +112,28 @@ pub struct CategoryAgreement {
     pub reference_mentions: u64,
     pub predicted_mentions: u64,
     pub mention_agreed: u64,
+    /// Where the reviews the labels put here actually went, in [`CORE_SPINE`] order.
+    ///
+    /// The diagonal is the agreements. Knowing a category scores badly says nothing about
+    /// what to do; knowing it is read as one particular other category is a boundary rule
+    /// waiting to be written, and that is a fact about the taxonomy rather than the model.
+    pub taken_as: Vec<u64>,
 }
 
 impl CategoryAgreement {
+    /// The category this one is most often mistaken for, and how often, ignoring the
+    /// reviews it gets right.
+    #[must_use]
+    pub fn mistaken_for(&self) -> Option<(&'static str, u64)> {
+        let mine = CORE_SPINE.iter().position(|c| c.id == self.id);
+        self.taken_as
+            .iter()
+            .enumerate()
+            .filter(|(slot, _)| Some(*slot) != mine)
+            .max_by_key(|(_, count)| **count)
+            .filter(|(_, count)| **count > 0)
+            .and_then(|(slot, count)| Some((CORE_SPINE.get(slot)?.label, *count)))
+    }
     /// Of the mentions the classifier claims, the share the reference set also has.
     #[must_use]
     pub fn precision(&self) -> Option<f64> {
@@ -315,6 +334,7 @@ pub fn pooled(reports: &[AgreementReport]) -> AgreementReport {
             reference_mentions: 0,
             predicted_mentions: 0,
             mention_agreed: 0,
+            taken_as: vec![0; CORE_SPINE.len()],
         })
         .collect();
     let mut slices: Vec<Slice> = Vec::new();
@@ -342,6 +362,11 @@ pub fn pooled(reports: &[AgreementReport]) -> AgreementReport {
             into.reference_mentions += from.reference_mentions;
             into.predicted_mentions += from.predicted_mentions;
             into.mention_agreed += from.mention_agreed;
+            for (slot, count) in from.taken_as.iter().enumerate() {
+                if let Some(into) = into.taken_as.get_mut(slot) {
+                    *into += count;
+                }
+            }
         }
         agreed += report
             .categories
@@ -402,6 +427,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
             reference_mentions: 0,
             predicted_mentions: 0,
             mention_agreed: 0,
+            taken_as: vec![0; CORE_SPINE.len()],
         })
         .collect();
     let index: HashMap<&str, usize> = CORE_SPINE
@@ -425,6 +451,9 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
 
         if let Some(&slot) = index.get(label.primary.as_str()) {
             stats[slot].reference_primary += 1;
+            if let Some(&went) = index.get(predicted.primary.as_str()) {
+                stats[slot].taken_as[went] += 1;
+            }
         }
         if let Some(&slot) = index.get(predicted.primary.as_str()) {
             stats[slot].predicted_primary += 1;
@@ -720,6 +749,7 @@ mod tests {
             reference_mentions: refr,
             predicted_mentions: pred,
             mention_agreed: hit,
+            taken_as: vec![0; CORE_SPINE.len()],
         }
     }
 
@@ -731,6 +761,35 @@ mod tests {
         assert!((stat.recall().unwrap() - 0.8).abs() < 1e-9);
         let f1 = stat.f1().unwrap();
         assert!((f1 - 0.533_333).abs() < 1e-5, "f1 was {f1}");
+    }
+
+    /// A confusion count read off the wrong axis still produces a plausible sentence, so
+    /// the direction is pinned: this is where the reviews the labels put here ended up.
+    #[test]
+    fn a_category_reports_what_it_is_mistaken_for_and_not_the_reverse() {
+        let slot = |id: &str| CORE_SPINE.iter().position(|c| c.id == id).expect(id);
+        let mut stat = agreement(0, 12, 0);
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        stat.taken_as[slot("bugs")] = 40;
+        stat.taken_as[slot("performance")] = 7;
+        stat.taken_as[slot("verdict")] = 3;
+
+        let (label, count) = stat.mistaken_for().expect("seven went to performance");
+        assert_eq!(count, 7, "the forty it got right are not a confusion");
+        assert_eq!(
+            label,
+            crate::taxonomy::by_id("performance")
+                .expect("in the spine")
+                .label
+        );
+
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        stat.taken_as[slot("bugs")] = 40;
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a category nothing is confused with has nothing to report"
+        );
     }
 
     #[test]
@@ -837,6 +896,7 @@ mod tests {
                 reference_mentions: compared,
                 predicted_mentions: compared,
                 mention_agreed: hits,
+                taken_as: vec![0; CORE_SPINE.len()],
             }],
         };
         // A game where nine of ten agree and one where one of ninety does. Averaging the two

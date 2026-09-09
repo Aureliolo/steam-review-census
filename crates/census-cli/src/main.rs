@@ -523,21 +523,28 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     let mut categories = report.categories.clone();
     categories.sort_by_key(|c| std::cmp::Reverse(c.reference_mentions));
     println!(
-        "\n{:<30} {:>8} {:>10} {:>8} {:>7}",
+        "\n{:<30} {:>8} {:>10} {:>8} {:>7}   most often read as",
         "category", "in ref", "precision", "recall", "F1"
     );
-    println!("{}", "-".repeat(68));
+    println!("{}", "-".repeat(96));
     for stat in &categories {
         let fmt = |v: Option<f64>| v.map_or_else(|| "    -".to_owned(), |x| format!("{x:.2}"));
         println!(
-            "{:<30} {:>8} {:>10} {:>8} {:>7}",
+            "{:<30} {:>8} {:>10} {:>8} {:>7}   {}",
             stat.label,
             stat.reference_mentions,
             fmt(stat.precision()),
             fmt(stat.recall()),
-            fmt(stat.f1())
+            fmt(stat.f1()),
+            stat.mistaken_for()
+                .map_or_else(String::new, |(label, count)| format!("{label} ({count})"))
         );
     }
+    println!(
+        "\n\"Most often read as\" counts only the main subject, and only where the classifier\n\
+         and the labels disagree. A category read as one particular other category is a\n\
+         boundary the taxonomy has not settled, which no amount of fitting will settle for it."
+    );
 
     if human_verified {
         return;
