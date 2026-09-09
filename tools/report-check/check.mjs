@@ -11,7 +11,7 @@
 // Chrome is found through CHROME_PATH, or in the usual places on each platform.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -462,6 +462,37 @@ const CONTRAST = `(function () {
   return wrong;
 })()`;
 
+// The same page with its script taken out, which is the shape a reader with scripting off
+// gets. Everything folded has to be present and open, nothing may be offered that cannot
+// work, and the page must still not pan sideways.
+const WITHOUT_SCRIPTING = `(function () {
+  var wrong = [];
+  var check = function (claim, ok) { if (!ok) { wrong.push(claim); } };
+  var page = document.documentElement;
+
+  check('the stylesheet is told scripting works when it does not', !page.classList.contains('js'));
+  check('a control that only scripting can build is on the page',
+    document.querySelector('button.disclose') === null);
+
+  var form = document.querySelector('[data-filter]');
+  check('a reader without scripting is offered a filter that cannot filter',
+    !form || form.hidden === true);
+
+  var panels = document.querySelectorAll('tr.panel');
+  check('there is no evidence on the page at all', panels.length > 0);
+  check('evidence is folded away with nothing to unfold it',
+    Array.prototype.every.call(panels, function (p) { return p.hidden === false; }));
+
+  var clipped = document.querySelector('.text.long p');
+  if (clipped) {
+    check('a long review is clipped with no way to see the rest of it',
+      clipped.scrollHeight <= clipped.clientHeight + 2);
+  }
+
+  check('the page itself pans sideways', page.scrollWidth <= page.clientWidth);
+  return wrong;
+})()`;
+
 // Run against the same page with print media emulated, and after the reader's machine has
 // been told it prefers a dark screen. Paper is white either way: a palette meant for a
 // backlit panel prints as blocks of solid ink, and nothing in the markup can show it.
@@ -496,8 +527,18 @@ const ON_PAPER = `(function () {
   return wrong;
 })()`;
 
-const page = pathToFileURL(resolve(process.argv[2] ?? "sample-report.html")).href;
+const file = resolve(process.argv[2] ?? "sample-report.html");
+const page = pathToFileURL(file).href;
 const profile = await mkdtemp(join(tmpdir(), "census-report-check-"));
+
+// The same page with the script cut out, which is exactly what a reader with scripting off
+// is served. Driven as a page of its own rather than by turning scripting off in the
+// browser, because a debugger that cannot run script cannot ask the page anything either.
+const mute = join(profile, "without-scripting.html");
+await writeFile(
+  mute,
+  (await readFile(file, "utf8")).replace(/<script>[\s\S]*?<\/script>/g, ""),
+);
 const chrome = spawn(
   browser(),
   [
@@ -538,8 +579,20 @@ try {
     features: [{ name: "prefers-color-scheme", value: "dark" }],
   });
   const paper = await evaluate(ON_PAPER);
+
+  await send("Emulation.setEmulatedMedia", { media: "screen" });
+  await send("Page.navigate", { url: pathToFileURL(mute).href });
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const ready = await evaluate(
+      "document.readyState === 'complete' && document.querySelectorAll('tr.panel').length > 0",
+    );
+    if (ready.result?.result?.value === true) break;
+    await sleep(250);
+  }
+  const quiet = await evaluate(WITHOUT_SCRIPTING);
+
   socket.close();
-  const threw = [answer, phone, ink, paper].find((r) => r.result?.exceptionDetails);
+  const threw = [answer, phone, ink, paper, quiet].find((r) => r.result?.exceptionDetails);
   if (threw) {
     console.error("the page threw while being checked:");
     console.error(threw.result.exceptionDetails.exception?.description ?? threw.result.exceptionDetails.text);
@@ -547,7 +600,8 @@ try {
     const wrong = answer.result.result.value
       .concat(phone.result.result.value)
       .concat(ink.result.result.value)
-      .concat(paper.result.result.value);
+      .concat(paper.result.result.value)
+      .concat(quiet.result.result.value.map((claim) => `${claim}, with scripting off`));
     if (wrong.length === 0) {
       console.log(`the report behaves as it says it does: ${page}`);
       failed = false;

@@ -21,10 +21,11 @@ All three run on Linux, macOS and Windows. Clippy warnings fail the build.
 
 The report page carries scripting no Rust test can reach, and rendering no Rust test can see:
 a stylesheet rule can flatten a chart or turn a printed page into blocks of ink while the
-markup stays exactly right. A fourth gate therefore drives the page in a real browser three
-times: on a desktop window, at 420 pixels where the tables are wider than the screen, and
-under print media with the machine asking for a dark one. It needs Chrome and Node, and
-nothing else: no corpus, no model, no network.
+markup stays exactly right. A fourth gate therefore drives the page in a real browser four
+times: on a desktop window, at 420 pixels where the tables are wider than the screen, under
+print media with the machine asking for a dark one, and again with the script cut out, which
+is what a reader with scripting off is served. It needs Chrome and Node, and nothing else: no
+corpus, no model, no network.
 
 ```sh
 cargo run -p census-core --example sample-report -- report.html
