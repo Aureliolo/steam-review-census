@@ -129,8 +129,13 @@ from the words alone: they are never shown whether the reviewer recommended the 
 they cannot be led by it, and so they are in no position to report that the two disagree.
 Putting that flag next to the rating is what finds the disagreement, and that is arithmetic
 rather than a judgement. The review still sorts by what it is actually about, so the praise
-buried in a joke review still counts as praise of whatever it praises. You can then include, exclude or inspect the
-flagged ones deliberately, instead of discovering later that they were silently miscounted.
+buried in a joke review still counts as praise of whatever it praises.
+
+The flag lives on labelled reviews and nowhere else, which is deliberate rather than an
+omission waiting to be filled. Reading it off a whole corpus needs a classifier measured to
+find irony, and nothing here has measured that yet. What the reference sets buy in the
+meantime is the rate: how often, in reviews drawn at random, the text and the rating point
+opposite ways at all.
 
 ## How it knows whether it is right
 
