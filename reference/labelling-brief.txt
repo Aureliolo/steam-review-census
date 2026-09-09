@@ -97,8 +97,8 @@ VR and headsets (vr)
   Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, whether it was built for a headset or is a flat game bolted into one, and which headsets it works with.
   RULE: Anything about being in a headset belongs here, including whether a given headset is supported. A flat game called immersive is not this: immersion belongs to whatever creates it, most often graphics or story. How the game looks on a monitor belongs to graphics.
 
-Every label also carries four judgements about the review itself. None of them changes which
-category it belongs to.
+Every label is five fields. The first two say which categories the review covers; the other
+three are judgements about the review, and none of them changes which category it belongs to.
 
 primary
   The one category the review is most about. Exactly one, always.

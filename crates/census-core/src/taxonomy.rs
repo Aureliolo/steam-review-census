@@ -449,8 +449,8 @@ const CONFIDENCE_SLOT: &str = "{confidence}";
 /// they cannot report that the two disagree either. They say what the text does; joining
 /// that to the rating is arithmetic and belongs to the tool.
 const FIELDS: &str = "\
-Every label also carries four judgements about the review itself. None of them changes which
-category it belongs to.
+Every label is five fields. The first two say which categories the review covers; the other
+three are judgements about the review, and none of them changes which category it belongs to.
 
 primary
   The one category the review is most about. Exactly one, always.
