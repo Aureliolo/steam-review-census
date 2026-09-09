@@ -413,15 +413,15 @@ fn most_overstated(out: &mut String, report: &Report) {
     };
     let _ = writeln!(
         out,
-        "<p class=\"headline\">Across these {} games the top of the pile overstates \
-         <strong>{}</strong> by <strong>{factor:.1}\u{d7}</strong>: {} of the {} reviews Steam \
-         ranks most helpful raise it, against {} of all {}.</p>",
-        report.apps.len(),
+        "<p class=\"headline\">Across these {games} games the top of the pile overstates \
+         <strong>{}</strong> by <strong>{factor:.1}\u{d7}</strong>: {} of the {} reviews at the \
+         top of those {games} piles raise it, against {} of all {}.</p>",
         escape(&category.label.to_lowercase()),
         thousands(category.top_mentions),
         thousands(category.top_reviews),
         percent(overall),
-        thousands(category.reviews)
+        thousands(category.reviews),
+        games = report.apps.len()
     );
 }
 
@@ -2333,7 +2333,7 @@ mod tests {
             "the pooled claim is not the one the pooled counts support: {claim}"
         );
         assert!(
-            claim.contains("60 of the 100 reviews Steam ranks most helpful")
+            claim.contains("60 of the 100 reviews at the top of those 2 piles")
                 && claim.contains("against 40.0% of all 2,000"),
             "the claim is counted over one game rather than both: {claim}"
         );
