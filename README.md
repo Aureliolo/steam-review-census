@@ -133,7 +133,7 @@ examples categories are built from. A separate, randomly drawn subset is held ba
 entirely and is the only part any figure is ever quoted from, because a stratified sample
 deliberately over-represents whatever the classifier rarely picks.
 
-Three rules keep those figures honest:
+These rules keep those figures honest:
 
 - **Agreement is not accuracy.** Where the labels were written by a model, what gets measured
   is consistency between two models, and the tool says so on every report until a person has
@@ -152,6 +152,13 @@ Three rules keep those figures honest:
   category and one in five of another. Each category carries its own precision and recall
   from the reference set, and a category the classifier is measured to miss most of is marked
   as a floor rather than a count.
+- **A difference the reader cannot see is not marked as one.** The page draws two kinds of
+  claim on top of its numbers, and each is earned rather than automatic. Across games, a
+  category is outlined as belonging to one of them only where that game clears every other by
+  more than the rounding in the printed figures. Within a game, a category is coloured as warm
+  or cold only where the interval on the reviews raising it clears the game's own baseline, so
+  eight reviews all recommending the game is left as the 100% it is instead of dressed as the
+  finding a thousand reviews at 98% would be.
 - **Reference sets span several games.** Anchors built from one game carry that game's
   vocabulary. Sets are labelled across games of different genres and different overall
   sentiment, so agreement can be measured on a game the anchors were never fitted to:

@@ -19,8 +19,11 @@ cargo test --workspace --all-features
 
 All three run on Linux, macOS and Windows. Clippy warnings fail the build.
 
-The report page carries scripting no Rust test can reach, so a fourth gate drives it in a
-real browser. It needs Chrome and Node, and nothing else: no corpus, no model, no network.
+The report page carries scripting no Rust test can reach, and rendering no Rust test can see:
+a stylesheet rule can flatten a chart or turn a printed page into blocks of ink while the
+markup stays exactly right. A fourth gate therefore drives the page in a real browser, on
+screen and again under print media. It needs Chrome and Node, and nothing else: no corpus, no
+model, no network.
 
 ```sh
 cargo run -p census-core --example sample-report -- report.html
