@@ -451,6 +451,26 @@ fn headline(out: &mut String, app: &AppReport) {
 ///
 /// Drawn as inline SVG: a chart that fetched a plotting library would not be a self-contained
 /// page, and this one is two shapes.
+/// The month the line falls furthest, as a sentence rather than as a shape to point at.
+///
+/// Months too small to carry a rate are left out for the same reason they are left out of the
+/// sparkline: four reviews and one thumb up is 25% and is not the month a game was hated in.
+fn worst_month(months: &[crate::report::Month]) -> String {
+    let coldest = months
+        .iter()
+        .filter(|month| month.reviews >= ENOUGH_FOR_A_RATE)
+        .filter_map(|month| month.positive_share().map(|share| (month, share)))
+        .min_by(|a, b| a.1.total_cmp(&b.1));
+    coldest.map_or_else(String::new, |(month, share)| {
+        format!(
+            " It falls furthest in {}, when {} of {} reviews recommended the game.",
+            escape(&crate::time::month_name(&month.label)),
+            percent(share),
+            thousands(month.reviews)
+        )
+    })
+}
+
 fn over_time(out: &mut String, app: &AppReport) {
     let months = &app.classification.months;
     if months.len() < 2 {
@@ -468,11 +488,16 @@ fn over_time(out: &mut String, app: &AppReport) {
         out,
         "<p class=\"note\">Reviews per month, {} to {}, against a busiest month of {} in {}. \
          The line is the share of each month that recommended the game, from none at the \
-         bottom to all at the top; the dashed line is half. Point at a month to read it.</p>",
+         bottom to all at the top; the dashed line is half.{} Point at a month to read \
+         it.</p>",
         escape(&first),
         escape(&last),
         thousands(tallest),
-        escape(&peak.map_or_else(String::new, |month| crate::time::month_name(&month.label)))
+        escape(&peak.map_or_else(String::new, |month| crate::time::month_name(&month.label))),
+        // The dip in that line is what a reader looks for and the one thing on the chart a
+        // pointer is needed to read. It costs a clause to say, and a pointer is a thing not
+        // every reader has.
+        worst_month(months)
     );
 
     #[expect(
@@ -1875,13 +1900,33 @@ mod tests {
         );
     }
 
-    /// Bars drawn against the busiest month say nothing about size until that month does.
+    /// Bars drawn against the busiest month say nothing about size until that month does,
+    /// and the dip in the share line is the one thing on the chart a pointer is needed for.
     #[test]
     fn the_chart_says_how_big_the_month_it_is_drawn_against_was() {
         let page = render(&sample_report("ordinary text"));
         assert!(
             page.contains("against a busiest month of 600 in Feb 2024"),
             "the chart has no scale on it"
+        );
+        assert!(
+            page.contains("falls furthest in Feb 2024, when 63.3% of 600 reviews recommended"),
+            "the chart's low point can only be reached with a pointer"
+        );
+
+        // Four reviews and none of them a thumb up is 0% and is not the month a game was
+        // hated in; thirty in a hundred is.
+        let mut noisy = vec![
+            month("2024-01", 100, 10),
+            month("2024-02", 4, 1),
+            month("2024-03", 100, 10),
+        ];
+        noisy[0].positive = 30;
+        noisy[1].positive = 0;
+        assert!(
+            render(&with_months(noisy))
+                .contains("falls furthest in Jan 2024, when 30.0% of 100 reviews recommended"),
+            "a four-review month was called the low point"
         );
     }
 
@@ -2060,7 +2105,7 @@ mod tests {
         // A token used but not defined for a theme is invisible text, and only in that
         // theme, which is exactly the kind of thing nobody notices until somebody else does.
         let light = declared_in(":root {");
-        let media = declared_in("@media (prefers-color-scheme: dark)");
+        let media = declared_in("(prefers-color-scheme: dark)");
         let attribute = declared_in(":root[data-theme='dark']");
 
         // Set on individual elements by the markup rather than by the theme.
