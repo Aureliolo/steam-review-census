@@ -56,21 +56,26 @@ impl From<Model> for census_core::Encoder {
     }
 }
 
+/// What the corpus mean is used for before categories compete for a review.
 #[derive(Debug, Clone, Copy, ValueEnum)]
-enum Calibrate {
+enum Scoring {
+    /// Let cross-validation pick, which is what a corpus nobody has swept by hand wants.
     Search,
-    On,
+    /// Plain cosine similarity to each anchor.
+    Raw,
+    /// Each category scored by how far above its own corpus average a review sits.
+    Bias,
+    /// The corpus mean removed from both sides before they are compared.
     Centred,
-    Off,
 }
 
-impl From<Calibrate> for census_core::anchors::Calibration {
-    fn from(value: Calibrate) -> Self {
+impl From<Scoring> for census_core::anchors::Calibration {
+    fn from(value: Scoring) -> Self {
         match value {
-            Calibrate::Search => Self::Search,
-            Calibrate::On => Self::Only(census_core::anchors::Scoring::Bias),
-            Calibrate::Centred => Self::Only(census_core::anchors::Scoring::Centred),
-            Calibrate::Off => Self::Only(census_core::anchors::Scoring::Raw),
+            Scoring::Search => Self::Search,
+            Scoring::Raw => Self::Only(census_core::anchors::Scoring::Raw),
+            Scoring::Bias => Self::Only(census_core::anchors::Scoring::Bias),
+            Scoring::Centred => Self::Only(census_core::anchors::Scoring::Centred),
         }
     }
 }
@@ -289,10 +294,10 @@ struct FitArgs {
     /// Cross-validation folds used to choose the blend and the mention margin.
     #[arg(long, default_value_t = 5)]
     folds: usize,
-    /// Score categories by how far above their own corpus average a review sits.
-    /// `search` lets cross-validation decide, which favours the largest categories.
+    /// What the corpus mean is used for before categories compete. `search` lets
+    /// cross-validation decide, and records what it chose beside the anchors.
     #[arg(long, default_value = "search")]
-    calibrate: Calibrate,
+    scoring: Scoring,
     /// What the blend is chosen to win. `mentions` weighs every category the same, which is
     /// what a report giving each one a row needs; `primary` maximises how often the main
     /// subject is right, which the largest few categories decide.
@@ -761,7 +766,8 @@ struct GameLabels {
 /// The corpus's own vectors are free and are what classification uses. Embedding the labels
 /// afresh is for judging an encoder the corpus was never built with, and it gives up the
 /// corpus centroid: a thousand labelled reviews are not what an average review looks like,
-/// so calibration is switched off rather than fed a number that is not the one it wants.
+/// so the scoring falls back to plain similarity rather than being fed a mean that is not
+/// the one it wants.
 enum Vectors<'a> {
     Stored,
     Fresh(&'a mut census_core::Embedder),
@@ -848,7 +854,7 @@ struct FitInputs<'a> {
     holdout: &'a str,
     cache: &'a std::path::Path,
     precision: census_core::model::Precision,
-    calibrate: Calibrate,
+    scoring: Scoring,
     select: Select,
 }
 
@@ -857,7 +863,7 @@ struct Under {
     encoder: census_core::Encoder,
     descriptions: census_core::Anchors,
     games: Vec<GameLabels>,
-    calibrate: Calibrate,
+    scoring: Scoring,
     select: Select,
 }
 
@@ -916,11 +922,7 @@ async fn load_under(model: Model, inputs: &FitInputs<'_>) -> Result<Under> {
         encoder,
         descriptions,
         games,
-        calibrate: if fresh {
-            Calibrate::Off
-        } else {
-            inputs.calibrate
-        },
+        scoring: if fresh { Scoring::Raw } else { inputs.scoring },
         select: inputs.select,
     })
 }
@@ -932,7 +934,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         reference,
         holdout,
         folds,
-        calibrate,
+        scoring,
         anchors_out,
         model_dir,
         model,
@@ -954,7 +956,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
         holdout,
         cache: &cache,
         precision: precision.into(),
-        calibrate,
+        scoring,
         select,
     };
     let base = load_under(model, &inputs).await?;
@@ -968,7 +970,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
             &base.descriptions,
             &base.games,
             folds,
-            base.calibrate,
+            base.scoring,
             base.select,
             holdout,
         );
@@ -978,7 +980,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
     let Under {
         descriptions,
         games,
-        calibrate,
+        scoring,
         select,
         ..
     } = base;
@@ -998,7 +1000,7 @@ async fn run_fit(args: FitArgs) -> Result<()> {
             &examples,
             &centroid,
             folds,
-            calibrate.into(),
+            scoring.into(),
             objective,
         );
         let mut anchors = descriptions.fit(&examples, &app_ids, outcome.params);
@@ -1080,11 +1082,11 @@ fn report_transfer(
     descriptions: &census_core::Anchors,
     games: &[GameLabels],
     folds: usize,
-    calibrate: Calibrate,
+    scoring: Scoring,
     select: Select,
     holdout: &str,
 ) {
-    let measured = measure_transfer(descriptions, games, folds, calibrate, select);
+    let measured = measure_transfer(descriptions, games, folds, scoring, select);
     println!("leave-one-game-out, measured on each game's {holdout} subset\n");
     println!(
         "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
@@ -1127,14 +1129,14 @@ fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -
         &base.descriptions,
         &base.games,
         folds,
-        base.calibrate,
+        base.scoring,
         base.select,
     );
     let right = measure_transfer(
         &other.descriptions,
         &other.games,
         folds,
-        other.calibrate,
+        other.scoring,
         other.select,
     );
     if left.len() != right.len()
@@ -1221,7 +1223,7 @@ fn measure_transfer(
     descriptions: &census_core::Anchors,
     games: &[GameLabels],
     folds: usize,
-    calibrate: Calibrate,
+    scoring: Scoring,
     select: Select,
 ) -> Vec<HeldOut> {
     let mut measured = Vec::with_capacity(games.len());
@@ -1246,7 +1248,7 @@ fn measure_transfer(
                 examples,
                 &game.centroid,
                 folds,
-                calibrate.into(),
+                scoring.into(),
                 select.into(),
             );
             let mut anchors = descriptions.fit(examples, &[game.app_id], outcome.params);
