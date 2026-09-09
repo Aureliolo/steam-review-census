@@ -787,6 +787,12 @@ struct GameLabels {
     app_id: u32,
     training: Vec<census_core::anchors::Example>,
     holdout: Vec<census_core::anchors::Example>,
+    /// Whether the labeller called each held-back review contested, in the same order.
+    ///
+    /// Carried alongside rather than inside the example, because fitting has no use for it:
+    /// it is a property of the measurement, and the measurement is the only thing that
+    /// splits by it.
+    contested: Vec<bool>,
     centroid: Vec<f32>,
 }
 
@@ -844,10 +850,16 @@ fn load_game(
             .cloned()
             .collect()
     };
+    let holdout_labels = split(true);
+    let held = census_core::anchors::labelled(&holdout_labels, &vectors);
     Ok(GameLabels {
         app_id,
         training: census_core::anchors::to_examples(&split(false), &vectors),
-        holdout: census_core::anchors::to_examples(&split(true), &vectors),
+        contested: held
+            .iter()
+            .map(|(_, label)| label.ambiguous)
+            .collect::<Vec<bool>>(),
+        holdout: held.into_iter().map(|(example, _)| example).collect(),
         centroid,
     })
 }
@@ -1123,7 +1135,22 @@ fn report_transfer(
     holdout: &str,
 ) {
     let measured = measure_transfer(descriptions, games, folds, scoring, select);
-    println!("leave-one-game-out, measured on each game's {holdout} subset\n");
+    println!("leave-one-game-out, measured on each game's {holdout} subset");
+    transfer_table(&measured, None, "every held-back review");
+    // Split because the two answer different questions. A game the anchors genuinely cannot
+    // reach is worse on the reviews the labeller found easy; a game whose taxonomy does not
+    // fit it is worse only on the ones the labeller could not place either.
+    transfer_table(
+        &measured,
+        Some(false),
+        "only the reviews the labeller called clear-cut",
+    );
+    transfer_table(&measured, Some(true), "only the ones it called contested");
+}
+
+/// The transfer table over every held-back review, or over one side of the contested split.
+fn transfer_table(measured: &[HeldOut], contested: Option<bool>, what: &str) {
+    println!("\n{what}\n");
     println!(
         "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
         "held out", "n", "descriptions", "same game", "unseen game", "gained / lost"
@@ -1131,7 +1158,8 @@ fn report_transfer(
     println!("{}", "-".repeat(72));
 
     let mut totals = [0_u64; 6];
-    for held in &measured {
+    for held in measured {
+        let held = held.only(contested);
         let (written, same, unseen) = (&held.written, &held.same, &held.unseen);
         let n = written.len() as u64;
         let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
@@ -1253,6 +1281,32 @@ struct HeldOut {
     written: Vec<bool>,
     same: Vec<bool>,
     unseen: Vec<bool>,
+    contested: Vec<bool>,
+}
+
+impl HeldOut {
+    /// The same measurement over the reviews the labeller called one way or the other.
+    ///
+    /// A game can look like it refuses anchors built elsewhere and turn out to be a game
+    /// whose held-back reviews the labeller could not place either, which is a fact about
+    /// the taxonomy rather than about transfer.
+    fn only(&self, contested: Option<bool>) -> Self {
+        let keep = |verdicts: &[bool]| -> Vec<bool> {
+            verdicts
+                .iter()
+                .zip(&self.contested)
+                .filter(|(_, flagged)| contested.is_none_or(|want| **flagged == want))
+                .map(|(hit, _)| *hit)
+                .collect()
+        };
+        Self {
+            app_id: self.app_id,
+            written: keep(&self.written),
+            same: keep(&self.same),
+            unseen: keep(&self.unseen),
+            contested: keep(&self.contested),
+        }
+    }
 }
 
 fn measure_transfer(
@@ -1297,6 +1351,7 @@ fn measure_transfer(
             written: census_core::anchors::agreements(descriptions, &game.holdout),
             same: census_core::anchors::agreements(&fit_on(&all), &game.holdout),
             unseen: census_core::anchors::agreements(&fit_on(&others), &game.holdout),
+            contested: game.contested.clone(),
         });
     }
     measured

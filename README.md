@@ -164,7 +164,11 @@ These rules keep those figures honest:
   sentiment, so agreement can be measured on a game the anchors were never fitted to:
   `census fit --leave-one-out` fits on every game but one and reports the one left out, which
   is the only figure that says whether a category travels. Numbers from a single corpus
-  describe that corpus and nothing else.
+  describe that corpus and nothing else. It reports that figure again over the reviews the
+  labeller called clear-cut and over the ones it called contested, because those answer
+  different questions: anchors that genuinely cannot reach a game are worse where the reading
+  was easy, and a taxonomy that does not fit a game is worse only where the labeller could
+  not place the review either.
 
 ## Honest limits
 
