@@ -252,6 +252,15 @@ table.matrix td {
   white-space: nowrap;
 }
 
+/* A Steam title runs to forty characters and the columns are being compared with each other,
+   so one long name wraps rather than taking a third of the table from the games beside it. */
+table.matrix thead th.num {
+  white-space: normal;
+  min-width: 6rem;
+  max-width: 9rem;
+  vertical-align: bottom;
+}
+
 table.matrix thead th {
   color: var(--ink-faint);
   font-size: 0.76rem;
