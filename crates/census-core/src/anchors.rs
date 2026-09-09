@@ -378,6 +378,23 @@ pub fn to_examples<S: std::hash::BuildHasher>(
     labels: &[ReferenceLabel],
     vectors: &HashMap<String, Vec<f32>, S>,
 ) -> Vec<Example> {
+    labelled(labels, vectors)
+        .into_iter()
+        .map(|(example, _)| example)
+        .collect()
+}
+
+/// The same examples, each still holding the label it was built from.
+///
+/// A label whose review has no vector, or whose category this build no longer has, is
+/// dropped, and anything measured per review has to be sliced by the labels that survived
+/// rather than by the ones that went in. Written twice, the two filters drift and a slice
+/// ends up describing different reviews than the figures it is slicing.
+#[must_use]
+pub fn labelled<'a, S: std::hash::BuildHasher>(
+    labels: &'a [ReferenceLabel],
+    vectors: &HashMap<String, Vec<f32>, S>,
+) -> Vec<(Example, &'a ReferenceLabel)> {
     let slot: HashMap<&str, usize> = CORE_SPINE
         .iter()
         .enumerate()
@@ -387,15 +404,18 @@ pub fn to_examples<S: std::hash::BuildHasher>(
     labels
         .iter()
         .filter_map(|label| {
-            Some(Example {
-                vector: vectors.get(&label.id)?.clone(),
-                primary: *slot.get(label.primary.as_str())?,
-                secondary: label
-                    .secondary
-                    .iter()
-                    .filter_map(|id| slot.get(id.as_str()).copied())
-                    .collect(),
-            })
+            Some((
+                Example {
+                    vector: vectors.get(&label.id)?.clone(),
+                    primary: *slot.get(label.primary.as_str())?,
+                    secondary: label
+                        .secondary
+                        .iter()
+                        .filter_map(|id| slot.get(id.as_str()).copied())
+                        .collect(),
+                },
+                label,
+            ))
         })
         .collect()
 }
