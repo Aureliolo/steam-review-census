@@ -822,11 +822,17 @@ fn sparkline(out: &mut String, app: &AppReport, id: &str) {
         reason = "a corpus spans hundreds of months at most"
     )]
     let step = WIDTH / (months.len() - 1).max(1) as f64;
-    let points: Vec<String> = rates
+    // Kept on the corpus's own axis rather than stretched across the months that survived, so
+    // a line that stops halfway means the game went quiet there and not that the subject did.
+    let drawn: Vec<usize> = rates
         .iter()
         .enumerate()
-        .filter_map(|(index, rate)| {
-            let rate = (*rate)?;
+        .filter_map(|(index, rate)| rate.map(|_| index))
+        .collect();
+    let points: Vec<String> = drawn
+        .iter()
+        .filter_map(|&index| {
+            let rate = rates[index]?;
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "a corpus spans hundreds of months at most"
@@ -835,21 +841,29 @@ fn sparkline(out: &mut String, app: &AppReport, id: &str) {
             Some(format!("{x:.2},{:.2}", (1.0 - rate / peak) * SPARK_HEIGHT))
         })
         .collect();
+    let (Some(&opens), Some(&closes)) = (drawn.first(), drawn.last()) else {
+        return;
+    };
     if points.len() < 3 {
         return;
     }
 
+    let name = |index: usize| escape(&crate::time::month_name(&months[index].label));
     let _ = writeln!(
         out,
         "<figure class=\"spark\">\n<svg viewBox=\"0 0 {WIDTH:.0} {SPARK_HEIGHT:.0}\" \
          preserveAspectRatio=\"none\" role=\"img\" aria-label=\"Mention rate by month\">\
+         <line class=\"axis\" x1=\"0\" y1=\"{SPARK_HEIGHT:.0}\" x2=\"{WIDTH:.0}\" \
+         y2=\"{SPARK_HEIGHT:.0}\" />\
          <polyline points=\"{}\" /></svg>\n\
-         <figcaption>Mention rate by month, {} to {}, peaking at {}. Months with fewer than \
-         {ENOUGH_FOR_A_RATE} reviews are left out.</figcaption>\n</figure>",
+         <figcaption>Mention rate by month, peaking at {}. Drawn from {} to {} on an axis \
+         running to {}: a month with fewer than {ENOUGH_FOR_A_RATE} reviews carries no \
+         rate.</figcaption>\n</figure>",
         points.join(" "),
-        escape(&crate::time::month_name(&months[0].label)),
-        escape(&crate::time::month_name(&months[months.len() - 1].label)),
-        percent(peak)
+        percent(peak),
+        name(opens),
+        name(closes),
+        name(months.len() - 1)
     );
 }
 
@@ -1543,7 +1557,21 @@ mod tests {
             page.contains("peaking at 10.0%"),
             "a five-review month set the scale"
         );
-        assert!(page.contains("Months with fewer than 30 reviews are left out"));
+        assert!(page.contains("a month with fewer than 30 reviews carries no rate"));
+        // The line stops where the rates stop, so the caption names where it stops and not
+        // the last month of a corpus it never reached.
+        let quietened = vec![
+            month("2024-01", 100, 10),
+            month("2024-02", 100, 10),
+            month("2024-03", 100, 10),
+            month("2024-04", 5, 1),
+            month("2024-05", 5, 1),
+        ];
+        let page = render(&with_months(quietened));
+        assert!(
+            page.contains("Drawn from Jan 2024 to Mar 2024 on an axis running to May 2024"),
+            "the caption claims months the line never reached"
+        );
     }
 
     #[test]

@@ -675,6 +675,15 @@ figure.spark polyline {
   stroke-linejoin: round;
 }
 
+/* The line covers only the months big enough to carry a rate, and without something running
+   the whole width a line that stops halfway reads as a subject that stopped being raised. */
+figure.spark .axis {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 3 4;
+}
+
 figure.spark figcaption {
   font-size: 0.74rem;
   color: var(--ink-faint);
