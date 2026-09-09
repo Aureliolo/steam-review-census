@@ -33,6 +33,15 @@ pub struct Category {
     /// second subject, and the labellers read them that way without being told to: across
     /// the six reference sets `offtopic` is alone in 191 labels of 191 and `verdict` in 364
     /// of 374.
+    ///
+    /// Measured on 2026-09-09, this trades one kind of error for another and leaves the
+    /// pooled macro F1 where it found it, at 0.585 against 0.584. What it buys is precision:
+    /// `offtopic` goes from 0.47 to 0.56 and `verdict` from 0.74 to 0.84, because neither can
+    /// be hedged onto a review whose subject the classifier has already named. What it costs
+    /// is the credit those hedges used to earn: `verdict` recall falls from 0.70 to 0.57,
+    /// which is the honest figure for how often a bare verdict is actually identified as one.
+    /// Kept for the reason it was added rather than for the score: a classifier that can
+    /// report a review as naming an aspect and naming none is wrong whatever it scores.
     pub alone: bool,
 }
 
