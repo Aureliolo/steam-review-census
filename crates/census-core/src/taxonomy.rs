@@ -407,9 +407,19 @@ pub fn labelling_brief() -> String {
         }
         brief.push('\n');
     }
-    brief.push_str(FIELDS);
+    brief.push_str(&FIELDS.replace(CONFIDENCE_SLOT, &CONFIDENCE.join(", ")));
     brief
 }
+
+/// The answers `confidence` may take.
+///
+/// A judgement asked for as free text drifts: "Medium", "fairly", "8/10", nothing at all. The
+/// sheet asks for these three and ingest refuses anything else, from the same list, so the
+/// column stays something a reader can count.
+pub const CONFIDENCE: [&str; 3] = ["high", "medium", "low"];
+
+/// Where the sheet names them, so the words are written down once.
+const CONFIDENCE_SLOT: &str = "{confidence}";
 
 /// What every label carries besides its categories.
 ///
@@ -442,7 +452,8 @@ ironic
   cannot be led by it.
 
 confidence
-  How sure you are of the primary category: high, medium or low. This one is about you.
+  How sure you are of the primary category, in one of these words: {confidence}.
+  This one is about you.
 
 ambiguous
   Whether the call is genuinely contested: two categories fit and the rules above do not
@@ -450,6 +461,11 @@ ambiguous
   is the judgement that is read back. Agreement is reported separately for the reviews
   marked here, because disagreement on them says as much about the taxonomy as about the
   classifier.
+
+Return every one of these for every review. A judgement left out is not a judgement, and a
+label missing one is refused rather than filled in with a guess: ironic and ambiguous are
+claims about the review, and defaulting them to false would put words in your mouth on the
+figure that decides how agreement is reported.
 ";
 
 #[cfg(test)]
@@ -554,6 +570,22 @@ mod tests {
             brief.contains("This one is about you.")
                 && brief.contains("about the review and the taxonomy rather than about you"),
             "confidence and ambiguous are not told apart, which is the whole difficulty"
+        );
+        // Ingest drops a label that leaves one out, so the sheet is the only place a labeller
+        // can find out that it will, and the only place the accepted words are written down.
+        assert!(
+            brief.contains("Return every one of these for every review."),
+            "the sheet does not say that every judgement is required"
+        );
+        for word in CONFIDENCE {
+            assert!(
+                brief.contains(word),
+                "the sheet asks for a confidence it does not name: {word}"
+            );
+        }
+        assert!(
+            !brief.contains(CONFIDENCE_SLOT),
+            "the sheet still holds the placeholder instead of the words"
         );
     }
 

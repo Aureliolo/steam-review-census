@@ -111,7 +111,8 @@ ironic
   cannot be led by it.
 
 confidence
-  How sure you are of the primary category: high, medium or low. This one is about you.
+  How sure you are of the primary category, in one of these words: high, medium, low.
+  This one is about you.
 
 ambiguous
   Whether the call is genuinely contested: two categories fit and the rules above do not
@@ -119,3 +120,8 @@ ambiguous
   is the judgement that is read back. Agreement is reported separately for the reviews
   marked here, because disagreement on them says as much about the taxonomy as about the
   classifier.
+
+Return every one of these for every review. A judgement left out is not a judgement, and a
+label missing one is refused rather than filled in with a guess: ironic and ambiguous are
+claims about the review, and defaulting them to false would put words in your mouth on the
+figure that decides how agreement is reported.

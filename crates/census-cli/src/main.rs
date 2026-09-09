@@ -713,10 +713,12 @@ fn run_ingest(
     complain("not drawn", &report.unknown_reviews);
     complain("bad category", &report.unknown_categories);
     complain("duplicated", &report.duplicates);
+    complain("unjudged", &report.unjudged);
 
     if !report.is_clean() && !allow_incomplete {
         anyhow::bail!(
-            "labels do not cleanly cover the drawn sample; fix them, or pass              --allow-incomplete to write the set as it stands"
+            "labels do not cleanly cover the drawn sample; fix them, or pass \
+             --allow-incomplete to write the set as it stands"
         );
     }
     let path = census_core::sample::write_labels(&dir, &labels)?;

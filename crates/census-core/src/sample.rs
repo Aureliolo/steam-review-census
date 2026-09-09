@@ -29,7 +29,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{Error, Result, evaluate::ReferenceLabel, taxonomy::CORE_SPINE};
+use crate::{
+    Error, Result,
+    evaluate::ReferenceLabel,
+    taxonomy::{CONFIDENCE, CORE_SPINE},
+};
 
 /// How many reviews to draw, and how to spread them.
 #[derive(Debug, Clone, Copy)]
@@ -224,18 +228,20 @@ pub fn draw(
 }
 
 /// What a labeller returns for one review, before the sample's own fields are put back.
+///
+/// Every judgement but `secondary` is optional here so that leaving one out is something
+/// [`ingest`] can report, rather than something serde turns into a default several hundred
+/// reviews at a time. An empty `secondary` and an omitted one do mean the same thing: a
+/// review about one subject takes one category and nothing else.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReturnedLabel {
     pub id: String,
     pub primary: String,
     #[serde(default)]
     pub secondary: Vec<String>,
-    #[serde(default)]
-    pub ironic: bool,
-    #[serde(default)]
-    pub confidence: String,
-    #[serde(default)]
-    pub ambiguous: bool,
+    pub ironic: Option<bool>,
+    pub confidence: Option<String>,
+    pub ambiguous: Option<bool>,
 }
 
 /// What ingesting a set of returned labels produced, and everything wrong with it.
@@ -250,6 +256,11 @@ pub struct IngestReport {
     pub unknown_categories: Vec<String>,
     /// Reviews labelled more than once, kept at the first label seen.
     pub duplicates: Vec<String>,
+    /// Labels that came back without one of the judgements every label carries, or with a
+    /// confidence that is not one of the words the sheet asks for. They are dropped: a
+    /// judgement nobody made is not a judgement, and `ambiguous` in particular decides how
+    /// agreement is reported, so defaulting it to false would invent the answer.
+    pub unjudged: Vec<String>,
 }
 
 impl IngestReport {
@@ -260,6 +271,7 @@ impl IngestReport {
             && self.unknown_reviews.is_empty()
             && self.unknown_categories.is_empty()
             && self.duplicates.is_empty()
+            && self.unjudged.is_empty()
     }
 }
 
@@ -324,6 +336,15 @@ pub fn ingest(
                 report.duplicates.push(label.id);
                 continue;
             }
+            let judged = label
+                .confidence
+                .filter(|word| CONFIDENCE.contains(&word.as_str()))
+                .zip(label.ironic)
+                .zip(label.ambiguous);
+            let Some(((confidence, ironic), ambiguous)) = judged else {
+                report.unjudged.push(label.id);
+                continue;
+            };
             for named in std::iter::once(&label.primary).chain(&label.secondary) {
                 if !known.contains(named.as_str()) {
                     report.unknown_categories.push(named.clone());
@@ -333,10 +354,10 @@ pub fn ingest(
                 id: label.id,
                 primary: label.primary,
                 secondary: label.secondary,
-                ironic: label.ironic,
-                confidence: label.confidence,
+                ironic,
+                confidence,
                 subset: (*subset).to_owned(),
-                ambiguous: label.ambiguous,
+                ambiguous,
             });
         }
     }
@@ -506,6 +527,49 @@ mod tests {
         let mut by_stratified: Vec<&String> = ids.iter().collect();
         by_stratified.sort_by_key(|id| rank(7, "stratified", id));
         assert_ne!(by_random, by_stratified);
+    }
+
+    /// `ambiguous` decides whether a review's disagreement is reported against the classifier
+    /// or against the taxonomy, and `ironic` is a claim about what the text does. Filling
+    /// either in for a labeller who did not answer puts a figure on the page that nobody
+    /// stood behind.
+    #[test]
+    fn a_judgement_nobody_made_is_refused_rather_than_filled_in() {
+        let root = std::env::temp_dir().join("census-ingest-judgements");
+        let reference = root.join("reference");
+        let returned = root.join("returned");
+        std::fs::create_dir_all(&reference).unwrap();
+        std::fs::create_dir_all(&returned).unwrap();
+        std::fs::write(
+            reference.join("sample.json"),
+            r#"[{"app_id":7,"id":"a","subset":"random","predicted":"bugs","review":"x"},
+                {"app_id":7,"id":"b","subset":"random","predicted":"bugs","review":"y"},
+                {"app_id":7,"id":"c","subset":"random","predicted":"bugs","review":"z"}]"#,
+        )
+        .unwrap();
+        std::fs::write(
+            returned.join("batch-000.json"),
+            r#"[{"id":"a","primary":"bugs","ironic":false,"confidence":"high","ambiguous":true},
+                {"id":"b","primary":"bugs","ironic":false,"confidence":"high"},
+                {"id":"c","primary":"bugs","ironic":false,"confidence":"fairly sure",
+                 "ambiguous":false}]"#,
+        )
+        .unwrap();
+
+        let (labels, report) = ingest(&reference, &returned).unwrap();
+        std::fs::remove_dir_all(&root).ok();
+
+        assert_eq!(report.accepted, 1, "an unjudged label was kept");
+        assert_eq!(
+            report.unjudged,
+            vec!["b".to_owned(), "c".to_owned()],
+            "a missing judgement and an invented confidence were both let through"
+        );
+        assert!(
+            !report.is_clean(),
+            "a set whose judgements went missing was called clean"
+        );
+        assert!(labels[0].ambiguous, "the judgement that was made was lost");
     }
 
     #[test]
