@@ -29,7 +29,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let alone = std::env::args().any(|argument| argument == "--one-game");
     let mut apps = vec![game(7, "A Measured Game", true)];
     if !alone {
+        // Four, because a matrix of two fits on a phone and a real one does not, and what
+        // happens to a table wider than the screen it is read on is the whole question.
         apps.push(game(11, "An Unmeasured Game", false));
+        apps.push(game(13, "A Third Game With A Rather Long Name", true));
+        apps.push(game(17, "A Fourth Game", true));
     }
     let report = Report {
         generated_unix: 1_760_000_000,
@@ -46,14 +50,17 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
         .enumerate()
         .map(|(slot, category)| {
             // Descending counts, so sorting has something to reorder and the widest bar is
-            // the first row rather than an accident.
-            let mentions = 900 - (slot as u64 * 40);
+            // the first row rather than an accident. The last category is raised by nobody,
+            // which every real report has and which is the only thing that puts a dash in the
+            // rightmost column of the table.
+            let quiet = slot + 1 == CORE_SPINE.len();
+            let mentions = if quiet { 0 } else { 900 - (slot as u64 * 40) };
             CategoryCount {
                 id: category.id.to_owned(),
                 label: category.label.to_owned(),
                 primary_count: mentions / 3,
                 mention_count: mentions,
-                top_mention_count: (slot as u64).min(9),
+                top_mention_count: if quiet { 0 } else { (slot as u64).min(9) },
                 positive_mentions: mentions / 2,
             }
         })

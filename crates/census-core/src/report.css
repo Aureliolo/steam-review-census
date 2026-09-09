@@ -112,11 +112,14 @@ h3 {
 
 /* Carried by the accessibility tree and by nothing else. Used where a glyph says something
    to the eye that it does not say to a screen reader. */
+/* Read aloud, never drawn, and deliberately left in the flow. Positioned hidden text keeps
+   its static position, and half of these sit in cells of a table that scrolls sideways: a
+   thousand pixels right of a phone screen, absolutely positioned against the page rather
+   than against anything that clips it, which made the whole page pan sideways. */
 .read-aloud {
-  position: absolute;
+  display: inline-block;
   width: 1px;
   height: 1px;
-  margin: -1px;
   padding: 0;
   overflow: hidden;
   clip-path: inset(50%);

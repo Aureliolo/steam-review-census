@@ -231,6 +231,12 @@ const PROBE = `(function () {
     }
   }
 
+  // Wide things belong in the containers built to scroll them. Anything reaching past the
+  // page pans the whole document sideways, which on a phone moves every column of text on
+  // every line, and nothing in the markup shows it.
+  check('the page itself pans sideways',
+    document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+
   // A control nobody can name is a control nobody can use, and the ones that open each row
   // are built by this script rather than rendered, so no Rust test ever sees them.
   var named = function (el) {
@@ -337,6 +343,29 @@ const PROBE = `(function () {
   return wrong;
 })()`;
 
+// The same page on a phone. The tables are wider than the screen there and the containers
+// built to scroll them are the only thing that may reach past it, which is a property of the
+// rendering and not of the markup: nothing a Rust test can see says whether it holds.
+const ON_A_PHONE = `(function () {
+  var wrong = [];
+  var check = function (claim, ok) { if (!ok) { wrong.push(claim); } };
+  var page = document.documentElement;
+
+  check('the page itself pans sideways on a phone', page.scrollWidth <= page.clientWidth);
+
+  var panel = document.querySelector('tr.panel');
+  if (panel) {
+    panel.hidden = false;
+    var quoted = panel.querySelector('.text p') || panel.querySelector('p');
+    if (quoted) {
+      check('a quoted review is laid out wider than the phone it is read on',
+        Math.round(quoted.getBoundingClientRect().width) <= page.clientWidth);
+    }
+    panel.hidden = true;
+  }
+  return wrong;
+})()`;
+
 // Run against the same page with print media emulated, and after the reader's machine has
 // been told it prefers a dark screen. Paper is white either way: a palette meant for a
 // backlit panel prints as blocks of solid ink, and nothing in the markup can show it.
@@ -399,18 +428,28 @@ try {
   }
 
   const answer = await evaluate(PROBE);
+  await send("Emulation.setDeviceMetricsOverride", {
+    width: 420,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  const phone = await evaluate(ON_A_PHONE);
+  await send("Emulation.clearDeviceMetricsOverride", {});
   await send("Emulation.setEmulatedMedia", {
     media: "print",
     features: [{ name: "prefers-color-scheme", value: "dark" }],
   });
   const paper = await evaluate(ON_PAPER);
   socket.close();
-  const threw = [answer, paper].find((r) => r.result?.exceptionDetails);
+  const threw = [answer, phone, paper].find((r) => r.result?.exceptionDetails);
   if (threw) {
     console.error("the page threw while being checked:");
     console.error(threw.result.exceptionDetails.exception?.description ?? threw.result.exceptionDetails.text);
   } else {
-    const wrong = answer.result.result.value.concat(paper.result.result.value);
+    const wrong = answer.result.result.value
+      .concat(phone.result.result.value)
+      .concat(paper.result.result.value);
     if (wrong.length === 0) {
       console.log(`the report behaves as it says it does: ${page}`);
       failed = false;
