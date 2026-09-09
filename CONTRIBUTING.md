@@ -19,6 +19,18 @@ cargo test --workspace --all-features
 
 All three run on Linux, macOS and Windows. Clippy warnings fail the build.
 
+The report page carries scripting no Rust test can reach, so a fourth gate drives it in a
+real browser. It needs Chrome and Node, and nothing else: no corpus, no model, no network.
+
+```sh
+cargo run -p census-core --example sample-report -- report.html
+node tools/report-check/check.mjs report.html
+```
+
+Chrome is found in the usual places per platform, or wherever `CHROME_PATH` says. Every
+check in it is a promise the page makes in its own prose; if you change what the page says
+it does, change the check with it.
+
 ## What is held to a higher bar
 
 This tool exists to make a percentage mean what it appears to mean, so anything affecting a
