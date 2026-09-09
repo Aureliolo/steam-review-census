@@ -202,6 +202,25 @@ const PROBE = `(function () {
     check('a sorted column does not say which way', button.parentNode.getAttribute('aria-sort') === 'descending');
   }
 
+  // A bar in the chart is a bar because its height is the number it stands for, and height on
+  // an SVG shape is geometry a stylesheet can overrule. A rule written for a box elsewhere in
+  // the page reaches these too and flattens every month to the same few pixels, which no Rust
+  // test can see: the markup is still right and only the browser knows what was drawn.
+  var bars = document.querySelectorAll('figure.timeline rect.bar');
+  check('the chart has no months in it', bars.length > 1);
+  if (bars.length > 1) {
+    var drawn = {};
+    var box = null;
+    Array.prototype.forEach.call(bars, function (bar) {
+      box = bar.getBoundingClientRect();
+      drawn[Math.round(box.height)] = true;
+    });
+    check('every month in the chart is drawn the same height', Object.keys(drawn).length > 1);
+    var chart = document.querySelector('figure.timeline svg').getBoundingClientRect();
+    check('the tallest month does not reach the top of the chart',
+      Math.max.apply(null, Object.keys(drawn).map(Number)) >= chart.height * 0.9);
+  }
+
   // A long review is clipped with a control to see the rest of it.
   var more = document.querySelector('[data-expands-text]');
   check('no long review offers the rest of itself', Boolean(more));

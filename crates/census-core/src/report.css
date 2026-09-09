@@ -549,17 +549,25 @@ button.disclose[aria-expanded='true'] .chevron {
   min-width: 11rem;
 }
 
-.bar {
+/* Scoped to the two places a bar is a box in the page. A bare `.bar` also reaches the rects
+   in the timeline, and `height` is geometry on an SVG shape, so it would flatten every month
+   in the chart to the same three pixels and leave only their position saying anything. */
+.bar-cell .bar,
+ul.languages .bar {
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.bar-cell .bar {
   position: absolute;
   left: 0.9rem;
   right: 0.9rem;
   bottom: 0.35rem;
   height: 3px;
-  border-radius: 3px;
-  background: var(--line);
 }
 
-.bar::before {
+.bar-cell .bar::before,
+ul.languages .bar::before {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
@@ -817,12 +825,7 @@ ul.languages li {
 
 ul.languages .bar {
   position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
   height: 6px;
-  border-radius: 3px;
-  background: var(--line);
 }
 
 ul.languages .lang-count {
