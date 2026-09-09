@@ -34,6 +34,39 @@ const SPARK_HEIGHT: f64 = 40.0;
 /// something to say.
 const ENOUGH_FOR_A_RATE: u64 = 30;
 
+/// The numeric columns of a game's table, in order, each with what it counts.
+///
+/// One list rather than two, so a column cannot reach the table without saying what it means.
+/// `{top}` is how many reviews Steam ranks as most helpful, which is a per-game setting.
+const COLUMNS: [(&str, &str); 5] = [
+    (
+        "Mention rate",
+        "The share of all reviews that say something about the category, with the number of \
+         reviews beside it. These are the headline figures and they add up to more than 100%.",
+    ),
+    (
+        "Main subject",
+        "The share whose single main subject is that category. Unlike mention rates, these add \
+         up to the number of reviews.",
+    ),
+    (
+        "Top of the pile",
+        "The mention rate over the {top} reviews Steam ranks as most helpful, which is roughly \
+         what somebody sees before deciding.",
+    ),
+    (
+        "Bias",
+        "How much the top of the pile overstates a category. 0\u{d7} means none of those few \
+         dozen reviews raised it, which is weak evidence rather than proof of absence.",
+    ),
+    (
+        "Recommended",
+        "The share of the reviews raising a category that still recommended the game, against \
+         this game's own baseline. Marked warm or cold only where the gap is wider than the \
+         number of reviews behind it can explain.",
+    ),
+];
+
 /// A rate below which no game can be said to talk about a subject more than another.
 ///
 /// It is the point at which the page stops printing a number and prints "less than" instead,
@@ -613,16 +646,49 @@ fn categories(out: &mut String, app: &AppReport) {
     }
     out.push_str(
         "<p class=\"note\">A review counts towards every category it says something about, so \
-         these add up to more than 100%. <strong>Bias</strong> is how much the top of the pile \
-         overstates a category: 0\u{d7} means none of those few dozen reviews raised it, which \
-         is weak evidence rather than proof of absence. <strong>Recommended</strong> is the \
-         share of the reviews raising a category that still recommended the game, against \
-         this game's own baseline, marked warm or cold only where the gap is wider than the \
-         number of reviews behind it can explain. Select a row to read the reviews behind it: \
-         a couple from the top of the pile where the category reaches it, and the rest drawn \
-         at random from everything filed there, so they are evidence rather than a \
-         selection.</p>\n",
+         these add up to more than 100%. Select a row to read the reviews behind it.</p>\n",
     );
+    legend(out, app);
+
+    let mut rows: Vec<&CategoryCount> = app.classification.categories.iter().collect();
+    rows.sort_by_key(|category| std::cmp::Reverse(category.mention_count));
+    let widest = rows.first().map_or(0, |c| c.mention_count).max(1);
+
+    out.push_str("<div class=\"scroll\">\n<table class=\"categories\">\n<thead><tr>");
+    heading(out, "Category", false);
+    for (name, _) in COLUMNS {
+        heading(out, name, true);
+    }
+    out.push_str("</tr></thead>\n<tbody>\n");
+
+    for category in rows {
+        category_row(out, app, category, widest);
+    }
+    out.push_str("</tbody>\n</table>\n</div>\n");
+}
+
+/// What each column means, folded away.
+///
+/// Five columns need five definitions and two of them were going unexplained, but a reader
+/// who already knows them should not have to scroll past six lines of prose in every one of
+/// six sections to reach the table. A native disclosure: it needs no scripting, and printing
+/// opens it along with everything else folded.
+fn legend(out: &mut String, app: &AppReport) {
+    out.push_str(
+        "<details class=\"legend\">\n\
+         <summary>What the columns mean, and where the quoted reviews come from</summary>\n\
+         <dl>\n",
+    );
+    let top = thousands(app.classification.top_helpful);
+    for (name, meaning) in COLUMNS {
+        let _ = writeln!(
+            out,
+            "<div><dt>{name}</dt><dd>{}</dd></div>",
+            meaning.replace("{top}", &top)
+        );
+    }
+    out.push_str("</dl>\n");
+
     // Otherwise the two identical columns on those rows look like a mistake.
     let alone: Vec<&str> = CORE_SPINE
         .iter()
@@ -632,29 +698,16 @@ fn categories(out: &mut String, app: &AppReport) {
     if !alone.is_empty() {
         let _ = writeln!(
             out,
-            "<p class=\"note\">{} are claims that no aspect was named, so nothing else can be \
-             true of the same review and their mention rate is their main-subject share.</p>",
+            "<p>{} are claims that no aspect was named, so nothing else can be true of the \
+             same review and their mention rate is their main-subject share.</p>",
             escape(&alone.join(" and "))
         );
     }
-
-    let mut rows: Vec<&CategoryCount> = app.classification.categories.iter().collect();
-    rows.sort_by_key(|category| std::cmp::Reverse(category.mention_count));
-    let widest = rows.first().map_or(0, |c| c.mention_count).max(1);
-
-    out.push_str("<div class=\"scroll\">\n<table class=\"categories\">\n<thead><tr>");
-    heading(out, "Category", false);
-    heading(out, "Mention rate", true);
-    heading(out, "Main subject", true);
-    heading(out, "Top of the pile", true);
-    heading(out, "Bias", true);
-    heading(out, "Recommended", true);
-    out.push_str("</tr></thead>\n<tbody>\n");
-
-    for category in rows {
-        category_row(out, app, category, widest);
-    }
-    out.push_str("</tbody>\n</table>\n</div>\n");
+    out.push_str(
+        "<p>The reviews behind a row are a couple from the top of the pile where the category \
+         reaches it, and the rest drawn at random from everything filed there, so they are \
+         evidence rather than a selection.</p>\n</details>\n",
+    );
 }
 
 /// A column header that can reorder the table.
@@ -2167,6 +2220,36 @@ mod tests {
         assert_eq!(
             escape("<script>alert(\"x\" & 'y')</script>"),
             "&lt;script&gt;alert(&quot;x&quot; &amp; &#39;y&#39;)&lt;/script&gt;"
+        );
+    }
+
+    /// A column with no definition is a number with no name for what it counts, and the
+    /// panel a reader would look in has to hold one for every column the table draws.
+    #[test]
+    fn every_column_the_table_draws_is_defined_where_a_reader_looks() {
+        let page = render(&sample_report("ordinary text"));
+        let legend = page
+            .split_once("<details class=\"legend\">")
+            .expect("no legend")
+            .1
+            .split_once("</details>")
+            .expect("the legend never ends")
+            .0;
+        for (name, _) in COLUMNS {
+            assert!(
+                page.contains(&format!(
+                    "<button type=\"button\" class=\"sort\" data-sort>{name}"
+                )),
+                "{name} is defined and never drawn"
+            );
+            assert!(
+                legend.contains(&format!("<dt>{name}</dt>")),
+                "{name} is drawn and never defined"
+            );
+        }
+        assert!(
+            legend.contains("the 50 reviews Steam ranks"),
+            "the definition still carries its placeholder: {legend}"
         );
     }
 
