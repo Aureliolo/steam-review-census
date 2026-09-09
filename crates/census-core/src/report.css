@@ -13,7 +13,10 @@
   --accent: #2f5fd0;
   --accent-soft: #dfe8fb;
   --over: #b4451f;
-  --over-soft: #f6e2d9;
+  /* Lighter than the shade it looks like it should be: the only thing drawn on it is the
+     chip that marks a review as one Steam ranks near the top, at 12px, and 4.4:1 is not
+     enough to read twelve pixels of anything against. */
+  --over-soft: #fbeee9;
   --under: #1f6f6b;
   --warn-bg: #fdf6e3;
   --warn-line: #e8d9a8;

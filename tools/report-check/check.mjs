@@ -366,6 +366,102 @@ const ON_A_PHONE = `(function () {
   return wrong;
 })()`;
 
+// Every piece of text on the page, in both themes, against whatever is actually behind it.
+// A palette is a set of tokens until a browser composites them, and the cells of the
+// cross-game matrix are a wash of the accent colour over the card at a strength that depends
+// on the number in them, which no reading of the stylesheet settles.
+const CONTRAST = `(function () {
+  var wrong = [];
+  var root = document.documentElement;
+  var chose = root.getAttribute('data-theme');
+
+  // Everything on screen at once, whatever the checks before this left folded, filtered or
+  // shut. Text nobody can see is text nobody has looked at.
+  var input = document.querySelector('[data-filter-input]');
+  if (input) {
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('tr.panel'), function (p) { p.hidden = false; });
+  Array.prototype.forEach.call(document.querySelectorAll('details'), function (d) { d.open = true; });
+
+  var rgba = function (value) {
+    var parts = String(value).match(/[\\d.]+/g);
+    if (!parts || parts.length < 3) { return null; }
+    return [+parts[0], +parts[1], +parts[2], parts.length > 3 ? +parts[3] : 1];
+  };
+  var over = function (top, under) {
+    var a = top[3];
+    return [
+      top[0] * a + under[0] * (1 - a),
+      top[1] * a + under[1] * (1 - a),
+      top[2] * a + under[2] * (1 - a),
+      1
+    ];
+  };
+  var backdrop = function (el) {
+    var stack = [];
+    for (var node = el; node; node = node.parentElement) {
+      var colour = rgba(getComputedStyle(node).backgroundColor);
+      if (colour && colour[3] > 0) {
+        stack.push(colour);
+        if (colour[3] === 1) { break; }
+      }
+    }
+    var base = [255, 255, 255, 1];
+    for (var i = stack.length - 1; i >= 0; i -= 1) { base = over(stack[i], base); }
+    return base;
+  };
+  var lum = function (c) {
+    var f = function (v) {
+      v = v / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  };
+  var ratio = function (a, b) {
+    var one = lum(a);
+    var two = lum(b);
+    return (Math.max(one, two) + 0.05) / (Math.min(one, two) + 0.05);
+  };
+
+  var writes = function (el) {
+    for (var i = 0; i < el.childNodes.length; i += 1) {
+      var node = el.childNodes[i];
+      if (node.nodeType === 3 && node.textContent.trim().length > 0) { return true; }
+    }
+    return false;
+  };
+
+  [null, 'light', 'dark'].forEach(function (theme) {
+    if (theme === null) { root.removeAttribute('data-theme'); } else { root.setAttribute('data-theme', theme); }
+    var worst = null;
+    Array.prototype.forEach.call(document.querySelectorAll('body *'), function (el) {
+      if (!writes(el)) { return; }
+      var box = el.getBoundingClientRect();
+      // Anything with no box on screen is folded away or read aloud rather than drawn.
+      if (box.width < 4 || box.height < 4) { return; }
+      var style = getComputedStyle(el);
+      var ink = rgba(style.color);
+      if (!ink || ink[3] === 0) { return; }
+      var size = parseFloat(style.fontSize);
+      var large = size >= 24 || (size >= 18.66 && parseInt(style.fontWeight, 10) >= 700);
+      var found = ratio(over(ink, backdrop(el)), backdrop(el));
+      if (found < (large ? 3 : 4.5) && (worst === null || found < worst.found)) {
+        worst = { found: found, what: el.tagName.toLowerCase() + '.' + (el.className || ''), size: size };
+      }
+    });
+    if (worst !== null) {
+      wrong.push('text is too faint to read against what is behind it (' +
+        worst.what + ', ' + worst.size + 'px, ' + worst.found.toFixed(2) + ':1, theme ' +
+        (theme === null ? 'as the machine prefers' : theme) + ')');
+    }
+  });
+
+  if (chose === null) { root.removeAttribute('data-theme'); } else { root.setAttribute('data-theme', chose); }
+  return wrong;
+})()`;
+
 // Run against the same page with print media emulated, and after the reader's machine has
 // been told it prefers a dark screen. Paper is white either way: a palette meant for a
 // backlit panel prints as blocks of solid ink, and nothing in the markup can show it.
@@ -436,19 +532,21 @@ try {
   });
   const phone = await evaluate(ON_A_PHONE);
   await send("Emulation.clearDeviceMetricsOverride", {});
+  const ink = await evaluate(CONTRAST);
   await send("Emulation.setEmulatedMedia", {
     media: "print",
     features: [{ name: "prefers-color-scheme", value: "dark" }],
   });
   const paper = await evaluate(ON_PAPER);
   socket.close();
-  const threw = [answer, phone, paper].find((r) => r.result?.exceptionDetails);
+  const threw = [answer, phone, ink, paper].find((r) => r.result?.exceptionDetails);
   if (threw) {
     console.error("the page threw while being checked:");
     console.error(threw.result.exceptionDetails.exception?.description ?? threw.result.exceptionDetails.text);
   } else {
     const wrong = answer.result.result.value
       .concat(phone.result.result.value)
+      .concat(ink.result.result.value)
       .concat(paper.result.result.value);
     if (wrong.length === 0) {
       console.log(`the report behaves as it says it does: ${page}`);
