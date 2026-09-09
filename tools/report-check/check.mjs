@@ -200,6 +200,21 @@ const PROBE = `(function () {
     check('a sorted column does not say which way', button.parentNode.getAttribute('aria-sort') === 'descending');
   }
 
+  // A long review is clipped with a control to see the rest of it.
+  var more = document.querySelector('[data-expands-text]');
+  check('no long review offers the rest of itself', Boolean(more));
+  if (more) {
+    var text = more.previousElementSibling;
+    var said = more.textContent;
+    more.click();
+    check('showing the rest of a review does not unclip it', text.classList.contains('open'));
+    check('the control does not say the review is open',
+      more.getAttribute('aria-expanded') === 'true');
+    check('the control still offers what it has already done', more.textContent !== said);
+    more.click();
+    check('a review cannot be clipped again', !text.classList.contains('open'));
+  }
+
   // A link from the finding to the reviews behind it.
   var link = document.querySelector('.headline a[href^="#panel-"]');
   check('the finding leads nowhere', Boolean(link));
