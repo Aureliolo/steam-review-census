@@ -16,7 +16,9 @@ use std::path::PathBuf;
 use census_core::{
     capture::CapturedReview,
     evaluate::{AgreementReport, CategoryAgreement, Slice},
-    report::{AppReport, CategoryCount, Classification, CrawlFacts, Example, Month, Report},
+    report::{
+        AppReport, CategoryCount, Classification, CrawlFacts, Example, Measurement, Month, Report,
+    },
     taxonomy::{CORE_SPINE, CORE_SPINE_VERSION},
 };
 
@@ -149,7 +151,11 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             })
             .collect(),
         top: vec![quoted(app_id, CORE_SPINE[0].id, true)],
-        agreement: measured.then(|| agreement(app_id)),
+        agreement: if measured {
+            Measurement::Measured(Box::new(agreement(app_id)))
+        } else {
+            Measurement::Unlabelled
+        },
     }
 }
 

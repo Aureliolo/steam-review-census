@@ -228,8 +228,37 @@ pub struct AppReport {
     pub examples: Vec<(String, Vec<Example>)>,
     /// The most-helpful reviews, which is what a reader skimming the store page sees.
     pub top: Vec<Example>,
-    /// Measured agreement against a reference set, where one exists for this game.
-    pub agreement: Option<crate::AgreementReport>,
+    /// Measured agreement against a reference set, or why there is none.
+    pub agreement: Measurement,
+}
+
+/// Whether a game's classifier error has been measured, and what stopped it if not.
+///
+/// A game with a reference set labelled against another taxonomy is not a game nobody has
+/// labelled, and a page that says it is tells a reader to go and do work that has been done.
+/// Every taxonomy change puts every game in that state until its set is labelled again, so it
+/// is a state the report spends real time in rather than an edge case.
+#[derive(Debug, Clone, Default)]
+pub enum Measurement {
+    /// Nobody has labelled this game.
+    #[default]
+    Unlabelled,
+    /// A set exists, naming a taxonomy this build does not have. Scoring against it would
+    /// mark the classifier on categories nobody labelling it was offered.
+    OtherTaxonomy(String),
+    /// Boxed because the report behind it dwarfs the other two and every game carries one.
+    Measured(Box<crate::AgreementReport>),
+}
+
+impl Measurement {
+    /// The report, where there is one.
+    #[must_use]
+    pub fn report(&self) -> Option<&crate::AgreementReport> {
+        match self {
+            Self::Measured(report) => Some(report),
+            _ => None,
+        }
+    }
 }
 
 impl AppReport {
@@ -567,12 +596,17 @@ struct Filed {
 
 /// A game's measured agreement, when it has a reference set and stored classifications to
 /// compare. A report without one still renders; it just cannot say how often it is wrong.
-fn agreement_for(app_id: u32, out_dir: &Path) -> Option<crate::AgreementReport> {
+fn agreement_for(app_id: u32, out_dir: &Path) -> Measurement {
     let dir = crate::evaluate::default_reference_dir(app_id);
-    let set = crate::ReferenceSet::load(&dir).ok()?;
-    (set.spine_version == crate::CORE_SPINE_VERSION)
-        .then(|| crate::compare(&set, out_dir, app_id).ok())
-        .flatten()
+    let Ok(set) = crate::ReferenceSet::load(&dir) else {
+        return Measurement::Unlabelled;
+    };
+    if set.spine_version != crate::CORE_SPINE_VERSION {
+        return Measurement::OtherTaxonomy(set.spine_version);
+    }
+    crate::compare(&set, out_dir, app_id).map_or(Measurement::Unlabelled, |report| {
+        Measurement::Measured(Box::new(report))
+    })
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
@@ -653,7 +687,7 @@ mod tests {
             },
             examples: Vec::new(),
             top: Vec::new(),
-            agreement: None,
+            agreement: Measurement::Unlabelled,
         }
     }
 

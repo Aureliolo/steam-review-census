@@ -221,7 +221,7 @@ fn corpora(out: &mut String, report: &Report) {
     }
     out.push_str("</tr></thead>\n<tbody>\n");
     for app in &report.apps {
-        let measured = app.agreement.as_ref().and_then(|agreement| {
+        let measured = app.agreement.report().and_then(|agreement| {
             agreement
                 .slices
                 .iter()
@@ -246,7 +246,7 @@ fn corpora(out: &mut String, report: &Report) {
             app.positive_baseline()
                 .map_or_else(|| nothing("no reviews"), percent),
             sortable(measured),
-            measured.map_or_else(|| nothing("no reference set"), percent)
+            measured.map_or_else(|| nothing(&unmeasured(&app.agreement)), percent)
         );
     }
     out.push_str("</tbody>\n</table>\n</div>\n");
@@ -255,6 +255,16 @@ fn corpora(out: &mut String, report: &Report) {
          hundred of them, so a single game's figure carries a band about twenty points wide \
          and the pooled one at the end of this section is the one worth quoting.</p>\n",
     );
+}
+
+/// Why a game carries no agreement figure, in the few words a dash can be read out as.
+fn unmeasured(measurement: &crate::report::Measurement) -> String {
+    match measurement {
+        crate::report::Measurement::OtherTaxonomy(version) => {
+            format!("labelled against {version}")
+        }
+        _ => "no reference set".to_owned(),
+    }
 }
 
 /// Every category against every game, loudest subject first.
@@ -474,7 +484,7 @@ fn pooled_agreement(out: &mut String, report: &Report) {
     let measured: Vec<crate::AgreementReport> = report
         .apps
         .iter()
-        .filter_map(|app| app.agreement.clone())
+        .filter_map(|app| app.agreement.report().cloned())
         .collect();
     if measured.len() != report.apps.len() || measured.len() < 2 {
         return;
@@ -868,7 +878,7 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
 
     let measured = app
         .agreement
-        .as_ref()
+        .report()
         .and_then(|report| report.categories.iter().find(|c| c.id == category.id));
 
     let _ = write!(
@@ -1417,13 +1427,26 @@ fn trust(out: &mut String, app: &AppReport) {
     }
     out.push_str("</dl>\n");
 
-    match app.agreement.as_ref() {
-        Some(agreement) => agreement_note(out, agreement),
-        None => out.push_str(
+    match &app.agreement {
+        crate::report::Measurement::Measured(agreement) => agreement_note(out, agreement),
+        crate::report::Measurement::Unlabelled => out.push_str(
             "<p class=\"warn\">No reference set has been labelled for this game, so how often \
              the classifier is wrong here has not been measured. Treat every rate as \
              provisional.</p>\n",
         ),
+        // Not the same thing as nobody having labelled it, and telling a reader it is sends
+        // them to do work that is already done.
+        crate::report::Measurement::OtherTaxonomy(version) => {
+            let _ = writeln!(
+                out,
+                "<p class=\"warn\">This game has a reference set, labelled against taxonomy \
+                 {}, and these categories are {}. Nothing here is measured against it, because \
+                 that would score the classifier on categories nobody labelling it was \
+                 offered. Label the set again to measure this game.</p>",
+                escape(version),
+                escape(&app.classification.spine_version)
+            );
+        }
     }
 
     out.push_str(
@@ -1728,7 +1751,7 @@ mod tests {
                 },
                 examples: vec![("bugs".to_owned(), vec![example])],
                 top: Vec::new(),
-                agreement: None,
+                agreement: crate::report::Measurement::Unlabelled,
             }],
         }
     }
@@ -2209,6 +2232,43 @@ mod tests {
         );
     }
 
+    /// Every taxonomy change puts every game into this state until its set is labelled again,
+    /// so it is a state the page spends real time in. Telling a reader that nobody has
+    /// labelled the game sends them to do work that is already done.
+    #[test]
+    fn a_set_labelled_against_another_taxonomy_is_not_reported_as_no_set_at_all() {
+        let mut report = two_games();
+        report.apps[0].agreement = crate::report::Measurement::OtherTaxonomy("core-3".to_owned());
+        report.apps[0].classification.spine_version = "core-9".to_owned();
+        let page = render(&report);
+
+        let section = page
+            .split_once("id=\"app-7\"")
+            .expect("no section for the game")
+            .1
+            .split_once("</section>")
+            .expect("the section never ends")
+            .0;
+        assert!(
+            !section.contains("No reference set has been labelled"),
+            "a game that has been labelled is reported as never labelled"
+        );
+        assert!(
+            section.contains("labelled against taxonomy core-3")
+                && section.contains("these categories are core-9"),
+            "the page does not say which two taxonomies disagree: {section}"
+        );
+
+        let table = page
+            .split_once("<table class=\"corpora\">")
+            .expect("no corpora table")
+            .1;
+        assert!(
+            table.contains("labelled against core-3"),
+            "the dash beside the game is read out as no set at all"
+        );
+    }
+
     /// A set of thirty games is a table of thirty rows, and the questions a reader brings to
     /// it are which corpus is biggest and where the classifier is weakest. Both are a sort,
     /// and a sort on the printed text puts 982,291 below 2,000 and an unmeasured game above
@@ -2341,21 +2401,22 @@ mod tests {
     #[test]
     fn the_cross_game_section_compares_the_corpora_and_not_only_the_subjects() {
         let mut report = two_games();
-        report.apps[0].agreement = Some(crate::AgreementReport {
-            apps: vec![7],
-            produced_by: String::new(),
-            compared: 100,
-            unmatched: 0,
-            primary_agreement: Some(0.62),
-            anchors: Vec::new(),
-            categories: Vec::new(),
-            slices: vec![crate::Slice {
-                subset: "random".to_owned(),
-                contested: None,
+        report.apps[0].agreement =
+            crate::report::Measurement::Measured(Box::new(crate::AgreementReport {
+                apps: vec![7],
+                produced_by: String::new(),
                 compared: 100,
-                agreed: 62,
-            }],
-        });
+                unmatched: 0,
+                primary_agreement: Some(0.62),
+                anchors: Vec::new(),
+                categories: Vec::new(),
+                slices: vec![crate::Slice {
+                    subset: "random".to_owned(),
+                    contested: None,
+                    compared: 100,
+                    agreed: 62,
+                }],
+            }));
 
         let table = render(&report)
             .split_once("<table class=\"corpora\">")
