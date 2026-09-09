@@ -244,10 +244,41 @@ section.overview {
   padding: 2.5rem 0 1rem;
 }
 
-table.matrix {
+table.matrix,
+table.corpora {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+}
+
+table.corpora {
+  margin-bottom: 0.75rem;
+}
+
+table.corpora th,
+table.corpora td {
+  padding: 0.45rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+table.corpora thead th {
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+table.corpora tbody th {
+  font-weight: 600;
+}
+
+table.corpora .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 table.matrix th,

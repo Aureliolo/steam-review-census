@@ -187,6 +187,7 @@ fn overview(out: &mut String, report: &Report) {
 
     out.push_str("<section class=\"overview\">\n<div class=\"wrap\">\n");
     out.push_str("<h2>Across these games</h2>\n");
+    corpora(out, report);
     let _ = writeln!(
         out,
         "<p class=\"note\">Mention rates for {} reviews of {} games. Read down a column for \
@@ -201,6 +202,46 @@ fn overview(out: &mut String, report: &Report) {
     widest_apart(out, report);
     pooled_agreement(out, report);
     out.push_str("</div>\n</section>\n");
+}
+
+/// The corpora themselves, before the subjects in them.
+///
+/// The section compared what six games talk about and never the six games, so how big each
+/// one is, how warmly it is reviewed and how well the classifier does on it were six visits
+/// away from each other.
+fn corpora(out: &mut String, report: &Report) {
+    out.push_str(
+        "<div class=\"scroll\">\n<table class=\"corpora\">\n<thead><tr>\
+         <th scope=\"col\">Game</th><th scope=\"col\" class=\"num\">Reviews counted</th>\
+         <th scope=\"col\" class=\"num\">Recommended</th>\
+         <th scope=\"col\" class=\"num\">Agreement</th></tr></thead>\n<tbody>\n",
+    );
+    for app in &report.apps {
+        let measured = app.agreement.as_ref().and_then(|agreement| {
+            agreement
+                .slices
+                .iter()
+                .find(|slice| slice.subset == "random" && slice.contested.is_none())
+                .and_then(crate::Slice::agreement)
+        });
+        let _ = writeln!(
+            out,
+            "<tr><th scope=\"row\"><a href=\"#app-{}\">{}</a></th>\
+             <td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
+            app.app_id(),
+            escape(&app.crawl.title()),
+            thousands(app.classification.reviews),
+            app.positive_baseline()
+                .map_or_else(|| nothing("no reviews"), percent),
+            measured.map_or_else(|| nothing("no reference set"), percent)
+        );
+    }
+    out.push_str("</tbody>\n</table>\n</div>\n");
+    out.push_str(
+        "<p class=\"note\">Agreement is measured on each game's own held-back reviews, a \
+         hundred of them, so a single game's figure carries a band about twenty points wide \
+         and the pooled one at the end of this section is the one worth quoting.</p>\n",
+    );
 }
 
 /// Every category against every game, loudest subject first.
@@ -2046,6 +2087,46 @@ mod tests {
         assert!(
             !tied.contains("loudest"),
             "one review in a hundred thousand was drawn as a finding"
+        );
+    }
+
+    /// A section comparing what six games talk about that never compares the six games
+    /// leaves how big each one is and how well it is measured six visits apart.
+    #[test]
+    fn the_cross_game_section_compares_the_corpora_and_not_only_the_subjects() {
+        let mut report = two_games();
+        report.apps[0].agreement = Some(crate::AgreementReport {
+            apps: vec![7],
+            produced_by: String::new(),
+            compared: 100,
+            unmatched: 0,
+            primary_agreement: Some(0.62),
+            anchors: Vec::new(),
+            categories: Vec::new(),
+            slices: vec![crate::Slice {
+                subset: "random".to_owned(),
+                contested: None,
+                compared: 100,
+                agreed: 62,
+            }],
+        });
+
+        let table = render(&report)
+            .split_once("<table class=\"corpora\">")
+            .expect("no corpora table")
+            .1
+            .split_once("</table>")
+            .expect("the table never ends")
+            .0
+            .to_owned();
+        assert!(table.contains("href=\"#app-7\""), "no way into a game");
+        assert!(table.contains("A Game &lt;&amp; Friends&gt;"));
+        assert!(table.contains(">1,000<"), "no review count: {table}");
+        assert!(table.contains(">70.0%<"), "no recommended share: {table}");
+        assert_eq!(
+            table.matches("no reference set").count(),
+            1,
+            "an unmeasured game is given a figure, or a measured one is not: {table}"
         );
     }
 
