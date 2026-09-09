@@ -811,6 +811,11 @@ ul.languages .lang-count {
   font-variant-numeric: tabular-nums;
 }
 
+.back {
+  margin: 2.5rem 0 0;
+  font-size: 0.9rem;
+}
+
 footer.page {
   padding: 2.5rem 0 4rem;
   color: var(--ink-soft);
@@ -863,6 +868,7 @@ a {
   button.more,
   form.filter,
   .skip,
+  .back,
   .chevron,
   .arrow {
     display: none;

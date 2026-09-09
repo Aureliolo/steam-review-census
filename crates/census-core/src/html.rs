@@ -50,8 +50,9 @@ pub fn render(report: &Report) -> String {
     out.push_str("<main id=\"main\">\n");
     contents(&mut out, report);
     overview(&mut out, report);
+    let several = report.apps.len() > 1;
     for app in &report.apps {
-        game(&mut out, app);
+        game(&mut out, app, several);
     }
     out.push_str("</main>\n");
     page_footer(&mut out, report);
@@ -117,7 +118,7 @@ fn contents(out: &mut String, report: &Report) {
     if report.apps.len() < 2 {
         return;
     }
-    out.push_str("<nav class=\"contents\" aria-label=\"Games in this report\">\n<div class=\"wrap\">\n<ul>\n");
+    out.push_str("<nav class=\"contents\" id=\"games\" aria-label=\"Games in this report\">\n<div class=\"wrap\">\n<ul>\n");
     for app in &report.apps {
         let _ = writeln!(
             out,
@@ -261,7 +262,7 @@ fn pooled_agreement(out: &mut String, report: &Report) {
     agreement_note(out, &crate::evaluate::pooled(&measured));
 }
 
-fn game(out: &mut String, app: &AppReport) {
+fn game(out: &mut String, app: &AppReport, several: bool) {
     let _ = writeln!(
         out,
         "<section class=\"game\" id=\"app-{}\">\n<div class=\"wrap\">",
@@ -275,6 +276,18 @@ fn game(out: &mut String, app: &AppReport) {
     top_of_the_pile(out, app);
     languages(out, app);
     trust(out, app);
+    // A section runs to a hundred rows and the evidence under them, so the way out of one is
+    // worth stating rather than leaving to a scrollbar.
+    let _ = writeln!(
+        out,
+        "<p class=\"back\"><a href=\"#{}\">{}</a></p>",
+        if several { "games" } else { "main" },
+        if several {
+            "Back to the games"
+        } else {
+            "Back to the top"
+        }
+    );
     out.push_str("</div>\n</section>\n");
 }
 
