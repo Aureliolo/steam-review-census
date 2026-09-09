@@ -1523,6 +1523,28 @@ mod tests {
         );
     }
 
+    /// Folded and filtered are two reasons a row is not on screen, and printing undoes only
+    /// the first. Sharing one mechanism would print rows a reader had filtered away.
+    #[test]
+    fn printing_opens_what_was_folded_and_leaves_what_was_filtered() {
+        assert!(
+            SCRIPT.contains("classList.toggle('filtered-out'"),
+            "the filter must not reach for the attribute that means folded"
+        );
+        let print = STYLE
+            .split_once("@media print")
+            .expect("nothing is written for paper")
+            .1;
+        assert!(
+            print.contains("tr.panel[hidden]:not(.filtered-out)"),
+            "printing would unfold rows the reader had filtered away"
+        );
+        assert!(
+            STYLE.contains(".filtered-out {"),
+            "the filter's class styles nothing"
+        );
+    }
+
     #[test]
     fn a_cell_with_no_number_says_so_out_loud() {
         let mut out = String::new();

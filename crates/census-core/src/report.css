@@ -98,6 +98,12 @@ h3 {
   margin: 2.5rem 0 0.5rem;
 }
 
+/* Narrowed away by the filter. Distinct from the hidden attribute, which on these same rows
+   means folded shut, and which printing opens. */
+.filtered-out {
+  display: none !important;
+}
+
 /* Carried by the accessibility tree and by nothing else. Used where a glyph says something
    to the eye that it does not say to a screen reader. */
 .read-aloud {
@@ -850,13 +856,19 @@ a {
   }
 }
 
+/* Paper has no pointer, so anything that only responds to one is noise on it, and every
+   fold has to be open because nobody can open it later. */
 @media print {
   .theme,
-  button.more {
+  button.more,
+  form.filter,
+  .skip,
+  .chevron,
+  .arrow {
     display: none;
   }
 
-  tr.panel[hidden] {
+  tr.panel[hidden]:not(.filtered-out) {
     display: table-row !important;
   }
 
@@ -868,5 +880,38 @@ a {
   body {
     background: #fff;
     color: #000;
+  }
+
+  /* Sticky positioning has nowhere to stick on a page, and leaves the header floating over
+     the rows it belongs to. A repeated header group is the printed equivalent. */
+  table.categories thead th,
+  table.matrix tbody th {
+    position: static;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  section.game {
+    break-before: page;
+  }
+
+  section.game:first-of-type {
+    break-before: auto;
+  }
+
+  tr.row,
+  tr.panel,
+  li.review,
+  figure.timeline,
+  .headline,
+  .warn {
+    break-inside: avoid;
+  }
+
+  h2,
+  h3 {
+    break-after: avoid;
   }
 }

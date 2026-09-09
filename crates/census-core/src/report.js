@@ -140,10 +140,11 @@
       var matched = {};
       rows.forEach(function (entry) {
         var hit = query === '' || entry.name.indexOf(query) !== -1;
-        entry.row.hidden = !hit;
+        // A class rather than the hidden attribute, which already means "folded away" on
+        // these rows. Printing opens everything folded and must not undo a filter with it.
+        entry.row.classList.toggle('filtered-out', !hit);
         if (entry.panel) {
-          // The row owns whether its evidence is open; filtering only ever hides.
-          entry.panel.hidden = !hit || entry.row.getAttribute('aria-expanded') !== 'true';
+          entry.panel.classList.toggle('filtered-out', !hit);
         }
         if (hit) {
           matched[entry.name] = true;
@@ -166,6 +167,27 @@
       event.preventDefault();
     });
     form.hidden = false;
+  }
+
+  // Nobody can open a fold on paper. The stylesheet handles the rows and the clipped text,
+  // but a closed <details> is hidden by the browser itself and no author rule reaches it.
+  function unfoldToPrint() {
+    var reopened = [];
+    window.addEventListener('beforeprint', function () {
+      reopened = [];
+      Array.prototype.forEach.call(document.querySelectorAll('details'), function (fold) {
+        if (!fold.open) {
+          fold.open = true;
+          reopened.push(fold);
+        }
+      });
+    });
+    window.addEventListener('afterprint', function () {
+      reopened.forEach(function (fold) {
+        fold.open = false;
+      });
+      reopened = [];
+    });
   }
 
   function setUp() {
@@ -231,6 +253,8 @@
     if (form && form.querySelector('[data-filter-input]')) {
       narrow(form);
     }
+
+    unfoldToPrint();
   }
 
   if (document.readyState === 'loading') {
