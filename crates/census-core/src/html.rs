@@ -1164,8 +1164,16 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
         "<div class=\"text{}\"><p{}>{}</p></div>",
         if long { " long" } else { "" },
         // The page is in English and most of the reviews on it are not. Saying so is what
-        // lets a screen reader pronounce a Chinese review as Chinese rather than as English.
-        bcp47(&example.review.language).map_or_else(String::new, |tag| format!(" lang=\"{tag}\"")),
+        // lets a screen reader pronounce a Chinese review as Chinese rather than as English,
+        // and what lets an Arabic one be laid out the way it was written.
+        bcp47(&example.review.language).map_or_else(String::new, |tag| {
+            let direction = if RIGHT_TO_LEFT.contains(&tag) {
+                " dir=\"rtl\""
+            } else {
+                ""
+            };
+            format!(" lang=\"{tag}\"{direction}")
+        }),
         escape(text)
     );
     if long {
@@ -1465,7 +1473,7 @@ const FOOTER_LIMITS: [&str; 4] = [
 ///
 /// Steam uses names of its own: "schinese", "koreana", "brazilian", "latam". A page that
 /// repeats those tells a screen reader nothing and a reader not much more.
-const LANGUAGES: [(&str, &str, &str); 29] = [
+const LANGUAGES: [(&str, &str, &str); 31] = [
     ("english", "en", "English"),
     ("schinese", "zh-Hans", "Chinese (simplified)"),
     ("tchinese", "zh-Hant", "Chinese (traditional)"),
@@ -1495,7 +1503,16 @@ const LANGUAGES: [(&str, &str, &str); 29] = [
     ("turkish", "tr", "Turkish"),
     ("ukrainian", "uk", "Ukrainian"),
     ("vietnamese", "vi", "Vietnamese"),
+    ("arabic", "ar", "Arabic"),
+    ("malay", "ms", "Malay"),
 ];
+
+/// Tags whose script runs the other way, so a review in one is laid out the other way.
+///
+/// Arabic is the only one Steam offers as a review language, and two reviews of the three
+/// million measured here are in it. Two reviews rendered backwards are still two reviews
+/// rendered backwards, and the fix is one attribute.
+const RIGHT_TO_LEFT: [&str; 1] = ["ar"];
 
 /// The BCP 47 tag for a Steam language name.
 ///
@@ -2385,6 +2402,34 @@ mod tests {
                 "{tag} is not a tag"
             );
         }
+        for tag in RIGHT_TO_LEFT {
+            assert!(
+                tags.contains(&tag),
+                "{tag} runs the other way and is not a language the page knows"
+            );
+        }
+    }
+
+    /// A review written right to left, laid out left to right, is unreadable in a way the
+    /// page has all the information to avoid.
+    #[test]
+    fn a_review_is_laid_out_the_way_it_was_written() {
+        let mut report = sample_report("مراجعة عن اللعبة");
+        report.apps[0].examples[0].1[0].review.language = "arabic".to_owned();
+        assert!(
+            render(&report).contains("<p lang=\"ar\" dir=\"rtl\">"),
+            "an Arabic review is laid out as English"
+        );
+
+        let english = render(&sample_report("ordinary text"));
+        assert!(
+            english.contains("<p lang=\"en\">"),
+            "an English review has no language on it"
+        );
+        assert!(
+            !english.contains("dir=\"rtl\""),
+            "an English review is laid out backwards"
+        );
     }
 
     #[test]
