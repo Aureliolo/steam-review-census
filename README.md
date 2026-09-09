@@ -95,8 +95,15 @@ can never report a review as naming an aspect and naming none.
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,
 balance is difficulty, animation speed is graphics, port requests are compatibility, sequel
-requests are a verdict. The rules ship with the taxonomy and generate the sheet every
-labeller works from, so a boundary can only be defined in one place.
+requests are a verdict, a system nobody explains is tutorial however good the system is,
+calling a game co-op is naming a kind of game and belongs to genre, and a protest about
+anything the publisher did belongs to policy even when it names no particular term. The rules
+ship with the taxonomy and generate the sheet every labeller works from, so a boundary can
+only be defined in one place.
+
+Categories are added when labellers report having nowhere to put something, not when
+somebody thinks of one. Every category in the current spine was asked for by the people
+labelling against the previous one.
 
 ### Depth is how closely each review is read
 
