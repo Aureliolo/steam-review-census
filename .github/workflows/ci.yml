@@ -39,8 +39,10 @@ jobs:
       - run: cargo test --workspace
 
   # The report's folding, filtering, sorting and deep links only exist once a browser has run
-  # them, so they are the one part of this tool no Rust test can reach. The runner's own
-  # Chrome drives a page rendered from a fixture, needing no corpus and no model.
+  # them, and so does its rendering: a stylesheet rule can flatten a chart or turn a printed
+  # page into blocks of ink while the markup stays exactly right. Both are the one part of
+  # this tool no Rust test can reach. The runner's own Chrome drives a page rendered from a
+  # fixture, on screen and again under print media, needing no corpus and no model.
   report:
     runs-on: ubuntu-latest
     steps:
