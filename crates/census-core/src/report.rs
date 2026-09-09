@@ -21,7 +21,7 @@ use crate::{Result, bounded::Smallest, capture::CapturedReview, taxonomy::CORE_S
 /// Reviews shown per category before a reader is asked to go to the corpus itself.
 pub const DEFAULT_EXAMPLES: usize = 8;
 
-/// Of those, how many are taken from the most-upvoted reviews rather than at random.
+/// Of those, how many are taken from the most-helpful reviews rather than at random.
 const FROM_THE_TOP: usize = 2;
 
 /// A category has to reach this fraction of the top of the pile before the headline will
@@ -202,7 +202,7 @@ pub struct Example {
     pub review: CapturedReview,
     pub primary: String,
     pub mentions: Vec<String>,
-    /// Whether this review is one of the most-upvoted in the corpus.
+    /// Whether this review is one of the most-helpful in the corpus.
     pub from_the_top: bool,
 }
 
@@ -226,7 +226,7 @@ pub struct AppReport {
     pub classification: Classification,
     /// Evidence per category id, in taxonomy order.
     pub examples: Vec<(String, Vec<Example>)>,
-    /// The most-upvoted reviews, which is what a reader skimming the store page sees.
+    /// The most-helpful reviews, which is what a reader skimming the store page sees.
     pub top: Vec<Example>,
     /// Measured agreement against a reference set, where one exists for this game.
     pub agreement: Option<crate::AgreementReport>,
@@ -361,7 +361,7 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
         .map(|category| {
             // A few from the top of the pile first, where the category reaches it at all.
             // A random sample of a million reviews will almost never contain one of the
-            // fifty most-upvoted, and what those fifty said about a category next to what
+            // fifty most-helpful, and what those fifty said about a category next to what
             // everyone said is the whole argument in miniature.
             let mut quoted: Vec<Example> = classification
                 .top_reviews

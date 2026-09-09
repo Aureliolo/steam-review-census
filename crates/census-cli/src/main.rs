@@ -269,7 +269,7 @@ struct ClassifyArgs {
     /// Defaults to the margin the anchors were fitted with.
     #[arg(long)]
     mention_margin: Option<f32>,
-    /// How many of the most-upvoted reviews count as "the top of the pile".
+    /// How many of the reviews Steam ranks most helpful count as "the top of the pile".
     #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
     top_helpful: usize,
     /// Anchors fitted by `census fit`. Defaults to a set fitted for this game if one exists,
@@ -1518,7 +1518,7 @@ fn print_classification(report: &census_core::ClassifyReport) {
     println!(
         "\nmention% counts every review that says anything about a category, so it sums to \
          more than 100%.\nprimary% counts each review once and sums to 100%.\nbias is how \
-         much the {} most-upvoted reviews overstate a category.",
+         much the {} reviews Steam ranks most helpful overstate a category.",
         report.top_helpful
     );
     println!(

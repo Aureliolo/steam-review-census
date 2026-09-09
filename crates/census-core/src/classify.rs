@@ -97,7 +97,7 @@ pub struct CategoryStats {
     /// Reviews that say anything about this category. These sum to more than the review
     /// count, because a review can mention several things.
     pub mention_count: u64,
-    /// Mentions among the most-upvoted reviews only.
+    /// Mentions among the most-helpful reviews only.
     pub top_mention_count: u64,
     /// Of the reviews mentioning this category, how many recommended the game.
     ///
@@ -125,7 +125,7 @@ impl CategoryStats {
         ratio(self.primary_count, reviews)
     }
 
-    /// Share of the most-upvoted reviews that mention this category.
+    /// Share of the most-helpful reviews that mention this category.
     #[must_use]
     pub fn top_mention_rate(&self, top_n: u64) -> f64 {
         ratio(self.top_mention_count, top_n)
@@ -134,7 +134,7 @@ impl CategoryStats {
     /// How much reading only the top of the pile overstates this category.
     ///
     /// This is the project's whole thesis expressed as a number: above 1.0 means the
-    /// most-upvoted reviews talk about this more than players in general do.
+    /// most-helpful reviews talk about this more than players in general do.
     #[must_use]
     pub fn bias_factor(&self, reviews: u64, top_n: u64) -> Option<f64> {
         let overall = self.mention_rate(reviews);
@@ -175,7 +175,7 @@ pub struct ClassifyReport {
     pub languages: Vec<(String, u64)>,
     /// What was said month by month, oldest first.
     pub months: Vec<Month>,
-    /// The most-upvoted reviews and what they were about, so a reader can be shown the top
+    /// The most-helpful reviews and what they were about, so a reader can be shown the top
     /// of the pile rather than only told how far it differs from everyone else.
     pub top_reviews: Vec<TopReview>,
     pub elapsed: Duration,
@@ -521,7 +521,7 @@ fn group_reviews_by_text(snapshot: &Path) -> Result<(HashMap<String, Vec<ReviewR
     Ok((by_hash, reviews))
 }
 
-/// Keeps the most-upvoted reviews seen so far, and no more than that.
+/// Keeps the most-helpful reviews seen so far, and no more than that.
 ///
 /// What a reader skimming the first page actually sees is a few dozen reviews, so sorting a
 /// million of them to find fifty wastes the memory the streaming join was built to save.
@@ -532,7 +532,7 @@ struct TopOfThePile {
     kept: Vec<TopReview>,
 }
 
-/// One of the most-upvoted reviews, kept so a reader can be shown what the top of the pile
+/// One of the most-helpful reviews, kept so a reader can be shown what the top of the pile
 /// actually says rather than only how far it differs from the corpus.
 #[derive(Debug, Clone)]
 pub struct TopReview {

@@ -517,7 +517,7 @@ fn headline(out: &mut String, app: &AppReport) {
     let _ = write!(
         out,
         "The top of the pile overstates {named} by <strong>{factor:.1}\u{d7}</strong>: {} of \
-         the {} most-upvoted reviews raise it, against {} of all {}.",
+         the {} reviews Steam ranks most helpful raise it, against {} of all {}.",
         thousands(category.top_mention_count),
         thousands(app.classification.top_helpful),
         percent(overall),
@@ -1906,10 +1906,10 @@ mod tests {
             SCRIPT.contains("hashchange"),
             "a second link to a second category would open nothing"
         );
-        // 30 of the 50 most-upvoted raise bugs against 40.0% of the corpus. The reader is
-        // owed the count the claim is built on, not only the share it comes to.
+        // 30 of the 50 Steam ranks most helpful raise bugs, against 40.0% of the corpus. The
+        // reader is owed the count the claim is built on, not only the share it comes to.
         assert!(
-            headline.contains("30 of the 50 most-upvoted reviews raise it"),
+            headline.contains("30 of the 50 reviews Steam ranks most helpful raise it"),
             "the finding hides how few reviews it rests on: {}",
             headline
                 .split_once("</p>")

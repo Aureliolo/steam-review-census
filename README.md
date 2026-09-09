@@ -16,7 +16,7 @@ reading the reviews other people upvoted, which are also the longest and angries
 is a measure of agreement, not of how common an opinion is.
 
 The gap is large enough to change conclusions. Measured on real corpora, a theme can appear
-in half or more of the fifty most-upvoted reviews and in a fifth of all of them. Both numbers
+in half or more of the fifty Steam ranks most helpful and in a fifth of all of them. Both numbers
 are true. Only the second is a fact about players. The tool reports the ratio between the two
 as a **bias factor**, so the distortion is a number you can read rather than an argument you
 have to have.
