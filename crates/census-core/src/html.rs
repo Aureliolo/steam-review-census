@@ -1632,6 +1632,58 @@ mod tests {
         );
     }
 
+    /// Every way through the page has to arrive somewhere, and no two things may answer to
+    /// the same name. A link into the evidence is worthless if its target moved or doubled.
+    #[test]
+    fn nothing_on_the_page_points_at_something_that_is_not_there() {
+        // Both shapes: the contents, the cross-game matrix and the way back out of a section
+        // only exist once there is more than one game, and they are all links.
+        for page in [
+            render(&sample_report("ordinary text")),
+            render(&two_games()),
+        ] {
+            no_dangling_links(&page);
+        }
+    }
+
+    fn two_games() -> Report {
+        let mut report = sample_report("ordinary text");
+        let mut second = report.apps[0].clone();
+        second.crawl.app_id = 9;
+        second.crawl.name = "Another Game".to_owned();
+        second.classification.app_id = 9;
+        report.apps.push(second);
+        report
+    }
+
+    fn no_dangling_links(page: &str) {
+        let mut ids: Vec<&str> = attributes(page, "id=\"");
+        let count = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(count, ids.len(), "two things answer to the same name");
+
+        let mut targets: Vec<&str> = attributes(page, "aria-controls=\"");
+        targets.extend(
+            attributes(page, "href=\"#")
+                .into_iter()
+                .filter(|target| !target.is_empty()),
+        );
+        targets.extend(attributes(page, "for=\""));
+        for target in targets {
+            assert!(
+                ids.binary_search(&target).is_ok(),
+                "the page points at {target}, which is not on it"
+            );
+        }
+    }
+
+    fn attributes<'a>(page: &'a str, opening: &str) -> Vec<&'a str> {
+        page.match_indices(opening)
+            .filter_map(|(at, _)| page[at + opening.len()..].split_once('"').map(|(v, _)| v))
+            .collect()
+    }
+
     #[test]
     fn a_cell_with_no_number_says_so_out_loud() {
         let mut out = String::new();
