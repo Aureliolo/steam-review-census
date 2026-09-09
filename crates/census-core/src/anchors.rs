@@ -60,6 +60,10 @@ const MARGIN_GRID: &[f32] = &[0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.06];
 
 /// How hard an anchor is pushed away from the reviews it wrongly attracts. Zero is in the
 /// grid, so the search can decline the whole idea rather than being made to use some of it.
+///
+/// Measured on 2026-09-09 across the six reference sets under gte-multilingual-base: the
+/// search picks 0.1, and the 600 held-back reviews go from 54.2% to 55.2% on the main
+/// subject and 0.498 to 0.516 on mention macro F1.
 const REPULSION_GRID: &[f32] = &[0.0, 0.1, 0.2, 0.35, 0.5];
 
 /// How the anchors were blended out of descriptions and labelled reviews.
@@ -234,6 +238,11 @@ impl Anchors {
     /// A review whose predicted category is one of its own secondary labels is not attracted
     /// wrongly. Pushing away from those would teach the anchors to miss real mentions, which
     /// is the failure this whole fit exists to avoid.
+    ///
+    /// Which reviews an anchor attracts is read off plain similarity, before any of the
+    /// treatments in [`Scoring`]. This is about where an anchor sits, and those shift what
+    /// its scores are compared against afterwards; the offsets are taken from the vectors
+    /// this leaves behind, so nothing downstream is reading a stale one.
     fn push_away(&mut self, examples: &[Example], weight: f32) {
         if weight <= 0.0 || examples.is_empty() {
             return;
