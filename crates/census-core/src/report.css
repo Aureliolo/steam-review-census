@@ -21,7 +21,11 @@
   --radius: 10px;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Screens only, both of them. Paper is white whatever the reader's machine prefers, and a
+   palette built for a backlit panel prints as solid blocks of ink under black text. Scoping
+   the dark values here leaves the light ones above standing when the page is printed, which
+   is the whole of what the print stylesheet has to do about colour. */
+@media screen and (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --ink: #e8eaef;
     --ink-soft: #b0b6c2;
@@ -40,21 +44,23 @@
   }
 }
 
-:root[data-theme='dark'] {
-  --ink: #e8eaef;
-  --ink-soft: #b0b6c2;
-  --ink-faint: #8b93a1;
-  --paper: #121418;
-  --card: #1a1d23;
-  --line: #2a2e37;
-  --line-strong: #3c424e;
-  --accent: #7aa2f7;
-  --accent-soft: #23304d;
-  --over: #e8875a;
-  --over-soft: #3a2419;
-  --under: #5fbfb8;
-  --warn-bg: #241f14;
-  --warn-line: #4a3f24;
+@media screen {
+  :root[data-theme='dark'] {
+    --ink: #e8eaef;
+    --ink-soft: #b0b6c2;
+    --ink-faint: #8b93a1;
+    --paper: #121418;
+    --card: #1a1d23;
+    --line: #2a2e37;
+    --line-strong: #3c424e;
+    --accent: #7aa2f7;
+    --accent-soft: #23304d;
+    --over: #e8875a;
+    --over-soft: #3a2419;
+    --under: #5fbfb8;
+    --warn-bg: #241f14;
+    --warn-line: #4a3f24;
+  }
 }
 
 * {

@@ -72,21 +72,17 @@ async function connect(url) {
       settle(message);
     }
   });
+  const send = (method, params) =>
+    new Promise((ok) => {
+      id += 1;
+      waiting.set(id, ok);
+      socket.send(JSON.stringify({ id, method, params }));
+    });
   return {
     socket,
-    evaluate(expression) {
-      return new Promise((ok) => {
-        id += 1;
-        waiting.set(id, ok);
-        socket.send(
-          JSON.stringify({
-            id,
-            method: "Runtime.evaluate",
-            params: { expression, returnByValue: true, awaitPromise: true },
-          }),
-        );
-      });
-    },
+    send,
+    evaluate: (expression) =>
+      send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }),
   };
 }
 
@@ -288,6 +284,40 @@ const PROBE = `(function () {
   return wrong;
 })()`;
 
+// Run against the same page with print media emulated, and after the reader's machine has
+// been told it prefers a dark screen. Paper is white either way: a palette meant for a
+// backlit panel prints as blocks of solid ink, and nothing in the markup can show it.
+const ON_PAPER = `(function () {
+  var wrong = [];
+  var lit = function (colour) {
+    var parts = String(colour).match(/[\\d.]+/g);
+    if (!parts || parts.length < 3) { return 0; }
+    if (parts.length > 3 && Number(parts[3]) === 0) { return 255; }
+    return (Number(parts[0]) + Number(parts[1]) + Number(parts[2])) / 3;
+  };
+  var paper = function (selector) {
+    var el = document.querySelector(selector);
+    return el ? lit(getComputedStyle(el).backgroundColor) : 255;
+  };
+  var root = document.documentElement;
+  var chose = root.getAttribute('data-theme');
+  [null, 'dark'].forEach(function (theme) {
+    if (theme === null) { root.removeAttribute('data-theme'); } else { root.setAttribute('data-theme', theme); }
+    var who = theme === null ? 'the machine prefers one' : 'the reader asked for one';
+    if (lit(getComputedStyle(document.body).color) > 128) {
+      wrong.push('the printed page is written in light ink where ' + who);
+    }
+    if (paper('.headline') < 200) {
+      wrong.push('a finding prints as a dark block where ' + who);
+    }
+    if (paper('nav.contents, section.game') < 200) {
+      wrong.push('a section prints as a dark block where ' + who);
+    }
+  });
+  if (chose === null) { root.removeAttribute('data-theme'); } else { root.setAttribute('data-theme', chose); }
+  return wrong;
+})()`;
+
 const page = pathToFileURL(resolve(process.argv[2] ?? "sample-report.html")).href;
 const profile = await mkdtemp(join(tmpdir(), "census-report-check-"));
 const chrome = spawn(
@@ -306,7 +336,7 @@ const chrome = spawn(
 
 let failed = true;
 try {
-  const { socket, evaluate } = await connect(await debuggerUrl());
+  const { socket, send, evaluate } = await connect(await debuggerUrl());
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const ready = await evaluate(
       "document.readyState === 'complete' && document.documentElement.classList.contains('js')",
@@ -316,12 +346,18 @@ try {
   }
 
   const answer = await evaluate(PROBE);
+  await send("Emulation.setEmulatedMedia", {
+    media: "print",
+    features: [{ name: "prefers-color-scheme", value: "dark" }],
+  });
+  const paper = await evaluate(ON_PAPER);
   socket.close();
-  if (answer.result?.exceptionDetails) {
+  const threw = [answer, paper].find((r) => r.result?.exceptionDetails);
+  if (threw) {
     console.error("the page threw while being checked:");
-    console.error(answer.result.exceptionDetails.exception?.description ?? answer.result.exceptionDetails.text);
+    console.error(threw.result.exceptionDetails.exception?.description ?? threw.result.exceptionDetails.text);
   } else {
-    const wrong = answer.result.result.value;
+    const wrong = answer.result.result.value.concat(paper.result.result.value);
     if (wrong.length === 0) {
       console.log(`the report behaves as it says it does: ${page}`);
       failed = false;
