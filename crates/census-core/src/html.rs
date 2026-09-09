@@ -192,10 +192,11 @@ fn overview(out: &mut String, report: &Report) {
     corpora(out, report);
     let _ = writeln!(
         out,
-        "<p class=\"note\">Mention rates for {} reviews of {} games. Read down a column for \
-         one game and across a row to see which games a subject belongs to. Deeper shading is \
-         a higher rate, and a cell is outlined where one game raises a subject more than every \
-         other by more than rounding; the rates are not comparable to any other corpus.</p>",
+        "<p class=\"note\">Mention rates for {} reviews of {} games. The game that raises each \
+         subject most is named beside it, and its cell outlined, where one clears every other \
+         by more than rounding. Read down a column for one game and across a row to compare \
+         them all; the table scrolls sideways. Deeper shading is a higher rate, and the rates \
+         are not comparable to any other corpus.</p>",
         thousands(total),
         report.apps.len()
     );
@@ -247,6 +248,12 @@ fn corpora(out: &mut String, report: &Report) {
 }
 
 /// Every category against every game, loudest subject first.
+///
+/// A census of a genre runs to dozens of games, and a screen holds about eight of them. The
+/// answer a row exists to give, which game raises this subject most, was carried only by an
+/// outline around one cell, so on a wide table it was usually off the side of the screen and
+/// a reader had no way of knowing it was there. Naming that game in a column beside the
+/// category means the row still answers its question at any width.
 fn matrix(out: &mut String, report: &Report) {
     let mut order: Vec<(&str, &str, u64)> = Vec::new();
     for category in CORE_SPINE {
@@ -262,7 +269,7 @@ fn matrix(out: &mut String, report: &Report) {
     order.sort_by_key(|(_, _, pooled)| std::cmp::Reverse(*pooled));
 
     out.push_str("<div class=\"scroll\">\n<table class=\"matrix\">\n<thead><tr>");
-    out.push_str("<th scope=\"col\">Category</th>");
+    out.push_str("<th scope=\"col\">Category</th><th scope=\"col\" class=\"leader\">Highest</th>");
     for app in &report.apps {
         let _ = write!(
             out,
@@ -296,6 +303,24 @@ fn matrix(out: &mut String, report: &Report) {
             escape(&label.to_lowercase()),
             escape(label)
         );
+        match loudest.and_then(|index| Some((report.apps.get(index)?, rates[index]?))) {
+            Some((app, rate)) => {
+                let _ = write!(
+                    out,
+                    "<td class=\"leader\"><a href=\"#app-{}\">{}</a> <b>{}</b></td>",
+                    app.app_id(),
+                    escape(&app.crawl.title()),
+                    percent(rate)
+                );
+            }
+            None => {
+                let _ = write!(
+                    out,
+                    "<td class=\"leader\">{}</td>",
+                    nothing("no game leads this")
+                );
+            }
+        }
         for (index, rate) in rates.iter().enumerate() {
             match *rate {
                 Some(rate) => {
@@ -2145,6 +2170,54 @@ mod tests {
         assert!(
             !tied.contains("loudest"),
             "one review in a hundred thousand was drawn as a finding"
+        );
+    }
+
+    /// A census of a genre is dozens of games and a screen holds about eight, so a claim
+    /// carried only by an outline around one cell is a claim most readers never see.
+    #[test]
+    fn a_row_names_the_game_that_leads_it_rather_than_only_outlining_the_cell() {
+        let mut report = two_games();
+        report.apps[1].classification.categories[0].mention_count =
+            report.apps[0].classification.categories[0].mention_count * 2;
+
+        let row = |page: &str| {
+            page.split_once("<table class=\"matrix\">")
+                .expect("no matrix")
+                .1
+                .split_once("<th scope=\"row\">Bugs and crashes</th>")
+                .expect("no bugs row")
+                .1
+                .split_once("</tr>")
+                .expect("the row never ends")
+                .0
+                .to_owned()
+        };
+
+        let leading = row(&render(&report));
+        let named = leading
+            .split_once("class=\"leader\">")
+            .expect("the row does not say which game leads it")
+            .1
+            .split_once("</td>")
+            .expect("the summary never ends")
+            .0
+            .to_owned();
+        assert!(
+            named.contains("Another Game"),
+            "the leading game is not named beside the row: {named}"
+        );
+        assert!(
+            named.contains("href=\"#app-9\""),
+            "the named game is not a way of reaching it: {named}"
+        );
+
+        // Both games raise it at the same rate, so there is nothing the page can name.
+        report.apps[1].classification.categories[0].mention_count =
+            report.apps[0].classification.categories[0].mention_count;
+        assert!(
+            !row(&render(&report)).contains("Another Game"),
+            "a tie was reported as a game leading the row"
         );
     }
 

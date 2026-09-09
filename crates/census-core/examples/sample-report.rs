@@ -2,12 +2,13 @@
 //! corpus, a model or a network.
 //!
 //! The scripting on that page depends on the shape of the markup and not on what the numbers
-//! mean, so a fixture is enough to exercise all of it. Two games, because the cross-game
+//! mean, so a fixture is enough to exercise all of it. Several games, because the cross-game
 //! matrix only exists when there is something to compare, and one measured game and one
 //! unmeasured, because they render differently.
 //!
 //! ```text
 //! cargo run -p census-core --example sample-report -- page.html
+//! cargo run -p census-core --example sample-report -- page.html --games 36
 //! ```
 
 use std::path::PathBuf;
@@ -16,24 +17,43 @@ use census_core::{
     capture::CapturedReview,
     evaluate::{AgreementReport, CategoryAgreement, Slice},
     report::{AppReport, CategoryCount, Classification, CrawlFacts, Example, Month, Report},
-    taxonomy::CORE_SPINE,
+    taxonomy::{CORE_SPINE, CORE_SPINE_VERSION},
 };
 
+/// Four, because a matrix of two fits on a phone and a real one does not, and what happens to
+/// a table wider than the screen it is read on is the whole question.
+const DEFAULT_GAMES: usize = 4;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path: PathBuf = std::env::args()
-        .nth(1)
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let path: PathBuf = arguments
+        .iter()
+        .find(|argument| !argument.starts_with("--"))
+        .cloned()
         .unwrap_or_else(|| "sample-report.html".to_owned())
         .into();
     // A report of one game has no cross-game matrix and no contents, and is a different page
     // to drive. Both shapes ship, so both are worth being able to render.
-    let alone = std::env::args().any(|argument| argument == "--one-game");
+    let alone = arguments.iter().any(|argument| argument == "--one-game");
+    let wanted = arguments
+        .iter()
+        .position(|argument| argument == "--games")
+        .and_then(|slot| arguments.get(slot + 1))
+        .map_or(DEFAULT_GAMES, |count| count.parse().expect("--games count"));
+
     let mut apps = vec![game(7, "A Measured Game", true)];
     if !alone {
-        // Four, because a matrix of two fits on a phone and a real one does not, and what
-        // happens to a table wider than the screen it is read on is the whole question.
         apps.push(game(11, "An Unmeasured Game", false));
         apps.push(game(13, "A Third Game With A Rather Long Name", true));
         apps.push(game(17, "A Fourth Game", true));
+        // Beyond the four distinctive ones, filler: a census of a whole genre runs to dozens
+        // of games, and every part of the page that grows with the number of them, the
+        // contents, the matrix and the outlining of which game leads a category, has to be
+        // read at that size rather than at the size that fits in a screenshot.
+        for extra in apps.len()..wanted {
+            let id = 100 + u32::try_from(extra).expect("more games than a page could hold");
+            apps.push(game(id, &format!("Filler Game {extra}"), true));
+        }
     }
     let report = Report {
         generated_unix: 1_760_000_000,
@@ -54,7 +74,22 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             // which every real report has and which is the only thing that puts a dash in the
             // rightmost column of the table.
             let quiet = slot + 1 == CORE_SPINE.len();
-            let mentions = if quiet { 0 } else { 900 - (slot as u64 * 40) };
+            // Which game leads a category is a claim the page only draws where one clears
+            // every other in the figures it prints, so a fixture where every game reports the
+            // same rate exercises none of it. The spread is distinct per game, except on one
+            // category where every game lands together and the page has to leave the row
+            // unclaimed rather than outline a rounding difference.
+            let tied = slot == 5;
+            let spread = if tied {
+                0
+            } else {
+                (u64::from(app_id) * 7_919 + slot as u64 * 31) % 300
+            };
+            let mentions = if quiet {
+                0
+            } else {
+                900 - (slot as u64 * 40) + spread
+            };
             CategoryCount {
                 id: category.id.to_owned(),
                 label: category.label.to_owned(),
@@ -86,7 +121,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             unmatched: 0,
             top_helpful: 50,
             mention_margin: 0.015,
-            spine_version: "core-3".to_owned(),
+            spine_version: CORE_SPINE_VERSION.to_owned(),
             model: "a-test-encoder".to_owned(),
             anchors_fitted_from: vec![app_id],
             months: months(&categories),
