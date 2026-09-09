@@ -283,7 +283,7 @@
     });
 
     Array.prototype.forEach.call(
-      document.querySelectorAll('table.categories'),
+      document.querySelectorAll('table.categories, table.corpora'),
       sortable
     );
 

@@ -214,12 +214,12 @@ fn overview(out: &mut String, report: &Report) {
 /// one is, how warmly it is reviewed and how well the classifier does on it were six visits
 /// away from each other.
 fn corpora(out: &mut String, report: &Report) {
-    out.push_str(
-        "<div class=\"scroll\">\n<table class=\"corpora\">\n<thead><tr>\
-         <th scope=\"col\">Game</th><th scope=\"col\" class=\"num\">Reviews counted</th>\
-         <th scope=\"col\" class=\"num\">Recommended</th>\
-         <th scope=\"col\" class=\"num\">Agreement</th></tr></thead>\n<tbody>\n",
-    );
+    out.push_str("<div class=\"scroll\">\n<table class=\"corpora\">\n<thead><tr>");
+    heading(out, "Game", false);
+    for column in ["Reviews counted", "Recommended", "Agreement"] {
+        heading(out, column, true);
+    }
+    out.push_str("</tr></thead>\n<tbody>\n");
     for app in &report.apps {
         let measured = app.agreement.as_ref().and_then(|agreement| {
             agreement
@@ -228,15 +228,24 @@ fn corpora(out: &mut String, report: &Report) {
                 .find(|slice| slice.subset == "random" && slice.contested.is_none())
                 .and_then(crate::Slice::agreement)
         });
+        // Sorted on the number rather than on the text of it: "982,291" reads as less than
+        // "2,000" to anything comparing strings, and a game with no reference set has to sort
+        // as unmeasured rather than as zero agreement.
+        let sortable = |value: Option<f64>| value.unwrap_or(-1.0);
         let _ = writeln!(
             out,
-            "<tr><th scope=\"row\"><a href=\"#app-{}\">{}</a></th>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
+            "<tr class=\"row\"><th scope=\"row\"><a href=\"#app-{}\">{}</a></th>\
+             <td class=\"num\" data-value=\"{}\">{}</td>\
+             <td class=\"num\" data-value=\"{:.6}\">{}</td>\
+             <td class=\"num\" data-value=\"{:.6}\">{}</td></tr>",
             app.app_id(),
             escape(&app.crawl.title()),
+            app.classification.reviews,
             thousands(app.classification.reviews),
+            sortable(app.positive_baseline()),
             app.positive_baseline()
                 .map_or_else(|| nothing("no reviews"), percent),
+            sortable(measured),
             measured.map_or_else(|| nothing("no reference set"), percent)
         );
     }
@@ -2197,6 +2206,46 @@ mod tests {
         assert!(
             !tied.contains("loudest"),
             "one review in a hundred thousand was drawn as a finding"
+        );
+    }
+
+    /// A set of thirty games is a table of thirty rows, and the questions a reader brings to
+    /// it are which corpus is biggest and where the classifier is weakest. Both are a sort,
+    /// and a sort on the printed text puts 982,291 below 2,000 and an unmeasured game above
+    /// every measured one.
+    #[test]
+    fn the_corpora_can_be_reordered_on_what_they_hold_rather_than_on_the_text_of_it() {
+        let mut report = two_games();
+        report.apps[1].classification.reviews = 982_291;
+        let page = render(&report);
+        let table = page
+            .split_once("<table class=\"corpora\">")
+            .expect("no corpora table")
+            .1
+            .split_once("</table>")
+            .expect("the table never ends")
+            .0;
+
+        let head = table.split_once("</thead>").expect("no head").0;
+        assert_eq!(
+            head.matches("data-sort").count(),
+            4,
+            "not every column of the corpora table can reorder it: {head}"
+        );
+        assert!(
+            table.contains("data-value=\"982291\""),
+            "a review count is left to be sorted as text: {table}"
+        );
+        // An unmeasured game is not a game measured at zero, and sorting has to keep them
+        // apart or the worst-measured game in a set is one nobody measured.
+        assert!(
+            table.contains("data-value=\"-1.000000\""),
+            "a game with no reference set sorts as zero agreement: {table}"
+        );
+        assert_eq!(
+            table.matches("<tr class=\"row\">").count(),
+            2,
+            "the rows are not the ones the sort moves"
         );
     }
 

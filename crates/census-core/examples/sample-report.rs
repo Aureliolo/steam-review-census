@@ -65,6 +65,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
+    // Corpora differ in size by more than an order of magnitude in any real set, which is the
+    // whole reason the section compares the games and not only the subjects, and the reason
+    // its table can be reordered on any of its columns.
+    let reviews = 2_000 + u64::from(app_id % 11) * 900;
+    let captured = reviews + 20;
+    let positive = reviews * 7 / 10;
+
     let categories: Vec<CategoryCount> = CORE_SPINE
         .iter()
         .enumerate()
@@ -106,18 +113,18 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             app_id,
             name: name.to_owned(),
             review_score_desc: "Mostly Positive".to_owned(),
-            rows_unique: 2_020,
-            valve_total_reviews: 2_020,
-            valve_total_positive: 1_400,
-            valve_total_negative: 620,
+            rows_unique: captured,
+            valve_total_reviews: captured,
+            valve_total_positive: positive,
+            valve_total_negative: captured - positive,
             coverage: 1.0,
             snapshot_unix: 1_750_000_000,
             shards: 1,
         },
         classification: Classification {
             app_id,
-            reviews: 2_000,
-            positive: 1_400,
+            reviews,
+            positive,
             unmatched: 0,
             top_helpful: 50,
             mention_margin: 0.015,
