@@ -242,6 +242,18 @@ const PROBE = `(function () {
   check('the page itself pans sideways',
     document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
+  // Headings are how anything not reading the page top to bottom moves around it, and a
+  // level skipped puts a section under something it does not belong to.
+  var levels = Array.prototype.map.call(
+    document.querySelectorAll('h1, h2, h3, h4, h5, h6'),
+    function (h) { return Number(h.tagName.slice(1)); }
+  );
+  check('the page has no headings at all', levels.length > 0);
+  check('the page does not start at its own title', levels[0] === 1);
+  check('a heading level is skipped', levels.every(function (level, index) {
+    return index === 0 || level <= levels[index - 1] + 1;
+  }));
+
   // A control nobody can name is a control nobody can use, and the ones that open each row
   // are built by this script rather than rendered, so no Rust test ever sees them.
   var named = function (el) {
