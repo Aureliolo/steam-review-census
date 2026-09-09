@@ -1440,7 +1440,12 @@ fn print_fit(
         "category", "evidence", "learned share"
     );
     println!("{}", "-".repeat(58));
-    for anchor in &anchors.categories {
+    // Thinnest last, the way `census evaluate` orders its own table. What a reader comes to
+    // this one for is which categories were built from almost nothing, and in taxonomy order
+    // those are five rows scattered through twenty-one.
+    let mut built: Vec<&census_core::anchors::Anchor> = anchors.categories.iter().collect();
+    built.sort_by(|a, b| b.evidence.total_cmp(&a.evidence));
+    for anchor in built {
         let label =
             census_core::taxonomy::by_id(&anchor.id).map_or(anchor.id.as_str(), |c| c.label);
         println!(
