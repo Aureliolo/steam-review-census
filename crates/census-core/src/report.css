@@ -272,8 +272,11 @@ table.corpora thead th {
   border-bottom: 1px solid var(--line-strong);
 }
 
+/* A Steam title is long and this table is only four columns wide, so the name wraps and the
+   three figures beside it stay on the screen rather than off the side of a phone. */
 table.corpora tbody th {
   font-weight: 600;
+  white-space: normal;
 }
 
 table.corpora .num {
@@ -960,6 +963,12 @@ a {
 }
 
 @media (max-width: 40rem) {
+  table.corpora th,
+  table.corpora td {
+    white-space: normal;
+    padding: 0.45rem 0.4rem;
+  }
+
   .bar-cell {
     min-width: 7rem;
   }
