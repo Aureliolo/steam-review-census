@@ -490,10 +490,7 @@ fn headline(out: &mut String, app: &AppReport) {
     let Some((category, factor)) = app.worst_bias() else {
         return;
     };
-    let (Some(top), Some(overall)) = (
-        app.top_rate(category.top_mention_count),
-        app.rate(category.mention_count),
-    ) else {
+    let Some(overall) = app.rate(category.mention_count) else {
         return;
     };
 
@@ -513,16 +510,18 @@ fn headline(out: &mut String, app: &AppReport) {
         )
     };
 
+    // Counted rather than given as a share of the top of the pile. A few dozen reviews is a
+    // number a reader can hold, and the point of the sentence is that a claim about a whole
+    // corpus is being made out of a handful, which "10.0% of them" hides.
     out.push_str("<p class=\"headline\">\n");
     let _ = write!(
         out,
-        "Reading only the {} most-upvoted reviews, {} of them talk about {named}. Across all \
-         {} reviews, {} do: the top of the pile overstates it by \
-         <strong>{factor:.1}\u{d7}</strong>.",
+        "The top of the pile overstates {named} by <strong>{factor:.1}\u{d7}</strong>: {} of \
+         the {} most-upvoted reviews raise it, against {} of all {}.",
+        thousands(category.top_mention_count),
         thousands(app.classification.top_helpful),
-        percent(top),
-        thousands(app.classification.reviews),
         percent(overall),
+        thousands(app.classification.reviews),
     );
     out.push_str("\n</p>\n");
 }
@@ -1906,6 +1905,15 @@ mod tests {
         assert!(
             SCRIPT.contains("hashchange"),
             "a second link to a second category would open nothing"
+        );
+        // 30 of the 50 most-upvoted raise bugs against 40.0% of the corpus. The reader is
+        // owed the count the claim is built on, not only the share it comes to.
+        assert!(
+            headline.contains("30 of the 50 most-upvoted reviews raise it"),
+            "the finding hides how few reviews it rests on: {}",
+            headline
+                .split_once("</p>")
+                .map_or(headline, |(head, _)| head)
         );
     }
 
