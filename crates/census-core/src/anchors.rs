@@ -100,6 +100,9 @@ pub struct Example {
     /// Index into [`CORE_SPINE`].
     pub primary: usize,
     pub secondary: Vec<usize>,
+    /// The game this review was written about, which the search folds by. Zero where the
+    /// caller does not know or does not care, and then the folds are dealt round-robin.
+    pub game: u32,
 }
 
 /// One category's anchor, with enough provenance to say what it was built from.
@@ -432,6 +435,7 @@ impl Anchors {
 pub fn to_examples<S: std::hash::BuildHasher>(
     labels: &[ReferenceLabel],
     vectors: &HashMap<String, Vec<f32>, S>,
+    app_id: u32,
 ) -> Vec<Example> {
     let slot: HashMap<&str, usize> = CORE_SPINE
         .iter()
@@ -450,6 +454,7 @@ pub fn to_examples<S: std::hash::BuildHasher>(
                     .iter()
                     .filter_map(|id| slot.get(id.as_str()).copied())
                     .collect(),
+                game: app_id,
             })
         })
         .collect()
@@ -709,17 +714,23 @@ fn across_margins(
     let mut total = vec![0_u64; margins.len()];
     let mut confusion = vec![vec![Counts::default(); CORE_SPINE.len()]; margins.len()];
 
+    let (folds, held) = fold_of(examples, folds);
     for fold in 0..folds {
         let train: Vec<Example> = examples
             .iter()
-            .enumerate()
-            .filter(|(index, _)| index % folds != fold)
-            .map(|(_, example)| example.clone())
+            .zip(&held)
+            .filter(|(_, at)| **at != fold)
+            .map(|(example, _)| example.clone())
             .collect();
         let mut fitted = descriptions.fit(&train, &[], params);
         fitted.prepare(params.scoring, centroid);
 
-        for example in examples.iter().skip(fold).step_by(folds) {
+        for example in examples
+            .iter()
+            .zip(&held)
+            .filter(|(_, at)| **at == fold)
+            .map(|(example, _)| example)
+        {
             let sims = fitted.similarities(&example.vector);
             for (slot, &margin) in margins.iter().enumerate() {
                 let (primary, mentions) = crate::classify::assign(&sims, margin);
@@ -744,6 +755,33 @@ fn across_margins(
             .collect(),
         Objective::Mentions => confusion.iter().map(|counts| macro_f1(counts)).collect(),
     }
+}
+
+/// Which fold each example is held out in, and how many folds that comes to.
+///
+/// By game wherever the labels come from more than one. The question these anchors are asked
+/// in the end is about a game nobody labelled, and dealing one game's reviews across every
+/// fold never asks it: a setting that works only by having seen this game's vocabulary scores
+/// as well as one that would carry, and the search then picks it. Measured across the six
+/// reference sets, folding by review chose a repulsion that gained a point on the games it
+/// could see and lost nearly three on the game it could not.
+///
+/// Round-robin otherwise, which is right for a single game: the reference set arrives grouped
+/// by predicted category, so dealing examples out in turn gives every fold nearly the same
+/// class balance, and random assignment would not at these counts.
+fn fold_of(examples: &[Example], folds: usize) -> (usize, Vec<usize>) {
+    let mut games: Vec<u32> = examples.iter().map(|example| example.game).collect();
+    games.sort_unstable();
+    games.dedup();
+
+    if games.len() < 2 {
+        return (folds, (0..examples.len()).map(|at| at % folds).collect());
+    }
+    let held = examples
+        .iter()
+        .map(|example| games.binary_search(&example.game).unwrap_or(0))
+        .collect();
+    (games.len(), held)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -911,6 +949,7 @@ mod tests {
                 vector: unit(300),
                 primary: 0,
                 secondary: vec![],
+                game: 0,
             })
             .collect();
         let fitted = descriptions().fit(&examples, &[1], FitParams::default());
@@ -931,6 +970,7 @@ mod tests {
                 vector: unit(300),
                 primary: 1,
                 secondary: vec![],
+                game: 0,
             })
             .collect();
         let fitted = descriptions().fit(&many, &[1], FitParams::default());
@@ -947,6 +987,7 @@ mod tests {
             vector: unit(300),
             primary: 5,
             secondary: vec![2],
+            game: 0,
         }];
         let params = FitParams {
             secondary_weight: 0.5,
@@ -964,6 +1005,7 @@ mod tests {
             vector: unit(300),
             primary: 4,
             secondary: vec![9],
+            game: 0,
         }];
         let fitted = descriptions().fit(&examples, &[1], FitParams::default());
         for anchor in &fitted.categories {
@@ -1008,6 +1050,7 @@ mod tests {
             vector: unit(300),
             primary: 0,
             secondary: vec![],
+            game: 0,
         }];
         let fitted = descriptions().fit(&examples, &[296_970], FitParams::default());
         fitted.save(&path).unwrap();
@@ -1193,6 +1236,7 @@ mod tests {
                 vector: plane(0.5, 0.6 + f32::from(index) * 0.001),
                 primary: 1,
                 secondary: vec![],
+                game: 0,
             })
             .collect();
 
@@ -1253,6 +1297,7 @@ mod tests {
                 primary: 1,
                 // Every category the anchors might reasonably pick is a real mention here.
                 secondary: (0..CORE_SPINE.len()).filter(|slot| *slot != 1).collect(),
+                game: 0,
             })
             .collect();
         let params = FitParams {
@@ -1289,6 +1334,42 @@ mod tests {
         assert!(anchors.categories.iter().all(|a| a.bias == 0.0));
         assert!((anchors.similarities(&review)[3] - 1.0).abs() < 1e-6);
         assert!(anchors.similarities(&review)[4].abs() < 1e-6);
+    }
+
+    /// The question these anchors are asked in the end is about a game nobody labelled, and
+    /// a fold holding some of a game's reviews while training on the rest never asks it.
+    #[test]
+    fn a_game_is_never_split_across_the_folds_that_choose_the_settings() {
+        let from = |game: u32, count: usize| {
+            (0..count).map(move |index| Example {
+                vector: unit(index % 4),
+                primary: index % 4,
+                secondary: vec![],
+                game,
+            })
+        };
+        let across: Vec<Example> = from(7, 5).chain(from(11, 5)).chain(from(13, 5)).collect();
+
+        let (folds, held) = fold_of(&across, 5);
+        assert_eq!(folds, 3, "three games should make three folds, not five");
+        for game in [7, 11, 13] {
+            let mine: Vec<usize> = across
+                .iter()
+                .zip(&held)
+                .filter(|(example, _)| example.game == game)
+                .map(|(_, at)| *at)
+                .collect();
+            assert!(
+                mine.windows(2).all(|pair| pair[0] == pair[1]),
+                "game {game} was dealt across folds {mine:?}"
+            );
+        }
+
+        // One game has nothing to hold out by, so the folds go back to round robin.
+        let alone: Vec<Example> = from(7, 10).collect();
+        let (folds, held) = fold_of(&alone, 5);
+        assert_eq!(folds, 5);
+        assert_eq!(held, vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
     }
 
     #[test]
@@ -1366,6 +1447,7 @@ mod tests {
                 vector: unit(index % 4),
                 primary: index % 4,
                 secondary: vec![],
+                game: 0,
             })
             .collect()
     }

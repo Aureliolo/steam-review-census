@@ -825,8 +825,8 @@ fn load_game(
     };
     Ok(GameLabels {
         app_id,
-        training: census_core::anchors::to_examples(&split(false), &vectors),
-        holdout: census_core::anchors::to_examples(&split(true), &vectors),
+        training: census_core::anchors::to_examples(&split(false), &vectors, app_id),
+        holdout: census_core::anchors::to_examples(&split(true), &vectors, app_id),
         centroid,
     })
 }
