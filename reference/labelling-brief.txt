@@ -24,7 +24,7 @@ Overall verdict only (verdict)
 
 Says nothing about the game (offtopic)
   The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
-  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest about anything this game's publisher or platform did belongs to policy. This is only for reviews from which a reader would learn nothing at all.
+  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest about anything this game's publisher or platform did belongs to policy. This is only for reviews from which a reader would learn nothing at all, and that includes a review with nothing in it: a full stop, a row of emoji, a keyboard mash. A single word that does pass judgement, good or terrible or 10/10, is a verdict.
   ONLY: this is the whole label. A review here covers nothing else, so it never takes a second category.
 
 Story and writing (story)
@@ -56,6 +56,7 @@ Price and value (price)
 
 Monetisation and DLC (monetisation)
   Paid extras and how they are sold. Microtransactions, battle passes, loot boxes, paywalls, season passes and content cut out to sell as DLC.
+  RULE: What is sold on top of the game, and how, belongs here. Wanting more of the game belongs to content even when the review asks for it as DLC: that is a review saying it ran out, not one about how the game is sold.
 
 Multiplayer and online (multiplayer)
   Playing with or against other people. Matchmaking, servers, lag and ping, co-op, player counts, whether lobbies are dead and whether cheaters ruin it.

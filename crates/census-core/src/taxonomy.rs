@@ -134,7 +134,9 @@ pub const CORE_SPINE: &[Category] = &[
             "A joke that still makes a point about the game belongs to whatever it is joking \
              about, most often gameplay or difficulty, and a protest about anything this \
              game's publisher or platform did belongs to policy. This is only for reviews from \
-             which a reader would learn nothing at all.",
+             which a reader would learn nothing at all, and that includes a review with \
+             nothing in it: a full stop, a row of emoji, a keyboard mash. A single word that \
+             does pass judgement, good or terrible or 10/10, is a verdict.",
         ),
         alone: true,
     },
@@ -224,7 +226,11 @@ pub const CORE_SPINE: &[Category] = &[
         label: "Monetisation and DLC",
         description: "Paid extras and how they are sold. Microtransactions, battle passes, \
                       loot boxes, paywalls, season passes and content cut out to sell as DLC.",
-        boundary: None,
+        boundary: Some(
+            "What is sold on top of the game, and how, belongs here. Wanting more of the game \
+             belongs to content even when the review asks for it as DLC: that is a review \
+             saying it ran out, not one about how the game is sold.",
+        ),
         alone: false,
     },
     Category {
