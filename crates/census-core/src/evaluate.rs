@@ -121,18 +121,35 @@ pub struct CategoryAgreement {
 }
 
 impl CategoryAgreement {
-    /// The category this one is most often mistaken for, and how often, ignoring the
-    /// reviews it gets right.
+    /// The category this one is most often mistaken for, where that is a pattern rather than
+    /// a coincidence.
+    ///
+    /// One review going one way is a tie broken by taxonomy order, and naming it would turn
+    /// a list of arbitrary neighbours into something that reads like a finding. Reported only
+    /// when it is several reviews and a real share of the ones this category loses.
     #[must_use]
     pub fn mistaken_for(&self) -> Option<(&'static str, u64)> {
+        const WORTH_NAMING: u64 = 3;
+        const SHARE_OF_THE_MISSES: f64 = 0.25;
+
         let mine = CORE_SPINE.iter().position(|c| c.id == self.id);
-        self.taken_as
+        let missed: u64 = self
+            .taken_as
             .iter()
             .enumerate()
             .filter(|(slot, _)| Some(*slot) != mine)
-            .max_by_key(|(_, count)| **count)
-            .filter(|(_, count)| **count > 0)
-            .and_then(|(slot, count)| Some((CORE_SPINE.get(slot)?.label, *count)))
+            .map(|(_, count)| count)
+            .sum();
+        let (slot, count) = self
+            .taken_as
+            .iter()
+            .enumerate()
+            .filter(|(slot, _)| Some(*slot) != mine)
+            .max_by_key(|(_, count)| **count)?;
+        if *count < WORTH_NAMING || rate(*count, missed)? < SHARE_OF_THE_MISSES {
+            return None;
+        }
+        Some((CORE_SPINE.get(slot)?.label, *count))
     }
     /// Of the mentions the classifier claims, the share the reference set also has.
     #[must_use]
@@ -789,6 +806,27 @@ mod tests {
             stat.mistaken_for(),
             None,
             "a category nothing is confused with has nothing to report"
+        );
+
+        // One review going one way is a tie broken by taxonomy order.
+        stat.taken_as[slot("performance")] = 1;
+        stat.taken_as[slot("verdict")] = 1;
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a single review is not a pattern"
+        );
+
+        // Several reviews, but scattered so evenly that no neighbour is the answer.
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        for id in ["performance", "verdict", "story", "graphics", "price"] {
+            stat.taken_as[slot(id)] = 4;
+        }
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a category confused with everything equally is confused with nothing in \
+             particular"
         );
     }
 

@@ -670,8 +670,19 @@ fn how_well_this_row_is_known(out: &mut String, measured: &crate::evaluate::Cate
         out,
         "<p class=\"{class}\">Measured on this row: of the {} labelled reviews that raise it, \
          the classifier found {found}; of the reviews it filed here, {right} were labelled \
-         that way. A rate built on a category it misses is a floor, not a count.</p>",
-        thousands(measured.reference_mentions)
+         that way. A rate built on a category it misses is a floor, not a count.{}</p>",
+        thousands(measured.reference_mentions),
+        // Which category the misses went to is the difference between a row that is merely
+        // hard and a row whose reviews are sitting under a neighbour's name.
+        measured
+            .mistaken_for()
+            .map_or_else(String::new, |(label, count)| {
+                format!(
+                    " Where its main subject was read wrongly, it was most often read as \
+                 <strong>{}</strong> ({count} of the labelled reviews).",
+                    escape(label)
+                )
+            })
     );
 }
 
