@@ -190,6 +190,25 @@
     });
   }
 
+  // A link to one category's evidence has to arrive with that evidence open, or it lands on
+  // a row that looks exactly like every other row.
+  function openWhatTheAddressAsksFor() {
+    var id = window.location.hash.replace('#', '');
+    if (!id) {
+      return;
+    }
+    var panel = document.getElementById(id);
+    if (!panel || !panel.classList.contains('panel')) {
+      return;
+    }
+    var row = panel.previousElementSibling;
+    if (row && row.getAttribute('data-expands') === id) {
+      row.setAttribute('aria-expanded', 'true');
+    }
+    panel.hidden = false;
+    panel.scrollIntoView();
+  }
+
   function setUp() {
     // Tells the stylesheet that folding is available. Everything folded is fully present in
     // the markup, so a page without scripting is longer rather than incomplete.
@@ -255,6 +274,8 @@
     }
 
     unfoldToPrint();
+    openWhatTheAddressAsksFor();
+    window.addEventListener('hashchange', openWhatTheAddressAsksFor);
   }
 
   if (document.readyState === 'loading') {

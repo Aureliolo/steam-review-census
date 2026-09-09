@@ -313,15 +313,30 @@ fn headline(out: &mut String, app: &AppReport) {
         return;
     };
 
+    // The sentence names a category and the reader's next question is always which reviews,
+    // so the name is the way to them rather than something to go hunting for in the table.
+    let named = if app.examples.iter().any(|(id, _)| *id == category.id) {
+        format!(
+            "<a href=\"#panel-{}-{}\"><strong>{}</strong></a>",
+            app.app_id(),
+            escape(&category.id),
+            escape(&category.label.to_lowercase())
+        )
+    } else {
+        format!(
+            "<strong>{}</strong>",
+            escape(&category.label.to_lowercase())
+        )
+    };
+
     out.push_str("<p class=\"headline\">\n");
     let _ = write!(
         out,
-        "Reading only the {} most-upvoted reviews, {} of them talk about \
-         <strong>{}</strong>. Across all {} reviews, {} do: the top of the pile overstates it \
-         by <strong>{factor:.1}\u{d7}</strong>.",
+        "Reading only the {} most-upvoted reviews, {} of them talk about {named}. Across all \
+         {} reviews, {} do: the top of the pile overstates it by \
+         <strong>{factor:.1}\u{d7}</strong>.",
         thousands(app.classification.top_helpful),
         percent(top),
-        escape(&category.label.to_lowercase()),
         thousands(app.classification.reviews),
         percent(overall),
     );
@@ -1542,6 +1557,34 @@ mod tests {
         assert!(
             STYLE.contains(".filtered-out {"),
             "the filter's class styles nothing"
+        );
+    }
+
+    /// The finding names a category, and the next question is always which reviews. A link
+    /// that lands on a folded row is worse than no link, so the panel has to open itself.
+    #[test]
+    fn the_finding_leads_to_the_reviews_behind_it() {
+        let page = render(&sample_report("ordinary text"));
+        let headline = page
+            .split_once("<p class=\"headline\">")
+            .expect("no finding")
+            .1;
+        let target = headline
+            .split_once("<a href=\"#")
+            .expect("the category is not a way to anything")
+            .1
+            .split_once('"')
+            .expect("an unclosed href")
+            .0
+            .to_owned();
+
+        assert!(
+            page.contains(&format!("id=\"{target}\"")),
+            "the finding points at {target}, which is not on the page"
+        );
+        assert!(
+            SCRIPT.contains("hashchange"),
+            "a second link to a second category would open nothing"
         );
     }
 
