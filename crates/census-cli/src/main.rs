@@ -1758,7 +1758,21 @@ fn thousands(n: u64) -> String {
 mod tests {
     use clap::Parser as _;
 
-    use super::{Cli, Command, Model, thousands};
+    use super::{Cli, Command, Model, elapsed, thousands};
+
+    /// A crawl of a million reviews runs for hours, and a figure in seconds is arithmetic
+    /// the reader has to do before the number means anything.
+    #[test]
+    fn a_run_reports_its_length_the_way_a_person_would_say_it() {
+        use std::time::Duration;
+
+        assert_eq!(elapsed(Duration::from_millis(1_500)), "1.5s");
+        assert_eq!(elapsed(Duration::from_secs(59)), "59.0s");
+        assert_eq!(elapsed(Duration::from_secs(60)), "1m 00s");
+        assert_eq!(elapsed(Duration::from_secs(1_147)), "19m 07s");
+        assert_eq!(elapsed(Duration::from_secs(3_600)), "1h 00m 00s");
+        assert_eq!(elapsed(Duration::from_secs(11_455)), "3h 10m 55s");
+    }
 
     #[test]
     fn the_flag_default_is_the_encoder_the_library_would_have_picked() {
