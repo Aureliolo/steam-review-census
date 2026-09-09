@@ -18,12 +18,12 @@ use std::{
 
 use arrow::array::{Array, ListArray, StringArray};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, taxonomy::CORE_SPINE};
 
 /// One review's reference labels.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReferenceLabel {
     pub id: String,
     pub primary: String,
@@ -112,9 +112,45 @@ pub struct CategoryAgreement {
     pub reference_mentions: u64,
     pub predicted_mentions: u64,
     pub mention_agreed: u64,
+    /// Where the reviews the labels put here actually went, in [`CORE_SPINE`] order.
+    ///
+    /// The diagonal is the agreements. Knowing a category scores badly says nothing about
+    /// what to do; knowing it is read as one particular other category is a boundary rule
+    /// waiting to be written, and that is a fact about the taxonomy rather than the model.
+    pub taken_as: Vec<u64>,
 }
 
 impl CategoryAgreement {
+    /// The category this one is most often mistaken for, where that is a pattern rather than
+    /// a coincidence.
+    ///
+    /// One review going one way is a tie broken by taxonomy order, and naming it would turn
+    /// a list of arbitrary neighbours into something that reads like a finding. Reported only
+    /// when it is several reviews and a real share of the ones this category loses.
+    #[must_use]
+    pub fn mistaken_for(&self) -> Option<(&'static str, u64)> {
+        const WORTH_NAMING: u64 = 3;
+        const SHARE_OF_THE_MISSES: f64 = 0.25;
+
+        let mine = CORE_SPINE.iter().position(|c| c.id == self.id);
+        let missed: u64 = self
+            .taken_as
+            .iter()
+            .enumerate()
+            .filter(|(slot, _)| Some(*slot) != mine)
+            .map(|(_, count)| count)
+            .sum();
+        let (slot, count) = self
+            .taken_as
+            .iter()
+            .enumerate()
+            .filter(|(slot, _)| Some(*slot) != mine)
+            .max_by_key(|(_, count)| **count)?;
+        if *count < WORTH_NAMING || rate(*count, missed)? < SHARE_OF_THE_MISSES {
+            return None;
+        }
+        Some((CORE_SPINE.get(slot)?.label, *count))
+    }
     /// Of the mentions the classifier claims, the share the reference set also has.
     #[must_use]
     pub fn precision(&self) -> Option<f64> {
@@ -127,12 +163,22 @@ impl CategoryAgreement {
         rate(self.mention_agreed, self.reference_mentions)
     }
 
-    /// `None` only when precision or recall is undefined, never merely because both are
-    /// zero. Returning `None` for a category the classifier gets entirely wrong would drop
-    /// it from the macro average and make the total look better the worse that category is.
+    /// `None` only when there is nothing at all to be right or wrong about: the reference
+    /// set never raises the category and the classifier never files anything under it.
+    ///
+    /// A category the classifier files nothing under, where the reference set does raise it,
+    /// has undefined precision and is nonetheless the worst outcome available. Reporting
+    /// that as unmeasurable drops it from the macro average, which makes the average rise
+    /// the more categories go completely missing.
     #[must_use]
     pub fn f1(&self) -> Option<f64> {
-        let (p, r) = (self.precision()?, self.recall()?);
+        if self.reference_mentions == 0 && self.predicted_mentions == 0 {
+            return None;
+        }
+        let (p, r) = (
+            self.precision().unwrap_or(0.0),
+            self.recall().unwrap_or(0.0),
+        );
         Some(if p + r > 0.0 {
             2.0 * p * r / (p + r)
         } else {
@@ -174,35 +220,79 @@ impl Slice {
     }
 
     /// 95% Wilson score interval for the agreement rate.
-    ///
-    /// Reference sets are small: the randomly drawn subset of the only set that exists is
-    /// sixty reviews, where six reviews changing hands moves the headline ten points. A bare
-    /// percentage invites reading such a swing as an improvement, so every rate reported
-    /// here carries the range it is actually entitled to claim. Wilson rather than the
-    /// textbook normal interval, which misbehaves badly at these counts and happily returns
-    /// bounds outside zero to one.
     #[must_use]
     pub fn interval(&self) -> Option<(f64, f64)> {
-        const Z: f64 = 1.959_963_985;
-        let hits = self.agreement()?;
+        wilson(self.agreed, self.compared)
+    }
+}
+
+/// 95% Wilson score interval for a proportion.
+///
+/// Reference sets are small: a randomly drawn subset runs to a hundred reviews or so, where
+/// six reviews changing hands moves the headline six points. A bare percentage invites
+/// reading such a swing as an improvement, so every rate reported anywhere in this tool
+/// carries the range it is actually entitled to claim. Wilson rather than the textbook
+/// normal interval, which misbehaves badly at these counts and happily returns bounds
+/// outside zero to one.
+#[must_use]
+pub fn wilson(part: u64, whole: u64) -> Option<(f64, f64)> {
+    const Z: f64 = 1.959_963_985;
+    let hits = rate(part, whole)?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are a few hundred reviews"
+    )]
+    let n = whole as f64;
+    let denominator = Z.mul_add(Z / n, 1.0);
+    let centre = hits + Z * Z / (2.0 * n);
+    let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
+    Some((
+        ((centre - spread) / denominator).max(0.0),
+        ((centre + spread) / denominator).min(1.0),
+    ))
+}
+
+/// Two-sided exact McNemar test for two classifiers judged on the same reviews.
+///
+/// `gained` is the reviews the second gets right and the first does not, `lost` the reverse.
+/// Reviews both place the same way carry no information about which is better and are
+/// deliberately absent from the arithmetic, which is what makes this the right test for a
+/// paired comparison and an unpaired interval the wrong one.
+///
+/// Exact rather than the usual chi-squared approximation: reference sets of this size swap
+/// a couple of dozen reviews, and the approximation is unreliable there. `None` when nothing
+/// changed hands, where there is no comparison to make rather than a perfect tie.
+#[must_use]
+pub fn mcnemar_exact(gained: u64, lost: u64) -> Option<f64> {
+    let swapped = gained + lost;
+    if swapped == 0 {
+        return None;
+    }
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are a few hundred reviews"
+    )]
+    let n = swapped as f64;
+    // The tail of a fair binomial, summed by the ratio between neighbouring terms so no
+    // factorial is ever formed.
+    let mut term = 0.5_f64.powf(n);
+    let mut tail = term;
+    for k in 0..gained.min(lost) {
         #[expect(
             clippy::cast_precision_loss,
             reason = "reference sets are a few hundred reviews"
         )]
-        let n = self.compared as f64;
-        let denominator = Z.mul_add(Z / n, 1.0);
-        let centre = hits + Z * Z / (2.0 * n);
-        let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
-        Some((
-            ((centre - spread) / denominator).max(0.0),
-            ((centre + spread) / denominator).min(1.0),
-        ))
+        let step = (swapped - k) as f64 / (k + 1) as f64;
+        term *= step;
+        tail += term;
     }
+    Some((2.0 * tail).min(1.0))
 }
 
 #[derive(Debug, Clone)]
 pub struct AgreementReport {
-    pub app_id: u32,
+    /// The games behind this comparison. One per game evaluated, several once pooled.
+    pub apps: Vec<u32>,
     pub produced_by: String,
     pub compared: u64,
     /// Reference labels with no matching classification, usually because the corpus was
@@ -239,6 +329,97 @@ impl AgreementReport {
     }
 }
 
+/// Sums several games' comparisons into one.
+///
+/// Six sets of a hundred held-out reviews are a six-hundred-review measurement, and the
+/// pooled figure is the one worth quoting: at a hundred reviews the honest band around a
+/// rate is about twenty points wide, which hides most of what any change does. Pooling also
+/// stops one game's idiosyncrasies from reading as a property of the classifier.
+///
+/// Categories are summed as counts rather than averaged as rates, so a category with four
+/// mentions in one game and forty in another counts for what it actually is.
+#[must_use]
+pub fn pooled(reports: &[AgreementReport]) -> AgreementReport {
+    let mut categories: Vec<CategoryAgreement> = CORE_SPINE
+        .iter()
+        .map(|c| CategoryAgreement {
+            id: c.id,
+            label: c.label,
+            reference_primary: 0,
+            predicted_primary: 0,
+            primary_agreed: 0,
+            reference_mentions: 0,
+            predicted_mentions: 0,
+            mention_agreed: 0,
+            taken_as: vec![0; CORE_SPINE.len()],
+        })
+        .collect();
+    let mut slices: Vec<Slice> = Vec::new();
+    let mut apps = Vec::new();
+    let mut anchors: Vec<String> = Vec::new();
+    let mut produced: Vec<String> = Vec::new();
+    let (mut compared, mut unmatched, mut agreed) = (0, 0, 0);
+
+    for report in reports {
+        apps.extend(report.apps.iter().copied());
+        anchors.extend(report.anchors.iter().cloned());
+        produced.push(report.produced_by.clone());
+        compared += report.compared;
+        unmatched += report.unmatched;
+        for from in &report.categories {
+            // Matched by id rather than by position: a report from another build may hold a
+            // different set of categories, and adding a row into the wrong category is the
+            // kind of mistake that produces a plausible number.
+            let Some(into) = categories.iter_mut().find(|into| into.id == from.id) else {
+                continue;
+            };
+            into.reference_primary += from.reference_primary;
+            into.predicted_primary += from.predicted_primary;
+            into.primary_agreed += from.primary_agreed;
+            into.reference_mentions += from.reference_mentions;
+            into.predicted_mentions += from.predicted_mentions;
+            into.mention_agreed += from.mention_agreed;
+            for (slot, count) in from.taken_as.iter().enumerate() {
+                if let Some(into) = into.taken_as.get_mut(slot) {
+                    *into += count;
+                }
+            }
+        }
+        agreed += report
+            .categories
+            .iter()
+            .map(|c| c.primary_agreed)
+            .sum::<u64>();
+        for slice in &report.slices {
+            match slices
+                .iter_mut()
+                .find(|into| into.subset == slice.subset && into.contested == slice.contested)
+            {
+                Some(into) => {
+                    into.compared += slice.compared;
+                    into.agreed += slice.agreed;
+                }
+                None => slices.push(slice.clone()),
+            }
+        }
+    }
+
+    anchors.sort_unstable();
+    anchors.dedup();
+    produced.sort_unstable();
+    produced.dedup();
+    AgreementReport {
+        apps,
+        produced_by: produced.join("; "),
+        compared,
+        unmatched,
+        primary_agreement: rate(agreed, compared),
+        anchors,
+        slices,
+        categories,
+    }
+}
+
 /// Compares stored classifications against a reference set.
 ///
 /// # Errors
@@ -246,7 +427,11 @@ impl AgreementReport {
 /// Fails if the reference set or the classifications cannot be read.
 pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<AgreementReport> {
     let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let predictions = load_predictions(&snapshot.join("classifications.parquet"))?;
+    // Only the labelled reviews are kept. A reference set names a few hundred reviews, and
+    // holding a million predictions to look up four hundred of them costs a hundred times
+    // more memory than the answer.
+    let wanted: HashSet<&str> = reference.labels.iter().map(|l| l.id.as_str()).collect();
+    let predictions = load_predictions(&snapshot.join("classifications.parquet"), &wanted)?;
 
     let mut stats: Vec<CategoryAgreement> = CORE_SPINE
         .iter()
@@ -259,6 +444,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
             reference_mentions: 0,
             predicted_mentions: 0,
             mention_agreed: 0,
+            taken_as: vec![0; CORE_SPINE.len()],
         })
         .collect();
     let index: HashMap<&str, usize> = CORE_SPINE
@@ -282,6 +468,9 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
 
         if let Some(&slot) = index.get(label.primary.as_str()) {
             stats[slot].reference_primary += 1;
+            if let Some(&went) = index.get(predicted.primary.as_str()) {
+                stats[slot].taken_as[went] += 1;
+            }
         }
         if let Some(&slot) = index.get(predicted.primary.as_str()) {
             stats[slot].predicted_primary += 1;
@@ -339,7 +528,7 @@ pub fn compare(reference: &ReferenceSet, out_dir: &Path, app_id: u32) -> Result<
     anchors.sort_unstable();
 
     Ok(AgreementReport {
-        app_id,
+        apps: vec![app_id],
         produced_by: reference.produced_by.clone(),
         compared,
         unmatched,
@@ -357,7 +546,7 @@ struct Prediction {
     anchors: String,
 }
 
-fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
+fn load_predictions(path: &Path, wanted: &HashSet<&str>) -> Result<HashMap<String, Prediction>> {
     let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
         path: path.to_path_buf(),
     })?;
@@ -378,6 +567,9 @@ fn load_predictions(path: &Path) -> Result<HashMap<String, Prediction>> {
             }
         })?;
         for row in 0..batch.num_rows() {
+            if !wanted.contains(ids.value(row)) {
+                continue;
+            }
             let listed = mentions.value(row);
             let listed = listed
                 .as_any()
@@ -406,6 +598,77 @@ fn downcast<'a, T: 'static>(
         .column_by_name(name)
         .and_then(|c| c.as_any().downcast_ref::<T>())
         .ok_or(Error::MalformedPayload { field: name })
+}
+
+/// Visits every review's primary category, one at a time.
+///
+/// # Errors
+///
+/// Fails if the classifications are missing or were written by an older build.
+pub fn for_each_prediction(path: &Path, mut visit: impl FnMut(&str, &str)) -> Result<()> {
+    let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(8192)
+        .build()?;
+
+    for batch in reader {
+        let batch = batch?;
+        let ids = downcast::<StringArray>(&batch, "recommendationid")?;
+        let primaries = downcast::<StringArray>(&batch, "primary_category")?;
+        for row in 0..batch.num_rows() {
+            visit(ids.value(row), primaries.value(row));
+        }
+    }
+    Ok(())
+}
+
+/// Streams every stored assignment, main subject and everything else it mentions.
+///
+/// Separate from [`for_each_prediction`] because reading the mention list costs an array
+/// downcast and a slice per row, which a caller that only wants the main subject should not
+/// pay for on a million reviews.
+///
+/// # Errors
+///
+/// Fails if the file is missing or was written by an older build.
+pub fn for_each_assignment(
+    path: &Path,
+    mut visit: impl FnMut(&str, &str, &[String]),
+) -> Result<()> {
+    let file = std::fs::File::open(path).map_err(|_| Error::NoCapture {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(8192)
+        .build()?;
+
+    // The mention list is a slice inside a batch-owned array, so the names are copied out
+    // rather than borrowed: the array is dropped between rows and a borrow would not outlive
+    // the visit it was gathered for.
+    let mut named: Vec<String> = Vec::new();
+    for batch in reader {
+        let batch = batch?;
+        let ids = downcast::<StringArray>(&batch, "recommendationid")?;
+        let primaries = downcast::<StringArray>(&batch, "primary_category")?;
+        let mentions = downcast::<ListArray>(&batch, "mentions")?;
+        for row in 0..batch.num_rows() {
+            let listed = mentions.value(row);
+            let listed = listed
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or(Error::MalformedPayload { field: "mentions" })?;
+            named.clear();
+            for slot in 0..listed.len() {
+                if !listed.is_null(slot) {
+                    named.push(listed.value(slot).to_owned());
+                }
+            }
+            visit(ids.value(row), primaries.value(row), &named);
+        }
+    }
+    Ok(())
 }
 
 /// Where a reference set for an app is expected to live.
@@ -461,6 +724,33 @@ mod tests {
     }
 
     #[test]
+    fn twelve_reviews_gained_against_two_lost_is_the_published_p_value() {
+        // The figure the first reference set was reported with: fitting anchors moved 12
+        // reviews to the right category and 2 away from it, p = 0.013.
+        let p = mcnemar_exact(12, 2).unwrap();
+        assert!((p - 0.012_939).abs() < 1e-6, "p was {p}");
+    }
+
+    #[test]
+    fn an_even_split_is_as_unremarkable_as_a_result_can_be() {
+        assert!((mcnemar_exact(7, 7).unwrap() - 1.0).abs() < 1e-12);
+        assert!(mcnemar_exact(9, 7).unwrap() > 0.8);
+    }
+
+    #[test]
+    fn the_same_margin_over_more_reviews_is_the_stronger_evidence() {
+        let few = mcnemar_exact(9, 3).unwrap();
+        let many = mcnemar_exact(90, 30).unwrap();
+        assert!(many < few, "{many} should be far below {few}");
+        assert!(few < 0.15 && few > 0.05, "twelve swaps prove little: {few}");
+    }
+
+    #[test]
+    fn two_sets_that_place_every_review_alike_have_nothing_to_compare() {
+        assert_eq!(mcnemar_exact(0, 0), None);
+    }
+
+    #[test]
     fn an_empty_slice_has_no_agreement_rather_than_a_zero_one() {
         assert_eq!(slice(0, 0).agreement(), None);
         assert_eq!(slice(0, 0).interval(), None);
@@ -476,6 +766,7 @@ mod tests {
             reference_mentions: refr,
             predicted_mentions: pred,
             mention_agreed: hit,
+            taken_as: vec![0; CORE_SPINE.len()],
         }
     }
 
@@ -487,6 +778,56 @@ mod tests {
         assert!((stat.recall().unwrap() - 0.8).abs() < 1e-9);
         let f1 = stat.f1().unwrap();
         assert!((f1 - 0.533_333).abs() < 1e-5, "f1 was {f1}");
+    }
+
+    /// A confusion count read off the wrong axis still produces a plausible sentence, so
+    /// the direction is pinned: this is where the reviews the labels put here ended up.
+    #[test]
+    fn a_category_reports_what_it_is_mistaken_for_and_not_the_reverse() {
+        let slot = |id: &str| CORE_SPINE.iter().position(|c| c.id == id).expect(id);
+        let mut stat = agreement(0, 12, 0);
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        stat.taken_as[slot("bugs")] = 40;
+        stat.taken_as[slot("performance")] = 7;
+        stat.taken_as[slot("verdict")] = 3;
+
+        let (label, count) = stat.mistaken_for().expect("seven went to performance");
+        assert_eq!(count, 7, "the forty it got right are not a confusion");
+        assert_eq!(
+            label,
+            crate::taxonomy::by_id("performance")
+                .expect("in the spine")
+                .label
+        );
+
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        stat.taken_as[slot("bugs")] = 40;
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a category nothing is confused with has nothing to report"
+        );
+
+        // One review going one way is a tie broken by taxonomy order.
+        stat.taken_as[slot("performance")] = 1;
+        stat.taken_as[slot("verdict")] = 1;
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a single review is not a pattern"
+        );
+
+        // Several reviews, but scattered so evenly that no neighbour is the answer.
+        stat.taken_as = vec![0; CORE_SPINE.len()];
+        for id in ["performance", "verdict", "story", "graphics", "price"] {
+            stat.taken_as[slot(id)] = 4;
+        }
+        assert_eq!(
+            stat.mistaken_for(),
+            None,
+            "a category confused with everything equally is confused with nothing in \
+             particular"
+        );
     }
 
     #[test]
@@ -502,6 +843,35 @@ mod tests {
         let stat = agreement(0, 12, 0);
         assert_eq!(stat.precision(), None, "nothing was claimed");
         assert_eq!(stat.recall(), Some(0.0), "twelve were missed");
+        assert_eq!(
+            stat.f1(),
+            Some(0.0),
+            "filing nothing under a category the labels do raise is the worst available \
+             outcome, and must not leave the category out of the average"
+        );
+    }
+
+    /// The failure the whole shape of `f1` exists to prevent, stated as an inequality: a set
+    /// of anchors that stops finding a category entirely must never score higher for it.
+    #[test]
+    fn losing_a_category_altogether_cannot_improve_the_average() {
+        let categories = |predicted, agreed| AgreementReport {
+            apps: vec![1],
+            produced_by: "test".to_owned(),
+            compared: 100,
+            unmatched: 0,
+            primary_agreement: Some(0.5),
+            anchors: Vec::new(),
+            slices: Vec::new(),
+            categories: vec![agreement(40, 40, 30), agreement(predicted, 20, agreed)],
+        };
+        let found = categories(20, 8).macro_f1().expect("two scored categories");
+        let lost = categories(0, 0).macro_f1().expect("still two categories");
+
+        assert!(
+            lost < found,
+            "giving up on a category scored {lost} against {found} for finding some of it"
+        );
     }
 
     #[test]
@@ -518,7 +888,7 @@ mod tests {
     #[test]
     fn macro_f1_lets_a_rare_category_drag_the_score_down() {
         let report = AgreementReport {
-            app_id: 1,
+            apps: vec![1],
             produced_by: "test".to_owned(),
             compared: 100,
             unmatched: 0,
@@ -530,6 +900,56 @@ mod tests {
         // Corpus-weighted this would look near perfect; unweighted it does not.
         let macro_f1 = report.macro_f1().unwrap();
         assert!(macro_f1 < 0.55, "macro f1 was {macro_f1}");
+    }
+
+    #[test]
+    fn pooling_adds_counts_and_never_averages_rates() {
+        let game = |app: u32, compared, agreed, hits| AgreementReport {
+            apps: vec![app],
+            produced_by: "test".to_owned(),
+            compared,
+            unmatched: 1,
+            primary_agreement: Some(0.0),
+            anchors: vec!["fitted:1".to_owned()],
+            slices: vec![
+                Slice {
+                    subset: "random".to_owned(),
+                    contested: None,
+                    compared,
+                    agreed,
+                },
+                Slice {
+                    subset: "random".to_owned(),
+                    contested: Some(false),
+                    compared,
+                    agreed,
+                },
+            ],
+            categories: vec![CategoryAgreement {
+                id: "bugs",
+                label: "Bugs and crashes",
+                reference_primary: compared,
+                predicted_primary: compared,
+                primary_agreed: hits,
+                reference_mentions: compared,
+                predicted_mentions: compared,
+                mention_agreed: hits,
+                taken_as: vec![0; CORE_SPINE.len()],
+            }],
+        };
+        // A game where nine of ten agree and one where one of ninety does. Averaging the two
+        // rates would call that 50%; the truth is ten of a hundred.
+        let pooled = pooled(&[game(1, 10, 9, 9), game(2, 90, 1, 1)]);
+
+        assert_eq!(pooled.apps, vec![1, 2]);
+        assert_eq!(pooled.compared, 100);
+        assert_eq!(pooled.unmatched, 2);
+        assert_eq!(pooled.primary_agreement, Some(0.1));
+        assert_eq!(pooled.anchors, vec!["fitted:1".to_owned()]);
+        assert_eq!(pooled.slices.len(), 2, "slices merged by subset and cut");
+        assert_eq!(pooled.slices[0].compared, 100);
+        assert_eq!(pooled.slices[0].agreed, 10);
+        assert_eq!(pooled.categories[1].reference_mentions, 100);
     }
 
     #[test]
@@ -598,7 +1018,7 @@ mod tests {
             .unwrap();
         writer.close().unwrap();
 
-        let error = load_predictions(&path).unwrap_err();
+        let error = load_predictions(&path, &HashSet::from(["1"])).unwrap_err();
         assert!(
             matches!(
                 error,

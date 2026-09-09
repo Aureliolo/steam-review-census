@@ -4,16 +4,21 @@
 
 pub mod anchors;
 pub mod api;
+mod bounded;
 pub mod capture;
 pub mod classify;
 pub mod crawl;
 pub mod embed;
 pub mod evaluate;
+pub mod html;
 pub mod model;
 pub mod query;
+pub mod report;
+pub mod sample;
 pub mod shard;
 pub mod state;
 pub mod taxonomy;
+pub mod time;
 
 pub use anchors::{Anchors, FitOutcome, FitParams};
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
@@ -22,8 +27,9 @@ pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corp
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
 pub use evaluate::{AgreementReport, ReferenceSet, Slice, compare};
-pub use model::{EMBEDDING_DIM, MODEL_ID};
+pub use model::{Encoder, Precision};
 pub use query::{ReviewQuery, SortOrder};
+pub use sample::{SampleOptions, SampleReport, SampledReview};
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
 pub use state::CrawlState;
 pub use taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, Category};
@@ -65,7 +71,10 @@ pub enum Error {
     #[error("no embeddings found at {path}; run `census embed` first")]
     NoEmbeddings { path: std::path::PathBuf },
 
-    #[error("no reference set at {path}")]
+    #[error("no classifications found at {path}; run `census classify` first")]
+    NoClassifications { path: std::path::PathBuf },
+
+    #[error("no reference set at {path}; run `census sample` then `census ingest` first")]
     NoReferenceSet { path: std::path::PathBuf },
 
     #[error("no fitted anchors at {path}; run `census fit` first")]

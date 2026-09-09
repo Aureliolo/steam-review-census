@@ -2,8 +2,18 @@
 # local: it is large, it is reproducible from the app ID, and it is not ours to
 # redistribute.
 data/
+
+# Drawn reference samples carry the review text itself, unlike the labels beside them,
+# which name reviews by id only. `census sample` regenerates these from the corpus and
+# the seed recorded in the manifest, so nothing is lost by keeping them out.
+reference/**/sample.json
+reference/**/batches/
 corpus/
 raw/
+
+# Rendered reports quote review text, which is the same reason the captures are not here.
+census-report.html
+*-report.html
 analysis/
 output/
 *.db
@@ -28,6 +38,7 @@ models/
 
 # Build and dependency artefacts
 target/
+target-*/
 dist/
 build/
 node_modules/

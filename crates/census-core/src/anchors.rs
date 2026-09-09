@@ -4,21 +4,28 @@
 //! nearest one. That description is prose about a topic, and reviews about that topic are
 //! not prose about it: "runs like garbage on my 4090" and "the game runs badly, low frame
 //! rate, poor optimisation" sit in noticeably different places even in a model that
-//! understands both. Measured against a reference set the gap showed up as 51.1% primary
-//! agreement on reviews the labeller called clear-cut.
+//! understands both. Measured against a reference set, the descriptions alone agree with
+//! the labels on roughly a third of reviews.
 //!
 //! An anchor fitted from labelled reviews removes that mismatch: the category is
 //! represented by the mean of things people actually wrote, in the register they wrote them
-//! in. The cost is that it needs labels, and the labels are thin. In the one reference set
-//! that exists, four of seventeen categories have no example at all and seven have fewer
-//! than five, so a set of pure prototypes would have holes exactly where the description was
-//! the only thing holding the category up.
+//! in. The cost is that it needs labels, and labels are thinnest exactly where a category is
+//! rare, which is where the description was the only thing holding it up. A set of pure
+//! prototypes would therefore have holes in precisely the wrong places.
 //!
 //! So each anchor is a blend, weighted by how much evidence there is for that category: a
 //! category with a hundred labelled reviews is almost entirely its reviews, a category with
 //! five is mostly its description nudged towards them, and a category with none is its
 //! description unchanged. That makes fitting a strict improvement on the descriptions rather
 //! than a replacement that can regress the long tail.
+//!
+//! Each anchor is a prototype of its own examples and nothing else. Fitting them against
+//! each other instead is the obvious next idea and was tried: pushing each anchor away from
+//! the reviews it takes off its neighbours, by an amount the search chose. Measured on
+//! 2026-09-09 it bought a point on the six games it could see and cost more than two on the
+//! game it could not, 50.8% to 48.5% leave-one-game-out. Six reference sets are not enough
+//! to fit a category against its neighbours without learning those six games' neighbours,
+//! and the anchors that ship are for games nobody has labelled.
 
 use std::{collections::HashMap, path::Path};
 
@@ -28,7 +35,6 @@ use crate::{
     Error, Result,
     embed::Embedder,
     evaluate::ReferenceLabel,
-    model::{EMBEDDING_DIM, MODEL_ID},
     taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, embedding_text},
 };
 
@@ -67,9 +73,8 @@ pub struct FitParams {
     pub secondary_weight: f32,
     /// How close to the best match another category must score to count as mentioned.
     pub mention_margin: f32,
-    /// Whether to score categories by how far above their own average a review sits, rather
-    /// than by raw similarity. See [`Anchors::calibrate`].
-    pub calibrate: bool,
+    /// What the corpus mean is used for before categories compete. See [`Scoring`].
+    pub scoring: Scoring,
 }
 
 impl Default for FitParams {
@@ -78,7 +83,7 @@ impl Default for FitParams {
             smoothing: DEFAULT_SMOOTHING,
             secondary_weight: DEFAULT_SECONDARY_WEIGHT,
             mention_margin: crate::classify::DEFAULT_MENTION_MARGIN,
-            calibrate: true,
+            scoring: Scoring::Bias,
         }
     }
 }
@@ -98,7 +103,10 @@ pub struct Anchor {
     pub id: String,
     /// Labelled examples behind this anchor, secondary mentions counted fractionally.
     pub evidence: f32,
-    /// How far the anchor moved from its written description towards those examples, 0 to 1.
+    /// How far the blend moved from the written description towards those examples, 0 to 1.
+    ///
+    /// The blend only. Repulsion moves the anchor again afterwards, away from reviews that
+    /// belong to somebody else, and that is a different direction from either end of this.
     pub learned_share: f32,
     /// This anchor's mean similarity to the corpus, subtracted before categories compete.
     /// Zero when the set has not been calibrated.
@@ -111,16 +119,29 @@ pub struct Anchor {
 pub struct Anchors {
     pub spine_version: String,
     pub model: String,
-    /// App whose reference labels produced these, if any.
+    /// Apps whose reference labels produced these. Empty for written descriptions.
     ///
-    /// Recorded because an anchor set fitted on one game carries that game's vocabulary,
-    /// and whether it transfers to another is an open question rather than an assumption.
-    pub fitted_from: Option<u32>,
+    /// Recorded because an anchor set carries the vocabulary of the games it was fitted on,
+    /// and whether it reaches a game outside that list is a measurement rather than an
+    /// assumption. `census fit --leave-one-out` is what makes it.
+    #[serde(default)]
+    pub fitted_from: Vec<u32>,
     pub params: Option<FitParams>,
+    /// The corpus mean subtracted from every review before it is compared, when the set was
+    /// fitted with [`Scoring::Centred`].
+    #[serde(default)]
+    pub centre: Option<Vec<f32>>,
     pub categories: Vec<Anchor>,
 }
 
 impl Anchors {
+    /// How wide these vectors are, which is a fact about the encoder that produced them
+    /// rather than about the build reading them.
+    #[must_use]
+    pub fn dimensions(&self) -> usize {
+        self.categories.first().map_or(0, |a| a.vector.len())
+    }
+
     /// Embeds the written category descriptions. The zero-setup path, needing no labels.
     ///
     /// # Errors
@@ -131,9 +152,10 @@ impl Anchors {
         let vectors = embedder.embed(&text)?;
         Ok(Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
-            fitted_from: None,
+            model: embedder.encoder().id().to_owned(),
+            fitted_from: Vec::new(),
             params: None,
+            centre: None,
             categories: CORE_SPINE
                 .iter()
                 .zip(vectors)
@@ -150,8 +172,8 @@ impl Anchors {
 
     /// Blends the descriptions towards the labelled examples.
     #[must_use]
-    pub fn fit(&self, examples: &[Example], app_id: u32, params: FitParams) -> Self {
-        let mut sums = vec![vec![0.0_f32; EMBEDDING_DIM]; CORE_SPINE.len()];
+    pub fn fit(&self, examples: &[Example], app_ids: &[u32], params: FitParams) -> Self {
+        let mut sums = vec![vec![0.0_f32; self.dimensions()]; CORE_SPINE.len()];
         let mut evidence = vec![0.0_f32; CORE_SPINE.len()];
 
         for example in examples {
@@ -193,10 +215,24 @@ impl Anchors {
 
         Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
-            fitted_from: Some(app_id),
+            model: self.model.clone(),
+            fitted_from: app_ids.to_vec(),
             params: Some(params),
+            centre: None,
             categories,
+        }
+    }
+
+    /// Applies whatever the fitted scoring needs the corpus mean for.
+    ///
+    /// One place, because a set fitted with one treatment and scored under another is not a
+    /// worse answer but a meaningless one, and three callers each remembering to do it is
+    /// three chances to forget.
+    pub fn prepare(&mut self, scoring: Scoring, centroid: &[f32]) {
+        match scoring {
+            Scoring::Raw => {}
+            Scoring::Bias => self.calibrate(centroid),
+            Scoring::Centred => self.centre_on(centroid),
         }
     }
 
@@ -215,32 +251,58 @@ impl Anchors {
     /// within a category. Only review vectors are used and no labels, so held-out reviews
     /// may contribute: this is the same corpus the classifier is about to be run over, not
     /// information about the answers.
-    pub fn calibrate(&mut self, corpus: &[Vec<f32>]) {
-        if corpus.is_empty() {
+    /// Takes the corpus centroid rather than the corpus itself. A dot product is linear in
+    /// its second argument, so the mean of an anchor's similarity to every review *is* its
+    /// similarity to the mean review. The two are equal rather than approximately equal, and
+    /// the second costs 384 multiplications instead of a walk over a million vectors. That
+    /// matters because fitting calibrates once per fold per parameter combination tried:
+    /// against six corpora the old form was several hundred passes over three million
+    /// vectors, and this form is a few thousand multiplications.
+    pub fn calibrate(&mut self, centroid: &[f32]) {
+        if centroid.len() != self.dimensions() {
             return;
         }
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "corpora are millions of reviews at most"
-        )]
-        let count = corpus.len() as f32;
         for anchor in &mut self.categories {
-            let total: f32 = corpus
-                .iter()
-                .map(|review| dot(&anchor.vector, review))
-                .sum();
-            anchor.bias = total / count;
+            anchor.bias = dot(&anchor.vector, centroid);
         }
     }
 
-    /// How far above its own corpus average each category scores this review.
+    /// Moves the origin to the corpus mean, so what is compared is what makes a review
+    /// unlike the others rather than what every review has in common.
     ///
-    /// Identical to plain cosine similarity for an uncalibrated set, whose biases are zero.
+    /// The centre has to be kept, because the same subtraction has to be done to every
+    /// review the set is later run over, and an anchor set is used long after the corpus
+    /// mean that produced it has been forgotten.
+    pub fn centre_on(&mut self, centroid: &[f32]) {
+        if centroid.len() != self.dimensions() {
+            return;
+        }
+        for anchor in &mut self.categories {
+            for (slot, mean) in anchor.vector.iter_mut().zip(centroid) {
+                *slot -= mean;
+            }
+            normalise(&mut anchor.vector);
+            anchor.bias = 0.0;
+        }
+        self.centre = Some(centroid.to_vec());
+    }
+
+    /// How strongly each category matches this review, on whatever scale the set was fitted
+    /// with. Plain cosine similarity for a set that was fitted with neither treatment.
     #[must_use]
     pub fn similarities(&self, vector: &[f32]) -> Vec<f32> {
+        let Some(centre) = self.centre.as_ref().filter(|c| c.len() == vector.len()) else {
+            return self
+                .categories
+                .iter()
+                .map(|anchor| dot(&anchor.vector, vector) - anchor.bias)
+                .collect();
+        };
+        let mut moved: Vec<f32> = vector.iter().zip(centre).map(|(v, m)| v - m).collect();
+        normalise(&mut moved);
         self.categories
             .iter()
-            .map(|anchor| dot(&anchor.vector, vector) - anchor.bias)
+            .map(|anchor| dot(&anchor.vector, &moved))
             .collect()
     }
 
@@ -284,13 +346,6 @@ impl Anchors {
                 actual: anchors.spine_version,
             });
         }
-        if anchors.model != MODEL_ID {
-            return Err(Error::StaleAnchors {
-                field: "embedding model",
-                expected: MODEL_ID.to_owned(),
-                actual: anchors.model,
-            });
-        }
         let ids: Vec<&str> = anchors.categories.iter().map(|a| a.id.as_str()).collect();
         let expected: Vec<&str> = CORE_SPINE.iter().map(|c| c.id).collect();
         if ids != expected {
@@ -300,42 +355,16 @@ impl Anchors {
                 actual: ids.join(","),
             });
         }
-        if let Some(bad) = anchors
-            .categories
-            .iter()
-            .find(|a| a.vector.len() != EMBEDDING_DIM)
-        {
+        let width = anchors.dimensions();
+        if let Some(bad) = anchors.categories.iter().find(|a| a.vector.len() != width) {
             return Err(Error::StaleAnchors {
                 field: "vector width",
-                expected: EMBEDDING_DIM.to_string(),
+                expected: width.to_string(),
                 actual: bad.vector.len().to_string(),
             });
         }
         Ok(anchors)
     }
-}
-
-/// Looks up the stored vector of every review in the most recent capture, by review id.
-///
-/// Reference labels name reviews by id while embeddings are keyed by the hash of the text,
-/// so fitting needs the capture as well as the vectors: the same text posted twice is
-/// embedded once, and two ids legitimately share a vector.
-///
-/// # Errors
-///
-/// Fails if the capture or its embeddings are missing.
-pub fn corpus_vectors(out_dir: &Path, app_id: u32) -> Result<HashMap<String, Vec<f32>>> {
-    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let by_hash = crate::classify::load_embeddings(&snapshot.join("embeddings.parquet"))?;
-
-    let mut by_id = HashMap::new();
-    for review in crate::classify::read_reviews(&snapshot)? {
-        let review = review?;
-        if let Some(vector) = by_hash.get(&review.text_hash) {
-            by_id.insert(review.recommendationid, vector.clone());
-        }
-    }
-    Ok(by_id)
 }
 
 /// Turns reference labels into fitting examples, dropping any the corpus cannot supply.
@@ -380,20 +409,70 @@ pub fn to_examples<S: std::hash::BuildHasher>(
 pub enum Calibration {
     #[default]
     Search,
-    Always,
-    Never,
+    Only(Scoring),
 }
 
 impl Calibration {
-    fn candidates(self) -> impl Iterator<Item = bool> {
+    fn candidates(self) -> impl Iterator<Item = Scoring> {
         match self {
-            Self::Search => [false, true].as_slice(),
-            Self::Always => [true].as_slice(),
-            Self::Never => [false].as_slice(),
+            Self::Search => [Scoring::Raw, Scoring::Bias, Scoring::Centred].as_slice(),
+            Self::Only(Scoring::Raw) => [Scoring::Raw].as_slice(),
+            Self::Only(Scoring::Bias) => [Scoring::Bias].as_slice(),
+            Self::Only(Scoring::Centred) => [Scoring::Centred].as_slice(),
         }
         .iter()
         .copied()
     }
+}
+
+/// How a review's distance from a category is turned into a score the categories compete on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scoring {
+    /// Plain cosine similarity to the anchor.
+    #[default]
+    Raw,
+    /// Each anchor's own mean similarity to the corpus subtracted from its score, so a
+    /// category is scored by how far above its own average a review sits.
+    Bias,
+    /// The corpus mean removed from both sides before they are compared.
+    ///
+    /// Sentence embeddings share a strong common direction: every review is somewhat similar
+    /// to every category, and the categories nearest that direction collect reviews that are
+    /// not about them.
+    ///
+    /// Its numerator ranks exactly as [`Scoring::Bias`] does, because the two extra terms it
+    /// picks up are the same for every category. What makes it a different answer is the
+    /// division that follows: each category is scaled by how far its own anchor sits from
+    /// the corpus mean, which is a per-category factor rather than a per-category offset.
+    ///
+    /// Measured and rejected on 2026-09-09 across the six reference sets under
+    /// gte-multilingual-base: 50.5% primary agreement and 0.458 mention macro F1 on the 600
+    /// held-back reviews, against 54.2% and 0.498 for raw similarity. It stays a candidate
+    /// because the search re-answers the question for every corpus and every encoder, and
+    /// the reason it loses here is a property of this embedding space rather than of the
+    /// method.
+    Centred,
+}
+
+/// Whether an anchor set picks the same primary category as the labels, review by review.
+///
+/// Works on vectors already in hand rather than on stored classifications, so a set can be
+/// measured against reviews it was never used to classify. That is what makes leaving a
+/// whole game out of the fit and testing on it cheap enough to do six times over.
+///
+/// Per review rather than as a total because two anchor sets are compared over the same
+/// reviews, and the ones they both place the same way say nothing about which is better.
+#[must_use]
+pub fn agreements(anchors: &Anchors, examples: &[Example]) -> Vec<bool> {
+    examples
+        .iter()
+        .map(|example| {
+            let sims = anchors.similarities(&example.vector);
+            let (primary, _) = crate::classify::assign(&sims, anchors.mention_margin());
+            primary == example.primary
+        })
+        .collect()
 }
 
 /// What a parameter search found, and how confident that finding is entitled to be.
@@ -405,21 +484,24 @@ pub struct FitOutcome {
     /// Held-out primary agreement of the unfitted descriptions, on the same folds.
     pub baseline_agreement: f64,
     /// Whether the description-only baseline was better off calibrated too.
-    pub baseline_calibrated: bool,
     /// Held-out mention macro F1 of the chosen blend and margin.
     pub mention_macro_f1: f64,
     pub baseline_macro_f1: f64,
+    /// What the blend was chosen to win. The other figure is a cost, not a claim.
+    pub objective: Objective,
     pub folds: usize,
     pub examples: usize,
 }
 
 /// Fits the blend and the mention margin by cross-validation over the training examples.
 ///
-/// Two stages, because the two settings answer different questions and one objective cannot
-/// serve both. The blend is chosen on held-out primary agreement, which is the question the
-/// classifier is mainly asked. The margin only affects which *additional* categories a
-/// review keeps, so it is chosen afterwards, on held-out mention macro F1, with the blend
-/// already fixed.
+/// Which of the two questions the search is trying to win is the caller's to say, because
+/// they pull in different directions: the secondary weight that best identifies a review's
+/// main subject is zero, and zero leaves every category that is usually somebody's second
+/// subject with almost no evidence and a written description it never moves off.
+///
+/// The margin is settled last and always on mentions, whatever the blend was chosen for,
+/// since it decides nothing else.
 ///
 /// Every score here is on examples the fold did not see. Selecting on training-fold scores
 /// would pick whichever setting memorised the labels hardest, which for anchors is always
@@ -428,74 +510,101 @@ pub struct FitOutcome {
 pub fn search(
     descriptions: &Anchors,
     examples: &[Example],
-    corpus: &[Vec<f32>],
+    centroid: &[f32],
     folds: usize,
     calibration: Calibration,
+    objective: Objective,
 ) -> FitOutcome {
     let folds = folds.max(2).min(examples.len().max(2));
-    let score = |params, objective| {
-        cross_validate(descriptions, examples, corpus, folds, params, objective)
+    let margins: &[f32] = match objective {
+        // The margin cannot change which category scores highest, so trying it here would
+        // only spend folds to arrive back where it started.
+        Objective::Primary => &[crate::classify::DEFAULT_MENTION_MARGIN],
+        Objective::Mentions => MARGIN_GRID,
+    };
+
+    let sweep = |params, margins: &[f32], objective| {
+        across_margins(
+            descriptions,
+            examples,
+            centroid,
+            folds,
+            params,
+            margins,
+            objective,
+        )
+    };
+    let best_of = |params: FitParams, margins: &[f32], objective| {
+        sweep(params, margins, objective)
+            .into_iter()
+            .zip(margins)
+            .fold((f64::NEG_INFINITY, params), |best, (found, &margin)| {
+                if found > best.0 {
+                    (
+                        found,
+                        FitParams {
+                            mention_margin: margin,
+                            ..params
+                        },
+                    )
+                } else {
+                    best
+                }
+            })
     };
 
     let mut best = (f64::NEG_INFINITY, FitParams::default());
     for &smoothing in SMOOTHING_GRID {
         for &secondary_weight in SECONDARY_GRID {
-            for calibrate in calibration.candidates() {
-                let params = FitParams {
-                    smoothing,
-                    secondary_weight,
-                    calibrate,
-                    ..FitParams::default()
-                };
-                let agreement = score(params, Objective::Primary);
-                if agreement > best.0 {
-                    best = (agreement, params);
+            for scoring in calibration.candidates() {
+                let found = best_of(
+                    FitParams {
+                        smoothing,
+                        secondary_weight,
+                        mention_margin: margins[0],
+                        scoring,
+                    },
+                    margins,
+                    objective,
+                );
+                if found.0 > best.0 {
+                    best = found;
                 }
             }
         }
     }
 
     // The description-only baseline is searched over everything that is not the blend
-    // itself, so neither the margin nor the calibration can be credited to fitting when it
-    // would have helped the descriptions just as much.
+    // itself, so neither the margin nor the treatment of the corpus mean can be credited to
+    // fitting when it would have helped the descriptions just as much. Each figure takes the
+    // best the descriptions manage on that question, rather than reporting one setting on
+    // both, which would flatter fitting on whichever question the setting was not chosen for.
     let flat = FitParams {
         smoothing: f32::INFINITY,
         secondary_weight: 0.0,
         ..FitParams::default()
     };
-    let mut baseline = (f64::NEG_INFINITY, flat);
-    for calibrate in calibration.candidates() {
-        let params = FitParams { calibrate, ..flat };
-        let agreement = score(params, Objective::Primary);
-        if agreement > baseline.0 {
-            baseline = (agreement, params);
-        }
+    let mut baseline_agreement = f64::NEG_INFINITY;
+    let mut baseline_macro_f1 = f64::NEG_INFINITY;
+    for scoring in calibration.candidates() {
+        let params = FitParams { scoring, ..flat };
+        baseline_agreement =
+            baseline_agreement.max(best_of(params, &[params.mention_margin], Objective::Primary).0);
+        baseline_macro_f1 =
+            baseline_macro_f1.max(best_of(params, MARGIN_GRID, Objective::Mentions).0);
     }
 
-    let best_margin = |mut params: FitParams| {
-        let mut found = (f64::NEG_INFINITY, params.mention_margin);
-        for &candidate in MARGIN_GRID {
-            params.mention_margin = candidate;
-            let f1 = score(params, Objective::Mentions);
-            if f1 > found.0 {
-                found = (f1, candidate);
-            }
-        }
-        found
-    };
-    let (mention_macro_f1, mention_margin) = best_margin(best.1);
-    let (baseline_macro_f1, _) = best_margin(baseline.1);
+    let (mention_macro_f1, params) = best_of(best.1, MARGIN_GRID, Objective::Mentions);
 
     FitOutcome {
-        params: FitParams {
-            mention_margin,
-            ..best.1
-        },
-        primary_agreement: best.0,
-        baseline_agreement: baseline.0,
-        baseline_calibrated: baseline.1.calibrate,
+        params,
+        // Reported rather than selected on, so a blend chosen for one question still says
+        // plainly what it cost the other.
+        primary_agreement: sweep(params, &[params.mention_margin], Objective::Primary)[0],
+        baseline_agreement,
         mention_macro_f1,
         baseline_macro_f1,
+        objective,
         folds,
         examples: examples.len(),
     }
@@ -506,9 +615,9 @@ pub fn search(
 pub enum Objective {
     /// Share of reviews whose main subject is identified correctly.
     ///
-    /// Dominated by whatever the corpus is mostly about: in the one reference set that
-    /// exists, two categories carry 72% of the labels, so a setting that improves those two
-    /// and ruins the other fifteen still wins on this.
+    /// Dominated by whatever the corpus is mostly about. Across the reference sets two
+    /// categories carry roughly two labels in five, so a setting that improves those two
+    /// and ruins every other category still wins on this.
     Primary,
     /// Mean per-category F1 over mentions, counting every category once however rare.
     ///
@@ -518,20 +627,28 @@ pub enum Objective {
     Mentions,
 }
 
+/// One blend against every margin at once, returning a score per margin.
+///
 /// Round-robin folds. The reference set arrives grouped by predicted category, so dealing
 /// examples out in turn gives every fold nearly the same class balance, which random
 /// assignment would not at these counts: several categories have five examples in total.
-fn cross_validate(
+///
+/// Nothing about an anchor depends on the margin, which only decides which of the finished
+/// vectors a review is judged to be near enough to. Fitting the folds once and scoring every
+/// margin against the same vectors is the same measurement for a seventh of the arithmetic,
+/// which is most of what a search spends its time on.
+fn across_margins(
     descriptions: &Anchors,
     examples: &[Example],
-    corpus: &[Vec<f32>],
+    centroid: &[f32],
     folds: usize,
     params: FitParams,
+    margins: &[f32],
     objective: Objective,
-) -> f64 {
-    let mut agreed = 0_u64;
-    let mut total = 0_u64;
-    let mut confusion = vec![Counts::default(); CORE_SPINE.len()];
+) -> Vec<f64> {
+    let mut agreed = vec![0_u64; margins.len()];
+    let mut total = vec![0_u64; margins.len()];
+    let mut confusion = vec![vec![Counts::default(); CORE_SPINE.len()]; margins.len()];
 
     for fold in 0..folds {
         let train: Vec<Example> = examples
@@ -540,37 +657,33 @@ fn cross_validate(
             .filter(|(index, _)| index % folds != fold)
             .map(|(_, example)| example.clone())
             .collect();
-        let mut fitted = descriptions.fit(&train, 0, params);
-        if params.calibrate {
-            fitted.calibrate(corpus);
-        }
+        let mut fitted = descriptions.fit(&train, &[], params);
+        fitted.prepare(params.scoring, centroid);
 
         for example in examples.iter().skip(fold).step_by(folds) {
             let sims = fitted.similarities(&example.vector);
-            let (primary, mentions) = crate::classify::assign(&sims, params.mention_margin);
-            match objective {
-                Objective::Primary => {
-                    total += 1;
-                    if primary == example.primary {
-                        agreed += 1;
+            for (slot, &margin) in margins.iter().enumerate() {
+                let (primary, mentions) = crate::classify::assign(&sims, margin);
+                match objective {
+                    Objective::Primary => {
+                        total[slot] += 1;
+                        if primary == example.primary {
+                            agreed[slot] += 1;
+                        }
                     }
-                }
-                Objective::Mentions => {
-                    for (slot, counts) in confusion.iter_mut().enumerate() {
-                        let expected = example.primary == slot || example.secondary.contains(&slot);
-                        let found = mentions & (1 << slot) != 0;
-                        counts.expected += u64::from(expected);
-                        counts.found += u64::from(found);
-                        counts.hit += u64::from(expected && found);
-                    }
+                    Objective::Mentions => tally(&mut confusion[slot], example, mentions),
                 }
             }
         }
     }
 
     match objective {
-        Objective::Primary => ratio(agreed, total),
-        Objective::Mentions => macro_f1(&confusion),
+        Objective::Primary => agreed
+            .iter()
+            .zip(&total)
+            .map(|(hit, seen)| ratio(*hit, *seen))
+            .collect(),
+        Objective::Mentions => confusion.iter().map(|counts| macro_f1(counts)).collect(),
     }
 }
 
@@ -579,6 +692,56 @@ struct Counts {
     expected: u64,
     found: u64,
     hit: u64,
+}
+
+/// What one anchor set gets right on a set of labelled reviews.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Scored {
+    /// Reviews whose main subject was identified as the labeller identified it.
+    pub agreed: u64,
+    pub compared: u64,
+    /// Mean per-category F1 over mentions, counting every category once however rare.
+    pub mention_macro_f1: f64,
+}
+
+impl Scored {
+    /// Share of reviews whose main subject was agreed, or zero when nothing was compared.
+    #[must_use]
+    pub fn primary_agreement(&self) -> f64 {
+        ratio(self.agreed, self.compared)
+    }
+}
+
+/// Scores an anchor set against labelled reviews it is not being fitted to.
+///
+/// Both questions at once, because they are answered from the same pass and reporting only
+/// one of them is how a set that finds two categories well and nineteen not at all comes to
+/// look like a good one.
+#[must_use]
+pub fn score(anchors: &Anchors, examples: &[Example], margin: f32) -> Scored {
+    let mut agreed = 0_u64;
+    let mut confusion = vec![Counts::default(); CORE_SPINE.len()];
+    for example in examples {
+        let sims = anchors.similarities(&example.vector);
+        let (primary, mentions) = crate::classify::assign(&sims, margin);
+        agreed += u64::from(primary == example.primary);
+        tally(&mut confusion, example, mentions);
+    }
+    Scored {
+        agreed,
+        compared: examples.len() as u64,
+        mention_macro_f1: macro_f1(&confusion),
+    }
+}
+
+fn tally(confusion: &mut [Counts], example: &Example, mentions: u32) {
+    for (slot, counts) in confusion.iter_mut().enumerate() {
+        let expected = example.primary == slot || example.secondary.contains(&slot);
+        let found = mentions & (1 << slot) != 0;
+        counts.expected += u64::from(expected);
+        counts.found += u64::from(found);
+        counts.hit += u64::from(expected && found);
+    }
 }
 
 /// Unweighted mean F1 over the categories the examples actually use, so a rare category the
@@ -642,8 +805,10 @@ fn normalise(vector: &mut [f32]) {
 mod tests {
     use super::*;
 
+    const DIM: usize = crate::model::Encoder::E5Small.dimensions();
+
     fn unit(slot: usize) -> Vec<f32> {
-        let mut vector = vec![0.0; EMBEDDING_DIM];
+        let mut vector = vec![0.0; DIM];
         vector[slot] = 1.0;
         vector
     }
@@ -651,9 +816,10 @@ mod tests {
     fn descriptions() -> Anchors {
         Anchors {
             spine_version: CORE_SPINE_VERSION.to_owned(),
-            model: MODEL_ID.to_owned(),
-            fitted_from: None,
+            model: crate::model::Encoder::E5Small.id().to_owned(),
+            fitted_from: Vec::new(),
             params: None,
+            centre: None,
             categories: CORE_SPINE
                 .iter()
                 .enumerate()
@@ -670,7 +836,7 @@ mod tests {
 
     #[test]
     fn a_category_with_no_examples_keeps_its_description_exactly() {
-        let fitted = descriptions().fit(&[], 1, FitParams::default());
+        let fitted = descriptions().fit(&[], &[1], FitParams::default());
         for (before, after) in descriptions().categories.iter().zip(&fitted.categories) {
             assert_eq!(before.vector, after.vector, "{} moved", after.id);
             assert!(after.learned_share.abs() < f32::EPSILON);
@@ -688,7 +854,7 @@ mod tests {
                 secondary: vec![],
             })
             .collect();
-        let fitted = descriptions().fit(&examples, 1, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[1], FitParams::default());
 
         let moved = fitted.categories[0].vector[300];
         assert!(moved > 0.0, "the anchor did not move at all");
@@ -708,7 +874,7 @@ mod tests {
                 secondary: vec![],
             })
             .collect();
-        let fitted = descriptions().fit(&many, 1, FitParams::default());
+        let fitted = descriptions().fit(&many, &[1], FitParams::default());
         assert!(
             fitted.categories[1].learned_share > 0.9,
             "two hundred examples should dominate a description"
@@ -727,7 +893,7 @@ mod tests {
             secondary_weight: 0.5,
             ..FitParams::default()
         };
-        let fitted = descriptions().fit(&secondary, 1, params);
+        let fitted = descriptions().fit(&secondary, &[1], params);
         assert!((fitted.categories[5].evidence - 1.0).abs() < 1e-6);
         assert!((fitted.categories[2].evidence - 0.5).abs() < 1e-6);
         assert!(fitted.categories[5].learned_share > fitted.categories[2].learned_share);
@@ -740,7 +906,7 @@ mod tests {
             primary: 4,
             secondary: vec![9],
         }];
-        let fitted = descriptions().fit(&examples, 1, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[1], FitParams::default());
         for anchor in &fitted.categories {
             let norm = anchor.vector.iter().map(|v| v * v).sum::<f32>().sqrt();
             assert!(
@@ -784,13 +950,58 @@ mod tests {
             primary: 0,
             secondary: vec![],
         }];
-        let fitted = descriptions().fit(&examples, 296_970, FitParams::default());
+        let fitted = descriptions().fit(&examples, &[296_970], FitParams::default());
         fitted.save(&path).unwrap();
 
         let loaded = Anchors::load(&path).unwrap();
-        assert_eq!(loaded.fitted_from, Some(296_970));
+        assert_eq!(loaded.fitted_from, vec![296_970]);
         assert_eq!(loaded.categories[0].vector, fitted.categories[0].vector);
         std::fs::remove_file(&path).ok();
+    }
+
+    /// The mean of a set of vectors, which is all calibration needs of a corpus.
+    fn centroid_of(corpus: &[Vec<f32>]) -> Vec<f32> {
+        let mut total = vec![0.0_f32; DIM];
+        for review in corpus {
+            accumulate(&mut total, review, 1.0);
+        }
+        #[expect(clippy::cast_precision_loss, reason = "test corpora are tiny")]
+        let count = corpus.len() as f32;
+        for value in &mut total {
+            *value /= count;
+        }
+        total
+    }
+
+    #[test]
+    fn calibrating_on_the_centroid_is_the_same_as_averaging_over_every_review() {
+        // The whole reason a million-review corpus collapses to 384 floats. If these ever
+        // disagreed, calibration would be an approximation rather than the identity it
+        // claims to be, and the speed would have been bought with accuracy.
+        let corpus: Vec<Vec<f32>> = (0..64)
+            .map(|index| {
+                let mut review = unit(index % 7);
+                review[300] = 0.5;
+                review[index % DIM] += 0.25;
+                normalise(&mut review);
+                review
+            })
+            .collect();
+
+        let mut anchors = descriptions();
+        anchors.calibrate(&centroid_of(&corpus));
+
+        #[expect(clippy::cast_precision_loss, reason = "test corpora are tiny")]
+        let count = corpus.len() as f32;
+        for (slot, anchor) in anchors.categories.iter().enumerate() {
+            let naive: f32 = corpus.iter().map(|r| dot(&unit(slot), r)).sum::<f32>() / count;
+            assert!(
+                (anchor.bias - naive).abs() < 1e-5,
+                "{} calibrated to {} but averages {naive}",
+                anchor.id,
+                anchor.bias
+            );
+        }
     }
 
     #[test]
@@ -818,7 +1029,7 @@ mod tests {
         let raw = anchors.similarities(&belongs_to_second);
         assert!(raw[0] > raw[1], "this test needs the mismatch it is about");
 
-        anchors.calibrate(&corpus);
+        anchors.calibrate(&centroid_of(&corpus));
         let calibrated = anchors.similarities(&belongs_to_second);
         assert!(
             calibrated[1] > calibrated[0],
@@ -837,7 +1048,7 @@ mod tests {
             anchors.similarities(&near)[2],
             anchors.similarities(&far)[2],
         );
-        anchors.calibrate(&corpus);
+        anchors.calibrate(&centroid_of(&corpus));
         let after = (
             anchors.similarities(&near)[2],
             anchors.similarities(&far)[2],
@@ -846,6 +1057,57 @@ mod tests {
         assert!(
             (before.0 - before.1 - (after.0 - after.1)).abs() < 1e-6,
             "subtracting a constant should not change a gap"
+        );
+    }
+
+    /// Centring earns its place only if it can reach an answer calibrating cannot, and the
+    /// two agree on everything except the scale each category is divided by.
+    #[test]
+    fn centring_reaches_an_answer_calibrating_cannot() {
+        // A common direction every review and every anchor shares, which is what makes a
+        // broad category the nearest thing to reviews that are not about it.
+        // Two slots no category's own anchor sits in, so nothing but this arrangement
+        // decides the answer. The corpus mean lies along the second of them.
+        let (across, along) = (DIM - 2, DIM - 1);
+        let plane = |x: f32, y: f32| {
+            let mut vector = vec![0.0_f32; DIM];
+            vector[across] = x;
+            vector[along] = y;
+            vector
+        };
+
+        let mut anchors = descriptions();
+        anchors.categories[1].vector = plane(1.0, 0.0);
+        anchors.categories[2].vector = plane(0.0, 1.0);
+        // Mostly what every review has in common, with a little of its own.
+        let review = plane(0.436, 0.9);
+        let centroid = plane(0.0, 0.5);
+
+        let mut calibrated = anchors.clone();
+        calibrated.prepare(Scoring::Bias, &centroid);
+        let mut centred = anchors.clone();
+        centred.prepare(Scoring::Centred, &centroid);
+
+        // The two differ only by a per-category divisor, so a review they order differently
+        // is the entire justification for offering both.
+        let gap = |set: &Anchors| {
+            let sims = set.similarities(&review);
+            sims[2] - sims[1]
+        };
+        assert!(
+            gap(&calibrated) * gap(&centred) < 0.0,
+            "calibrated put the two categories {:?} and centred {:?}, which is the same \
+             answer twice",
+            gap(&calibrated),
+            gap(&centred)
+        );
+        assert!(
+            centred.centre.is_some(),
+            "the centre has to be kept, or the same subtraction cannot be done again"
+        );
+        assert!(
+            calibrated.centre.is_none(),
+            "calibrating needs nothing of the corpus at scoring time"
         );
     }
 
@@ -860,18 +1122,80 @@ mod tests {
 
     #[test]
     fn the_search_never_returns_a_setting_it_did_not_score() {
-        let examples: Vec<Example> = (0..40)
+        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
+        for objective in [Objective::Primary, Objective::Mentions] {
+            // Two folds and one scoring, because this is about where the returned settings
+            // come from and the whole product of the grids is minutes of an unoptimised build.
+            let outcome = search(
+                &descriptions(),
+                &spread_over_four(),
+                &centroid_of(&corpus),
+                2,
+                Calibration::Only(Scoring::Bias),
+                objective,
+            );
+            assert!(SMOOTHING_GRID.contains(&outcome.params.smoothing));
+            assert!(SECONDARY_GRID.contains(&outcome.params.secondary_weight));
+            assert!(MARGIN_GRID.contains(&outcome.params.mention_margin));
+            assert_eq!(outcome.objective, objective);
+            assert_eq!(outcome.examples, 40);
+        }
+    }
+
+    /// Both figures come back whichever one was chosen on, or a caller cannot see what the
+    /// choice cost and the flag is unreadable.
+    #[test]
+    fn a_search_reports_the_question_it_was_not_asked() {
+        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
+        for objective in [Objective::Primary, Objective::Mentions] {
+            let outcome = search(
+                &descriptions(),
+                &spread_over_four(),
+                &centroid_of(&corpus),
+                2,
+                Calibration::Only(Scoring::Bias),
+                objective,
+            );
+            assert!(
+                outcome.primary_agreement > 0.0,
+                "{objective:?} reports no agreement"
+            );
+            assert!(
+                outcome.mention_macro_f1 > 0.0,
+                "{objective:?} reports no F1"
+            );
+        }
+    }
+
+    #[test]
+    fn a_perfect_set_scores_perfectly_on_reviews_it_was_never_fitted_to() {
+        let examples = spread_over_four();
+        let fitted = descriptions().fit(&examples, &[], FitParams::default());
+        let scored = score(&fitted, &examples, crate::classify::DEFAULT_MENTION_MARGIN);
+
+        assert_eq!(scored.compared, 40);
+        assert!(
+            (scored.primary_agreement() - 1.0).abs() < 1e-9,
+            "four separated categories should never be confused: {scored:?}"
+        );
+        assert_eq!(
+            score(&fitted, &[], crate::classify::DEFAULT_MENTION_MARGIN).compared,
+            0
+        );
+        assert!(
+            (score(&fitted, &[], crate::classify::DEFAULT_MENTION_MARGIN).primary_agreement())
+                .abs()
+                < 1e-9
+        );
+    }
+
+    fn spread_over_four() -> Vec<Example> {
+        (0..40)
             .map(|index| Example {
                 vector: unit(index % 4),
                 primary: index % 4,
                 secondary: vec![],
             })
-            .collect();
-        let corpus: Vec<Vec<f32>> = (0..4).map(unit).collect();
-        let outcome = search(&descriptions(), &examples, &corpus, 5, Calibration::Search);
-        assert!(SMOOTHING_GRID.contains(&outcome.params.smoothing));
-        assert!(SECONDARY_GRID.contains(&outcome.params.secondary_weight));
-        assert!(MARGIN_GRID.contains(&outcome.params.mention_margin));
-        assert_eq!(outcome.examples, 40);
+            .collect()
     }
 }

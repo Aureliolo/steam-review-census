@@ -75,6 +75,9 @@ pub struct Progress {
 #[derive(Debug, Clone)]
 pub struct CrawlReport {
     pub app_id: u32,
+    /// The store's name for the app, where the store would give one. Empty otherwise, and
+    /// every caller falls back to the id rather than treating it as a failure.
+    pub name: String,
     pub shards: usize,
     pub pages: u32,
     pub unique: u64,
@@ -88,6 +91,10 @@ pub struct CrawlReport {
     pub complete: bool,
     pub resumed: bool,
     pub top_up_from: Option<i64>,
+    /// Windows Steam stopped serving early, which a second walk then completed.
+    pub shards_restarted: usize,
+    /// Windows still short of Valve's stated count after every walk. These stay unfinished.
+    pub shards_short: usize,
 }
 
 impl CrawlReport {
@@ -148,47 +155,30 @@ pub async fn crawl(
 
     let pending = state.pending_shards(crawl_id)?;
     let shards_total = pending.len();
-    let mut duplicates = 0;
-    let mut done = 0;
-
-    let permits = Arc::new(Semaphore::new(options.concurrency.max(1)));
-    let mut tasks = JoinSet::new();
-    for record in pending {
-        let client = client.clone();
-        let permits = Arc::clone(&permits);
-        let state = Arc::clone(&state);
-        let path = dir.join(format!("shard-{:04}.parquet", record.idx));
-        tasks.spawn(async move {
-            let _permit = permits.acquire_owned().await;
-            state.mark_running(crawl_id, record.idx)?;
-            let outcome = crawl_shard(&client, app_id, record.shard, &path).await?;
-            state.mark_done(
-                crawl_id,
-                record.idx,
-                outcome.rows,
-                outcome.pages,
-                outcome.stop.as_str(),
-                outcome.max_created,
-            )?;
-            Ok::<_, crate::Error>(outcome)
-        });
-    }
-
-    while let Some(joined) = tasks.join_next().await {
-        // A panicking shard task must not be reported as a completed crawl.
-        let outcome = joined.map_err(|e| crate::Error::ShardPanicked {
-            detail: e.to_string(),
-        })??;
-        duplicates += outcome.fetched.saturating_sub(outcome.rows);
-        done += 1;
-        let (unique, _) = state.completed_totals(crawl_id)?;
-        on_progress(Progress {
-            shards_done: done,
-            shards_total,
-            unique,
-            valve_total,
-        });
-    }
+    let Tally {
+        duplicates,
+        shards_restarted,
+        shards_short,
+    } = run_shards(
+        ShardRun {
+            client,
+            app_id,
+            state: &state,
+            crawl_id,
+            dir: &dir,
+            concurrency: options.concurrency,
+        },
+        pending,
+        |shards_done, unique| {
+            on_progress(Progress {
+                shards_done,
+                shards_total,
+                unique,
+                valve_total,
+            });
+        },
+    )
+    .await?;
 
     let complete = state.all_shards_done(crawl_id)?;
     if complete {
@@ -204,6 +194,7 @@ pub async fn crawl(
 
     let report = CrawlReport {
         app_id,
+        name: client.name(app_id).await.unwrap_or_default(),
         shards: shards_total,
         pages,
         unique,
@@ -217,6 +208,8 @@ pub async fn crawl(
         complete,
         resumed,
         top_up_from,
+        shards_restarted,
+        shards_short,
     };
     write_sidecar(&report, snapshot)?;
     Ok(report)
@@ -258,6 +251,129 @@ async fn prepare(
     Ok((crawl_id, snapshot, false))
 }
 
+/// What the shard run added up to, beyond what the state database already records.
+struct Tally {
+    duplicates: u64,
+    shards_restarted: usize,
+    shards_short: usize,
+}
+
+/// Everything a shard walk needs that is the same for every shard.
+struct ShardRun<'a> {
+    client: &'a SteamClient,
+    app_id: u32,
+    state: &'a Arc<CrawlState>,
+    crawl_id: i64,
+    dir: &'a std::path::Path,
+    concurrency: usize,
+}
+
+/// Walks every outstanding window, up to `concurrency` at a time.
+async fn run_shards(
+    run: ShardRun<'_>,
+    pending: Vec<crate::state::ShardRecord>,
+    mut on_progress: impl FnMut(usize, u64),
+) -> Result<Tally> {
+    let ShardRun {
+        client,
+        app_id,
+        state,
+        crawl_id,
+        dir,
+        concurrency,
+    } = run;
+    let permits = Arc::new(Semaphore::new(concurrency.max(1)));
+    let mut tasks = JoinSet::new();
+    for record in pending {
+        let client = client.clone();
+        let permits = Arc::clone(&permits);
+        let state = Arc::clone(state);
+        let path = dir.join(format!("shard-{:04}.parquet", record.idx));
+        tasks.spawn(async move {
+            let _permit = permits.acquire_owned().await;
+            state.mark_running(crawl_id, record.idx)?;
+            let outcome = crawl_shard(&client, app_id, record.shard, &path).await?;
+            // A window still short after every walk is left unfinished on purpose. Marking
+            // it done would fold a known undercount into the corpus and report it as
+            // complete; left as it is, the crawl reports itself incomplete and the next run
+            // walks it again.
+            if !outcome.short {
+                state.mark_done(
+                    crawl_id,
+                    record.idx,
+                    outcome.rows,
+                    outcome.pages,
+                    outcome.stop.as_str(),
+                    outcome.max_created,
+                )?;
+            }
+            Ok::<_, crate::Error>(outcome)
+        });
+    }
+
+    let mut tally = Tally {
+        duplicates: 0,
+        shards_restarted: 0,
+        shards_short: 0,
+    };
+    let mut done = 0;
+    while let Some(joined) = tasks.join_next().await {
+        // A panicking shard task must not be reported as a completed crawl.
+        let outcome = joined.map_err(|e| crate::Error::ShardPanicked {
+            detail: e.to_string(),
+        })??;
+        tally.duplicates += outcome.fetched.saturating_sub(outcome.rows);
+        if outcome.walks > 1 {
+            tally.shards_restarted += 1;
+        }
+        if outcome.short {
+            tally.shards_short += 1;
+        }
+        done += 1;
+        let (unique, _) = state.completed_totals(crawl_id)?;
+        on_progress(done, unique);
+    }
+    Ok(tally)
+}
+
+/// Walks allowed for one window before its shortfall is treated as real rather than a stall.
+///
+/// Steam intermittently stops serving a window early. The cursor advances normally, pages
+/// come back full, and then an empty page arrives long before the window is exhausted, which
+/// is indistinguishable from a genuine end. Measured on a 380,000-review corpus, three of
+/// fourteen windows stopped between 69% and 75% of their expected count, and re-walking an
+/// identical window immediately afterwards returned 18,159 of 18,160.
+///
+/// Accepting the first walk is what made that corpus 4.5% short while reporting every shard
+/// as finished, which is the one failure this project cannot tolerate quietly: it undercounts
+/// the corpus and calls it a census.
+const MAX_SHARD_WALKS: u32 = 3;
+
+/// How far below Valve's stated count for a window a walk may land before it is walked again.
+///
+/// Windows that genuinely finish land within a handful of reviews of expectation, the drift
+/// being reviews written or deleted between planning and walking; the largest gap seen across
+/// eleven honest shards was eight reviews in 39,278. Windows cut short by a stall miss a
+/// quarter or more. Nothing observed falls between, so both bounds have wide margins.
+const SHORTFALL_RATIO: f64 = 0.95;
+
+/// Shortfalls smaller than this are drift rather than evidence, however small the window.
+const SHORTFALL_FLOOR: u64 = 20;
+
+/// Whether a walk ended so far below expectation that Steam is more likely to have stalled
+/// than the window to have run out.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "review counts are far below 2^53"
+)]
+fn fell_short(rows: u64, expected: u64) -> bool {
+    if expected == 0 {
+        return false;
+    }
+    expected.saturating_sub(rows) > SHORTFALL_FLOOR
+        && (rows as f64) < expected as f64 * SHORTFALL_RATIO
+}
+
 #[derive(Debug)]
 struct ShardOutcome {
     rows: u64,
@@ -265,9 +381,36 @@ struct ShardOutcome {
     pages: u32,
     stop: StopReason,
     max_created: Option<i64>,
+    /// Walks taken. More than one means Steam stopped early at least once.
+    walks: u32,
+    /// Still short after every walk, so the window is not known to be complete.
+    short: bool,
 }
 
+/// Walks a window, repeating it while it comes back short of what Valve says it holds.
 async fn crawl_shard(
+    client: &SteamClient,
+    app_id: u32,
+    shard: Shard,
+    path: &std::path::Path,
+) -> Result<ShardOutcome> {
+    let mut last = walk_shard(client, app_id, shard, path).await?;
+    for walk in 2..=MAX_SHARD_WALKS {
+        if !fell_short(last.rows, shard.expected) {
+            return Ok(ShardOutcome {
+                walks: walk - 1,
+                short: false,
+                ..last
+            });
+        }
+        last = walk_shard(client, app_id, shard, path).await?;
+        last.walks = walk;
+    }
+    let short = fell_short(last.rows, shard.expected);
+    Ok(ShardOutcome { short, ..last })
+}
+
+async fn walk_shard(
     client: &SteamClient,
     app_id: u32,
     shard: Shard,
@@ -325,6 +468,8 @@ async fn crawl_shard(
         pages,
         stop,
         max_created,
+        walks: 1,
+        short: false,
     })
 }
 
@@ -333,6 +478,7 @@ async fn crawl_shard(
 fn write_sidecar(report: &CrawlReport, snapshot: i64) -> Result<()> {
     let meta = json!({
         "app_id": report.app_id,
+        "name": report.name,
         "snapshot_unix": snapshot,
         "tool_version": env!("CARGO_PKG_VERSION"),
         "request_url_template": ReviewQuery::new(report.app_id).to_url(),
@@ -348,6 +494,8 @@ fn write_sidecar(report: &CrawlReport, snapshot: i64) -> Result<()> {
         "complete": report.complete,
         "resumed": report.resumed,
         "top_up_from": report.top_up_from,
+        "shards_restarted": report.shards_restarted,
+        "shards_short": report.shards_short,
         "elapsed_secs": report.elapsed.as_secs_f64(),
     });
     std::fs::write(
@@ -385,13 +533,48 @@ mod tests {
             valve_total: total,
             valve_positive: 0,
             valve_negative: 0,
+            name: String::new(),
             review_score_desc: String::new(),
             elapsed: Duration::from_secs(1),
             dir: PathBuf::new(),
             complete: true,
             resumed: false,
             top_up_from: top_up,
+            shards_restarted: 0,
+            shards_short: 0,
         }
+    }
+
+    #[test]
+    fn a_window_that_stalls_a_quarter_of_the_way_short_is_not_accepted() {
+        // The shard that exposed this returned 12,600 of an expected 18,184 and was recorded
+        // as finished. Walking the identical window again returned all of them.
+        assert!(fell_short(12_600, 18_184));
+        assert!(fell_short(18_297, 24_340));
+        assert!(fell_short(12_699, 17_991));
+    }
+
+    #[test]
+    fn ordinary_drift_between_planning_and_walking_is_not_a_stall() {
+        // Reviews are written and deleted while a crawl runs, so expectation is never exact.
+        // The widest honest gap observed was eight reviews in 39,278.
+        assert!(!fell_short(39_276, 39_278));
+        assert!(!fell_short(29_048, 29_050));
+        assert!(!fell_short(2_909, 2_909));
+        assert!(!fell_short(35_856, 35_860));
+    }
+
+    #[test]
+    fn a_small_window_is_judged_by_reviews_missed_rather_than_by_share() {
+        // Losing three of twenty reviews is 15% and means nothing; the floor stops a tiny
+        // window from being walked three times over noise.
+        assert!(!fell_short(17, 20));
+        assert!(fell_short(60, 200), "a real shortfall must still be caught");
+    }
+
+    #[test]
+    fn a_window_valve_reports_nothing_for_can_never_be_short() {
+        assert!(!fell_short(0, 0));
     }
 
     #[test]

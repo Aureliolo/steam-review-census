@@ -1,376 +1,2639 @@
 [
-	{"id":"102237987","primary":"content","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"106813537","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"109564849","primary":"bugs","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"111020343","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"111101101","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"112078069","primary":"gameplay","secondary":["graphics","audio","story","controls","difficulty","content","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"112935272","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"113412477","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"116558035","primary":"verdict","secondary":["compatibility"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"116685648","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"117687966","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"118152976","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"119678504","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"121391713","primary":"gameplay","secondary":["story"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"121543039","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"121639555","primary":"difficulty","secondary":["gameplay","graphics","audio","performance"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"122790056","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"122979567","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"123276486","primary":"gameplay","secondary":["story","content","difficulty"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"123734764","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"127337574","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"129164251","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"130026883","primary":"gameplay","secondary":["story"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"133291688","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"136440351","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"136504409","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"140190625","primary":"story","secondary":["accessibility","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"140219590","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"141058917","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"145093662","primary":"compatibility","secondary":["bugs","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"147877557","primary":"gameplay","secondary":["content","graphics","audio"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"149416542","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"150183792","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"154256407","primary":"content","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"163541911","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"169517004","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"169927764","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"172386339","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"174757904","primary":"price","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"176662846","primary":"gameplay","secondary":["difficulty","content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"17861202","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"17872051","primary":"content","secondary":["gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"17872635","primary":"gameplay","secondary":["graphics","audio"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"17899206","primary":"gameplay","secondary":["graphics","audio","difficulty","bugs","content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"17900893","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"17919464","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"17921798","primary":"updates","secondary":["gameplay","content","difficulty","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"17932978","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"17935052","primary":"gameplay","secondary":["bugs","content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"179769465","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"17988385","primary":"gameplay","secondary":["story","updates","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"17993688","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"18020800","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"18044956","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"18167170","primary":"gameplay","secondary":["controls","graphics","story","content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"18179343","primary":"gameplay","secondary":["controls"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"18185359","primary":"bugs","secondary":["gameplay","content","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"18193509","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"18209736","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"18298517","primary":"updates","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"183887491","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"18434205","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"184423109","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"18469573","primary":"gameplay","secondary":["updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"185020184","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"18624541","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"18624723","primary":"gameplay","secondary":["graphics","audio","content","updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"18691463","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"18733476","primary":"updates","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"187426074","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"18797107","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"18811552","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"18844000","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":false},
-	{"id":"18857600","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"18869983","primary":"gameplay","secondary":["graphics","content","updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"189193271","primary":"story","secondary":["gameplay","graphics","audio","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"18999769","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"19006195","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"190649226","primary":"gameplay","secondary":["compatibility","performance"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"19122362","primary":"gameplay","secondary":["price"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"191576858","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"192066933","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"19272800","primary":"gameplay","secondary":["content","graphics","difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"193337555","primary":"compatibility","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"193767369","primary":"gameplay","secondary":["graphics","content","difficulty"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"19443939","primary":"gameplay","secondary":["updates","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"19516803","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"19594994","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"19688901","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"19795352","primary":"compatibility","secondary":["bugs"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"19827552","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"19862815","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"19885083","primary":"gameplay","secondary":["accessibility","controls","content","difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20056584","primary":"difficulty","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"20108173","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20153691","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20161154","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"20184382","primary":"content","secondary":["gameplay","graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"20198127","primary":"content","secondary":["updates","gameplay","story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"20205695","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"20268867","primary":"verdict","secondary":[],"ironic":true,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"203666381","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"20368740","primary":"gameplay","secondary":["updates","graphics","audio","content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"204314075","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"20434700","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20710275","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"20759078","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"20759439","primary":"gameplay","secondary":["content","updates"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20781833","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"208532125","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"20909127","primary":"gameplay","secondary":["story","price","updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"20954317","primary":"verdict","secondary":["updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"21110150","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"212652338","primary":"gameplay","secondary":["story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"21268213","primary":"gameplay","secondary":["graphics","audio","difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"21452736","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"21599180","primary":"gameplay","secondary":["bugs","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"21615908","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"216287420","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"21692294","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"21874783","primary":"verdict","secondary":["content"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"21950344","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"219864356","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"22191455","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22202673","primary":"content","secondary":["gameplay"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"22205885","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"222065942","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22224177","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"22227916","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22238863","primary":"difficulty","secondary":[],"ironic":true,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"22242597","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22245165","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"22247353","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22266005","primary":"gameplay","secondary":["graphics","audio","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"22270147","primary":"gameplay","secondary":["difficulty","content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"22287397","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22297787","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"22308225","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22308458","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"22433470","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22435999","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22487819","primary":"gameplay","secondary":["story","difficulty"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"22603714","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"22686066","primary":"content","secondary":["difficulty","gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"229499266","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"232458130","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"232549441","primary":"gameplay","secondary":["content","difficulty","bugs","controls"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"232913776","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23320931","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23335828","primary":"verdict","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"23361582","primary":"verdict","secondary":["accessibility"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"23384578","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23395217","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23410336","primary":"verdict","secondary":["accessibility"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"23423824","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"23444476","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23462570","primary":"gameplay","secondary":["story","content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"23490157","primary":"gameplay","secondary":["graphics","story","content"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"23529494","primary":"graphics","secondary":["bugs"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"23542015","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"23680449","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"23713337","primary":"difficulty","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"23864867","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"23894508","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"23951716","primary":"gameplay","secondary":["graphics","story","controls"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"24060468","primary":"story","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"24217335","primary":"gameplay","secondary":["story","content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"24414042","primary":"updates","secondary":["graphics","audio","content","performance"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"24654859","primary":"story","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"24966339","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"25272320","primary":"gameplay","secondary":["difficulty","story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"25272859","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"25274101","primary":"compatibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"25275225","primary":"story","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"25275609","primary":"price","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"25278031","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"25284930","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"25348904","primary":"gameplay","secondary":["difficulty","content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"25388775","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"25423642","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"25432512","primary":"gameplay","secondary":["content","difficulty","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"25563227","primary":"gameplay","secondary":["updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"25724645","primary":"story","secondary":["graphics","audio","gameplay","content","bugs"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"25844786","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"26006659","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"26109396","primary":"verdict","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"26207204","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"26212694","primary":"gameplay","secondary":["price","multiplayer","updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"26409043","primary":"content","secondary":["bugs"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"26430402","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"26557526","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"26665093","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"26848832","primary":"gameplay","secondary":["graphics","difficulty","story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"26867388","primary":"difficulty","secondary":["story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"26919094","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"27003528","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"27086404","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"27214643","primary":"content","secondary":["gameplay","story","price"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"27353863","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"27392351","primary":"gameplay","secondary":["content","updates"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"27409289","primary":"gameplay","secondary":["difficulty","bugs","graphics","audio","content","updates"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"27646466","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"27699369","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"27923190","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"28290882","primary":"gameplay","secondary":["story","audio","content","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"28549422","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"28642882","primary":"gameplay","secondary":["accessibility"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"28818037","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"28868052","primary":"gameplay","secondary":["audio"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"29210414","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"29238304","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"29654569","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"29833650","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"29863902","primary":"verdict","secondary":["difficulty"],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"31536292","primary":"graphics","secondary":["story"],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"31572179","primary":"bugs","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":true},
-	{"id":"31594073","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31677433","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31704732","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31715652","primary":"bugs","secondary":["content","gameplay","difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31748643","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31784151","primary":"gameplay","secondary":["content","story","difficulty","updates"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31832772","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31866212","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31904960","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"31917962","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"32334765","primary":"gameplay","secondary":["graphics","content","story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"32841549","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"32847793","primary":"content","secondary":["story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"32893190","primary":"gameplay","secondary":["content","graphics"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"33083125","primary":"content","secondary":["gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"33117428","primary":"gameplay","secondary":["content","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"33145346","primary":"gameplay","secondary":["graphics","audio"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"33273102","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"33425542","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"33483533","primary":"gameplay","secondary":["content","accessibility"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"33878887","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"33999073","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"34154188","primary":"verdict","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"34486469","primary":"gameplay","secondary":["content","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"34531146","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"34784292","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"34943990","primary":"content","secondary":["audio","price","compatibility"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"35017728","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"35077018","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"35509318","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"35647669","primary":"gameplay","secondary":["difficulty","content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"35659367","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"35701420","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"35751562","primary":"gameplay","secondary":["graphics","difficulty"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"36153599","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"36207479","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"36437643","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"36587213","primary":"content","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"36684177","primary":"content","secondary":["gameplay","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"36764523","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"36827960","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"36835088","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"36886338","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"36889299","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"37089316","primary":"content","secondary":["price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"37122795","primary":"story","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"37204021","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"37403673","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"37850210","primary":"content","secondary":["gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"37920222","primary":"verdict","secondary":["story"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"38224277","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"38502782","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"38705199","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"38878967","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"38998729","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"39130624","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"39754256","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"39921632","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"40524785","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"40529156","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"40626134","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"40786360","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"41180065","primary":"gameplay","secondary":["content","story","graphics"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"42008944","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"42445785","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"42833103","primary":"accessibility","secondary":["bugs","gameplay"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"43330400","primary":"verdict","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"43474348","primary":"gameplay","secondary":["price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"43524251","primary":"gameplay","secondary":["content","graphics","story"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"43613775","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"43876477","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"44003498","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"44074617","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"44723614","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"44993025","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"45103744","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"45127323","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"45129388","primary":"price","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"45174150","primary":"gameplay","secondary":["audio","story","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"45200934","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"45337995","primary":"bugs","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"45975617","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"46002733","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"46062961","primary":"gameplay","secondary":["content","difficulty","story"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"46366998","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"46391382","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"46698450","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"47155458","primary":"difficulty","secondary":["graphics","content","story"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":true},
-	{"id":"47514761","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"47522585","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"47534409","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"47578358","primary":"story","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"47648261","primary":"gameplay","secondary":["difficulty","content","price"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"47967518","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"48805263","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"48856046","primary":"controls","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"50003897","primary":"gameplay","secondary":["content","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"50021338","primary":"content","secondary":["story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"50381538","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"50551391","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"51624751","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"52448773","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"52639887","primary":"content","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"52813683","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"53112602","primary":"content","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"53493755","primary":"updates","secondary":["difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"54766619","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"55462679","primary":"price","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"55525821","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"55942558","primary":"gameplay","secondary":["story"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"56408856","primary":"community","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"56948544","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"57041390","primary":"gameplay","secondary":["difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"57079156","primary":"gameplay","secondary":["graphics","content","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"57380239","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"57419484","primary":"gameplay","secondary":[],"ironic":false,"confidence":"low","subset":"random","ambiguous":true},
-	{"id":"58261302","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"59567814","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"59854908","primary":"content","secondary":["gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"59927527","primary":"gameplay","secondary":["graphics"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"60911958","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"61234064","primary":"difficulty","secondary":["bugs"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"61951869","primary":"story","secondary":["graphics","gameplay","difficulty"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"63817675","primary":"content","secondary":["difficulty","price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"64521711","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"64550791","primary":"gameplay","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"64779547","primary":"gameplay","secondary":["graphics","story","content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"65523979","primary":"verdict","secondary":["content"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"65779631","primary":"controls","secondary":["accessibility"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"66923992","primary":"bugs","secondary":["updates"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"66924878","primary":"story","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"68911724","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"68966576","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"69020871","primary":"price","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"69326440","primary":"gameplay","secondary":[],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"70066707","primary":"gameplay","secondary":["graphics","story"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"70875771","primary":"accessibility","secondary":["updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"71337162","primary":"story","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"74007372","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"74639755","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"random","ambiguous":false},
-	{"id":"75120578","primary":"gameplay","secondary":["story","updates","community"],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"75248557","primary":"compatibility","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"75954490","primary":"gameplay","secondary":["story"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"76137547","primary":"gameplay","secondary":["content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"76213209","primary":"accessibility","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"78068359","primary":"gameplay","secondary":["difficulty","story","content"],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"78598110","primary":"gameplay","secondary":["difficulty","price"],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"80223160","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"81538237","primary":"verdict","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"84865295","primary":"story","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"87520688","primary":"verdict","secondary":[],"ironic":false,"confidence":"medium","subset":"random","ambiguous":false},
-	{"id":"89985086","primary":"difficulty","secondary":["price"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"90803533","primary":"gameplay","secondary":["difficulty","story","content","community","updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"92450044","primary":"difficulty","secondary":["gameplay"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":false},
-	{"id":"94001867","primary":"accessibility","secondary":["updates"],"ironic":false,"confidence":"medium","subset":"stratified","ambiguous":true},
-	{"id":"95452186","primary":"verdict","secondary":[],"ironic":false,"confidence":"low","subset":"stratified","ambiguous":true},
-	{"id":"95701173","primary":"verdict","secondary":[],"ironic":false,"confidence":"high","subset":"stratified","ambiguous":false},
-	{"id":"99825476","primary":"gameplay","secondary":["story","content"],"ironic":false,"confidence":"high","subset":"random","ambiguous":false}
+  {
+    "id": "107656406",
+    "primary": "graphics",
+    "secondary": [
+      "story",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "112078069",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "story",
+      "controls",
+      "price",
+      "monetisation",
+      "genre",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "116678388",
+    "primary": "difficulty",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "122033536",
+    "primary": "genre",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "125422139",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "128422161",
+    "primary": "content",
+    "secondary": [
+      "graphics",
+      "compatibility",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "136440351",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "136461336",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "137593726",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "151074610",
+    "primary": "story",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "152707928",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "153163287",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "157717653",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "170514308",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "170993695",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "172386339",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "174757904",
+    "primary": "policy",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "177892869",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "17859476",
+    "primary": "story",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "17872051",
+    "primary": "content",
+    "secondary": [
+      "gameplay",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "17875164",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "genre",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "17879582",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "story",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "17921111",
+    "primary": "gameplay",
+    "secondary": [
+      "controls",
+      "bugs",
+      "price",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "17955867",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "17966256",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "17967162",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "graphics",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "179809035",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "17986873",
+    "primary": "updates",
+    "secondary": [
+      "content",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18099515",
+    "primary": "content",
+    "secondary": [
+      "gameplay",
+      "difficulty",
+      "accessibility",
+      "controls",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "18164020",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "audio",
+      "graphics",
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18179369",
+    "primary": "content",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18259633",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18298517",
+    "primary": "updates",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "184423109",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18482403",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18585132",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18624723",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "content",
+      "updates",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18661626",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18667655",
+    "primary": "genre",
+    "secondary": [
+      "gameplay",
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "18690775",
+    "primary": "price",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "18733476",
+    "primary": "updates",
+    "secondary": [
+      "monetisation",
+      "content",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18828437",
+    "primary": "content",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18856685",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18861414",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "language",
+      "price",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "18861646",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "graphics",
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "18967790",
+    "primary": "genre",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "18978035",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "story",
+      "content",
+      "price",
+      "difficulty",
+      "genre",
+      "controls"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "189884603",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "19122362",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "price",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "191576858",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "19254802",
+    "primary": "difficulty",
+    "secondary": [
+      "graphics",
+      "audio"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "19443969",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "19795187",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "19799513",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "19896619",
+    "primary": "content",
+    "secondary": [
+      "gameplay",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "199817678",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "20036968",
+    "primary": "genre",
+    "secondary": [
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "201846365",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "20200525",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "20236474",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "price",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "20238695",
+    "primary": "monetisation",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20247768",
+    "primary": "story",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "20262466",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20307608",
+    "primary": "graphics",
+    "secondary": [
+      "gameplay",
+      "content",
+      "audio",
+      "story",
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "20313699",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "203502286",
+    "primary": "language",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20350910",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "controls",
+      "story",
+      "content",
+      "updates",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "203666381",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "203666770",
+    "primary": "genre",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20394909",
+    "primary": "genre",
+    "secondary": [
+      "graphics",
+      "gameplay",
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20434700",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "20458663",
+    "primary": "content",
+    "secondary": [
+      "difficulty",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "20671253",
+    "primary": "content",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "20759078",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "21015979",
+    "primary": "compatibility",
+    "secondary": [
+      "performance",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "21091043",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "difficulty",
+      "content",
+      "language",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "21202011",
+    "primary": "updates",
+    "secondary": [
+      "content",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "21398521",
+    "primary": "gameplay",
+    "secondary": [
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "217980141",
+    "primary": "content",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "21950344",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "219864356",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "22191455",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "22200853",
+    "primary": "performance",
+    "secondary": [
+      "compatibility"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "22247353",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "22248070",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "22304349",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "22308225",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "22312517",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "22384465",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "22392040",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "content",
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "22829376",
+    "primary": "content",
+    "secondary": [
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23038614",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "content",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23280693",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23320931",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "23321874",
+    "primary": "graphics",
+    "secondary": [
+      "genre",
+      "content",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "23336276",
+    "primary": "content",
+    "secondary": [
+      "accessibility",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "23403887",
+    "primary": "genre",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23408065",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "story",
+      "monetisation",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "23408520",
+    "primary": "genre",
+    "secondary": [
+      "gameplay",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "23444476",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23480108",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "23590758",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "graphics",
+      "content",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "23705346",
+    "primary": "gameplay",
+    "secondary": [
+      "language",
+      "graphics",
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "23894508",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "23995357",
+    "primary": "story",
+    "secondary": [
+      "gameplay",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "23996500",
+    "primary": "gameplay",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "24037903",
+    "primary": "story",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "24096679",
+    "primary": "language",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "24219455",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "24389726",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "language",
+      "graphics",
+      "content",
+      "accessibility"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "24648675",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "24966339",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "25285614",
+    "primary": "price",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "25291380",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25302952",
+    "primary": "genre",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "25313965",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "25398467",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "graphics",
+      "language",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25459050",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25520828",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25548271",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25770080",
+    "primary": "gameplay",
+    "secondary": [
+      "price",
+      "difficulty",
+      "monetisation",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "25932664",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "26109396",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "26845909",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "27196984",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "27246439",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "27815206",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "27923190",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "28115522",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "28147716",
+    "primary": "genre",
+    "secondary": [
+      "difficulty",
+      "controls",
+      "content",
+      "price",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "28266220",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "28642882",
+    "primary": "language",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "28759476",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "28978377",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "content",
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "29189780",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "community",
+      "multiplayer",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "29210414",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "29296240",
+    "primary": "content",
+    "secondary": [
+      "difficulty",
+      "gameplay",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "29601214",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "29657645",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "compatibility",
+      "difficulty",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "30030714",
+    "primary": "gameplay",
+    "secondary": [
+      "story",
+      "genre",
+      "content",
+      "monetisation",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "30044449",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "30398135",
+    "primary": "language",
+    "secondary": [
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "30411005",
+    "primary": "audio",
+    "secondary": [
+      "genre",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "30458812",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "30513411",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "30596250",
+    "primary": "content",
+    "secondary": [
+      "gameplay",
+      "audio",
+      "graphics",
+      "story",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "30792090",
+    "primary": "language",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "31510070",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "31572179",
+    "primary": "bugs",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "31694089",
+    "primary": "updates",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "31798953",
+    "primary": "gameplay",
+    "secondary": [
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "31832772",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "31893452",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "31896989",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "graphics",
+      "difficulty",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "31909588",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "genre",
+      "difficulty",
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "33413910",
+    "primary": "genre",
+    "secondary": [
+      "content",
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "33961950",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "34154188",
+    "primary": "genre",
+    "secondary": [
+      "gameplay",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "34189023",
+    "primary": "genre",
+    "secondary": [
+      "difficulty",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "35044311",
+    "primary": "genre",
+    "secondary": [
+      "content",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "35077018",
+    "primary": "genre",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "35659367",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "35704831",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "36158159",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "story",
+      "content",
+      "updates",
+      "genre",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "36873064",
+    "primary": "content",
+    "secondary": [
+      "community",
+      "updates",
+      "monetisation",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "37025149",
+    "primary": "difficulty",
+    "secondary": [
+      "genre",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "37326351",
+    "primary": "gameplay",
+    "secondary": [
+      "monetisation",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "37365389",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "37759913",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "37864963",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "41471692",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "41693583",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "content",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "41911089",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty",
+      "content",
+      "price",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "42403650",
+    "primary": "language",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "43241377",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "story",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "43658237",
+    "primary": "language",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "45116428",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "45129388",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "45602191",
+    "primary": "difficulty",
+    "secondary": [
+      "genre",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "45846070",
+    "primary": "performance",
+    "secondary": [
+      "compatibility"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "46040686",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "46524163",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "46941366",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "47182547",
+    "primary": "gameplay",
+    "secondary": [
+      "language",
+      "genre",
+      "graphics",
+      "story",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "47266798",
+    "primary": "compatibility",
+    "secondary": [
+      "genre",
+      "audio",
+      "difficulty",
+      "performance",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "47514761",
+    "primary": "language",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "47648261",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "difficulty",
+      "price",
+      "monetisation",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "47774291",
+    "primary": "controls",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "48856046",
+    "primary": "controls",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "50021338",
+    "primary": "content",
+    "secondary": [
+      "story"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "50885437",
+    "primary": "price",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "51121899",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "51624751",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "51820605",
+    "primary": "genre",
+    "secondary": [
+      "difficulty",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "52932772",
+    "primary": "gameplay",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "53524124",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "53702357",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "54075189",
+    "primary": "controls",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "55124315",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "55264012",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "56948544",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "57571596",
+    "primary": "gameplay",
+    "secondary": [
+      "story",
+      "genre",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "58340633",
+    "primary": "content",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "58476913",
+    "primary": "difficulty",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "59080322",
+    "primary": "content",
+    "secondary": [
+      "updates",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "59567814",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "59854908",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "59927527",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "60149034",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "60276105",
+    "primary": "difficulty",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "60911958",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "64283534",
+    "primary": "gameplay",
+    "secondary": [
+      "language",
+      "story",
+      "genre",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "64326915",
+    "primary": "gameplay",
+    "secondary": [
+      "story",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "64521711",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "66313273",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "66923992",
+    "primary": "bugs",
+    "secondary": [
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "68638819",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "story",
+      "genre",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "69918795",
+    "primary": "price",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "71391058",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "71690942",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "72283732",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "72577065",
+    "primary": "content",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "75248557",
+    "primary": "compatibility",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "76171754",
+    "primary": "gameplay",
+    "secondary": [
+      "story",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "78232991",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "78563319",
+    "primary": "difficulty",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "81538237",
+    "primary": "price",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "81814469",
+    "primary": "difficulty",
+    "secondary": [
+      "gameplay",
+      "story",
+      "price",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "84194541",
+    "primary": "gameplay",
+    "secondary": [
+      "content",
+      "story",
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "84730780",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "84865295",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "85460390",
+    "primary": "gameplay",
+    "secondary": [
+      "genre",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "89985086",
+    "primary": "difficulty",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "90803533",
+    "primary": "updates",
+    "secondary": [
+      "community",
+      "content",
+      "difficulty",
+      "story",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "90887868",
+    "primary": "difficulty",
+    "secondary": [
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "92643210",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "94136229",
+    "primary": "difficulty",
+    "secondary": [
+      "audio"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "94908537",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "95452186",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "96088041",
+    "primary": "story",
+    "secondary": [
+      "audio",
+      "gameplay",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  }
 ]

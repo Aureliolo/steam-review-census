@@ -1,0 +1,2 @@
+# A surname, not an identifier, and it belongs in prose where the test is explained.
+doc-valid-idents = ["McNemar", ".."]

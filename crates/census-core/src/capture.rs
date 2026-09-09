@@ -21,6 +21,9 @@ use serde_json::Value;
 
 use crate::{Error, Result};
 
+/// Reviews per Parquet row group, which is what the writer buffers before flushing.
+const REVIEWS_PER_ROW_GROUP: usize = 65_536;
+
 #[must_use]
 pub fn schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
@@ -70,8 +73,11 @@ impl CaptureWriter {
             std::fs::create_dir_all(parent)?;
         }
         let schema = schema();
+        // Buffered whole before it reaches the disk, so this bounds what a shard holding
+        // tens of thousands of reviews costs in memory.
         let props = WriterProperties::builder()
             .set_compression(Compression::ZSTD(ZstdLevel::default()))
+            .set_max_row_group_row_count(Some(REVIEWS_PER_ROW_GROUP))
             .build();
         let writer = ArrowWriter::try_new(File::create(path)?, Arc::clone(&schema), Some(props))?;
         Ok(Self {
@@ -256,6 +262,179 @@ impl RowBuilders {
         ];
         Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
     }
+}
+
+/// Reads back the text of specific reviews, by id.
+///
+/// Takes the ids it wants rather than returning the corpus, because a caller that needs a
+/// few hundred reviews out of a million should not pay for the other million.
+///
+/// # Errors
+///
+/// Fails if a shard cannot be read.
+pub fn texts_for<S: std::hash::BuildHasher>(
+    snapshot: &Path,
+    ids: &std::collections::HashSet<String, S>,
+) -> Result<std::collections::HashMap<String, String>> {
+    use arrow::array::{Array, StringArray};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let mut found = std::collections::HashMap::new();
+    for shard in shards_of(snapshot)? {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let column = |name: &'static str| -> Result<&StringArray> {
+                batch
+                    .column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let review_ids = column("recommendationid")?;
+            let bodies = column("review")?;
+            for row in 0..batch.num_rows() {
+                if bodies.is_null(row) {
+                    continue;
+                }
+                let id = review_ids.value(row);
+                if ids.contains(id) {
+                    found.insert(id.to_owned(), bodies.value(row).to_owned());
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// One captured review, with everything a reader needs to judge it for themselves.
+#[derive(Debug, Clone)]
+pub struct CapturedReview {
+    pub id: String,
+    pub text: String,
+    pub language: String,
+    /// Steam's own id for the author, which is what a link back to the review needs.
+    pub author_steamid: String,
+    pub voted_up: bool,
+    pub votes_up: u32,
+    pub votes_funny: u32,
+    pub playtime_at_review_minutes: u32,
+    pub created: i64,
+}
+
+/// Fetches whole reviews by id, for the handful a report actually shows.
+///
+/// Takes the ids it wants for the same reason [`texts_for`] does: a report shows a few
+/// hundred reviews out of a million, and reading the million to find them costs the memory
+/// the streaming passes were built to avoid.
+///
+/// # Errors
+///
+/// Fails if a shard cannot be read.
+pub fn reviews_for<S: std::hash::BuildHasher>(
+    snapshot: &Path,
+    ids: &std::collections::HashSet<String, S>,
+) -> Result<std::collections::HashMap<String, CapturedReview>> {
+    use arrow::array::{Array, BooleanArray, Int64Array, StringArray, UInt32Array};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let mut found = std::collections::HashMap::new();
+    for shard in shards_of(snapshot)? {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let strings = |name: &'static str| -> Result<&StringArray> {
+                batch
+                    .column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let counts = |name: &'static str| -> Result<&UInt32Array> {
+                batch
+                    .column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let review_ids = strings("recommendationid")?;
+            let bodies = strings("review")?;
+            let languages = strings("language")?;
+            let authors = strings("author_steamid")?;
+            let votes_up = counts("votes_up")?;
+            let votes_funny = counts("votes_funny")?;
+            let playtime = counts("author_playtime_at_review")?;
+            let recommended = batch
+                .column_by_name("voted_up")
+                .and_then(|c| c.as_any().downcast_ref::<BooleanArray>())
+                .ok_or(Error::MalformedPayload { field: "voted_up" })?;
+            let created = batch
+                .column_by_name("timestamp_created")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or(Error::MalformedPayload {
+                    field: "timestamp_created",
+                })?;
+
+            for row in 0..batch.num_rows() {
+                if bodies.is_null(row) {
+                    continue;
+                }
+                let id = review_ids.value(row);
+                if !ids.contains(id) {
+                    continue;
+                }
+                let string = |array: &StringArray| {
+                    if array.is_null(row) {
+                        String::new()
+                    } else {
+                        array.value(row).to_owned()
+                    }
+                };
+                let count = |array: &UInt32Array| {
+                    if array.is_null(row) {
+                        0
+                    } else {
+                        array.value(row)
+                    }
+                };
+                found.insert(
+                    id.to_owned(),
+                    CapturedReview {
+                        id: id.to_owned(),
+                        text: bodies.value(row).to_owned(),
+                        language: string(languages),
+                        author_steamid: string(authors),
+                        voted_up: !recommended.is_null(row) && recommended.value(row),
+                        votes_up: count(votes_up),
+                        votes_funny: count(votes_funny),
+                        playtime_at_review_minutes: count(playtime),
+                        created: if created.is_null(row) {
+                            0
+                        } else {
+                            created.value(row)
+                        },
+                    },
+                );
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The capture's shard files, in a fixed order.
+fn shards_of(snapshot: &Path) -> Result<Vec<std::path::PathBuf>> {
+    let mut shards: Vec<std::path::PathBuf> = std::fs::read_dir(snapshot)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"))
+        })
+        .collect();
+    shards.sort();
+    Ok(shards)
 }
 
 fn text(v: Option<&Value>) -> Option<&str> {
