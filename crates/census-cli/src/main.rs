@@ -795,6 +795,9 @@ fn run_sample(
 /// from it, and what an average review of it looks like.
 struct GameLabels {
     app_id: u32,
+    /// What to call it in a table. Thirty-six rows of nine digits is not a table anyone
+    /// reads, and the name is already in the capture.
+    name: String,
     training: Vec<census_core::anchors::Example>,
     holdout: Vec<census_core::anchors::Example>,
     /// Whether the labeller called each held-back review contested, in the same order.
@@ -864,6 +867,9 @@ fn load_game(
     let held = census_core::anchors::labelled(&holdout_labels, &vectors);
     Ok(GameLabels {
         app_id,
+        // A capture always carries one, but a fit that cannot read a name is still a fit.
+        name: census_core::report::crawl_facts(out, app_id)
+            .map_or_else(|_| format!("app {app_id}"), |facts| facts.title()),
         training: census_core::anchors::to_examples(&split(false), &vectors),
         contested: held
             .iter()
@@ -1162,10 +1168,10 @@ fn report_transfer(
 fn transfer_table(measured: &[HeldOut], contested: Option<bool>, what: &str) {
     println!("\n{what}\n");
     println!(
-        "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
+        "{:<28}{:>7}{:>14}{:>12}{:>13}{:>16}",
         "held out", "n", "descriptions", "same game", "unseen game", "gained / lost"
     );
-    println!("{}", "-".repeat(72));
+    println!("{}", "-".repeat(90));
 
     let mut totals = [0_u64; 6];
     for held in measured {
@@ -1182,8 +1188,8 @@ fn transfer_table(measured: &[HeldOut], contested: Option<bool>, what: &str) {
         totals[4] += gained;
         totals[5] += lost;
         println!(
-            "{:<10}{n:>7}{:>14}{:>12}{:>13}{:>16}",
-            held.app_id,
+            "{:<28}{n:>7}{:>14}{:>12}{:>13}{:>16}",
+            shortened(&held.name),
             share(count(written), n),
             share(count(same), n),
             share(count(unseen), n),
@@ -1217,7 +1223,7 @@ fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -
         || left
             .iter()
             .zip(&right)
-            .any(|(l, r)| l.app_id != r.app_id || l.unseen.len() != r.unseen.len())
+            .any(|(l, r)| l.name != r.name || l.unseen.len() != r.unseen.len())
     {
         anyhow::bail!(
             "the two encoders were measured on different reviews, so pairing them would \
@@ -1229,10 +1235,10 @@ fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -
     let two = other.encoder.as_str();
     println!("leave-one-game-out under two encoders, on each game's {holdout} subset\n");
     println!(
-        "{:<10}{:>7}{one:>14}{two:>14}{:>16}",
+        "{:<28}{:>7}{one:>14}{two:>14}{:>16}",
         "held out", "n", "gained / lost"
     );
-    println!("{}", "-".repeat(61));
+    println!("{}", "-".repeat(79));
 
     let count = |verdicts: &[bool]| verdicts.iter().filter(|hit| **hit).count() as u64;
     let mut totals = [0_u64; 5];
@@ -1245,16 +1251,16 @@ fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -
         totals[3] += gained;
         totals[4] += lost;
         println!(
-            "{:<10}{n:>7}{:>14}{:>14}{:>16}",
-            l.app_id,
+            "{:<28}{n:>7}{:>14}{:>14}{:>16}",
+            shortened(&l.name),
             share(count(&l.unseen), n),
             share(count(&r.unseen), n),
             format!("+{gained} / -{lost}")
         );
     }
-    println!("{}", "-".repeat(61));
+    println!("{}", "-".repeat(79));
     println!(
-        "{:<10}{:>7}{:>14}{:>14}{:>16}",
+        "{:<28}{:>7}{:>14}{:>14}{:>16}",
         "all",
         totals[2],
         share(totals[0], totals[2]),
@@ -1284,10 +1290,20 @@ fn report_comparison(base: &Under, other: &Under, folds: usize, holdout: &str) -
     Ok(())
 }
 
+/// A Steam title cut to what a column can hold, ending in an ellipsis where it was cut.
+fn shortened(name: &str) -> String {
+    const ROOM: usize = 26;
+    if name.chars().count() <= ROOM {
+        return name.to_owned();
+    }
+    let kept: String = name.chars().take(ROOM - 1).collect();
+    format!("{}\u{2026}", kept.trim_end())
+}
+
 /// One game held out, and whether each of its held-back reviews landed where the labels put
 /// it under each anchor set it is judged with.
 struct HeldOut {
-    app_id: u32,
+    name: String,
     written: Vec<bool>,
     same: Vec<bool>,
     unseen: Vec<bool>,
@@ -1310,7 +1326,7 @@ impl HeldOut {
                 .collect()
         };
         Self {
-            app_id: self.app_id,
+            name: self.name.clone(),
             written: keep(&self.written),
             same: keep(&self.same),
             unseen: keep(&self.unseen),
@@ -1357,7 +1373,7 @@ fn measure_transfer(
         };
 
         measured.push(HeldOut {
-            app_id: game.app_id,
+            name: game.name.clone(),
             written: census_core::anchors::agreements(descriptions, &game.holdout),
             same: census_core::anchors::agreements(&fit_on(&all), &game.holdout),
             unseen: census_core::anchors::agreements(&fit_on(&others), &game.holdout),
@@ -1368,9 +1384,9 @@ fn measure_transfer(
 }
 
 fn print_transfer_totals(totals: &[u64; 6]) {
-    println!("{}", "-".repeat(72));
+    println!("{}", "-".repeat(90));
     println!(
-        "{:<10}{:>7}{:>14}{:>12}{:>13}{:>16}",
+        "{:<28}{:>7}{:>14}{:>12}{:>13}{:>16}",
         "all",
         totals[3],
         share(totals[0], totals[3]),

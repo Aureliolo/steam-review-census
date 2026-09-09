@@ -450,10 +450,23 @@ pub fn build(app_ids: &[u32], options: &ReportOptions) -> Result<Report> {
     })
 }
 
+/// What the crawl recorded about a game's most recent capture, without reading the corpus.
+///
+/// The name lives here and nowhere else, so anything that wants to call a game by its name
+/// rather than by nine digits reads it from the capture.
+///
+/// # Errors
+///
+/// Fails if there is no capture, or its crawl record is missing or malformed.
+pub fn crawl_facts(out_dir: &Path, app_id: u32) -> Result<CrawlFacts> {
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    read_json(&snapshot.join("crawl.json"))
+}
+
 fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
     let classification: Classification = read_json(&snapshot.join("classification.json"))?;
-    let crawl: CrawlFacts = read_json(&snapshot.join("crawl.json"))?;
+    let crawl = crawl_facts(&options.out_dir, app_id)?;
 
     // Re-embedding a corpus and forgetting to classify it again leaves counts that describe
     // vectors nothing here holds any more. They would render perfectly and be wrong.
