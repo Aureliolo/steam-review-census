@@ -492,6 +492,15 @@ table.categories thead th {
   z-index: 1;
 }
 
+/* Six columns do not fit on a phone, and scrolling right to read the last of them is no use
+   at all once the name of the row has gone off the left. The matrix keeps its first column
+   for the same reason. */
+table.categories tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--card);
+}
+
 table.categories .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1030,6 +1039,7 @@ a {
   /* Sticky positioning has nowhere to stick on a page, and leaves the header floating over
      the rows it belongs to. A repeated header group is the printed equivalent. */
   table.categories thead th,
+  table.categories tbody th,
   table.matrix tbody th {
     position: static;
   }
