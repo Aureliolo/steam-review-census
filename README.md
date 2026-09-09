@@ -78,6 +78,15 @@ A category with plenty of labelled examples is defined by them; one with none is
 its description alone and behaves exactly as it would without any of this. Fitting can
 therefore improve a category but never leaves one worse off for lack of data.
 
+A review usually raises several subjects and is mostly about one of them, and those are two
+different questions to be good at. Fitting for the second one alone is a trap: the setting
+that best identifies a review's main subject is to ignore secondary subjects entirely, which
+leaves every category that is usually somebody's *second* subject, graphics and audio and
+price among them, with almost nothing to be built from. Anchors are therefore fitted so that
+every category counts the same however rare it is, and the fit reports what the other choice
+would have scored on the same held-back reviews, so the decision is a measurement rather than
+an opinion.
+
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,
 balance is difficulty, animation speed is graphics, port requests are compatibility, sequel
@@ -128,6 +137,11 @@ Three rules keep those figures honest:
 - **Every rate carries a 95% interval.** Reference sets are small. At fifty reviews the honest
   band around a rate is roughly twenty-five points wide, and a bare percentage invites
   conclusions the counts cannot support.
+- **Every row says how well it is measured, not just the page.** One agreement figure for a
+  whole taxonomy hides the shape of the error: the same run finds nine mentions in ten of one
+  category and one in five of another. Each category carries its own precision and recall
+  from the reference set, and a category the classifier is measured to miss most of is marked
+  as a floor rather than a count.
 - **Reference sets span several games.** Anchors built from one game carry that game's
   vocabulary. Sets are labelled across games of different genres and different overall
   sentiment, so agreement can be measured on a game the anchors were never fitted to:
