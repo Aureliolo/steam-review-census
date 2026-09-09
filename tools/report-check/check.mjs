@@ -478,6 +478,12 @@ const WITHOUT_SCRIPTING = `(function () {
   check('a reader without scripting is offered a filter that cannot filter',
     !form || form.hidden === true);
 
+  var pointing = document.querySelectorAll('.chevron, .arrow');
+  check('a mark that says something opens is drawn where nothing opens',
+    Array.prototype.every.call(pointing, function (mark) {
+      return getComputedStyle(mark).display === 'none';
+    }));
+
   var panels = document.querySelectorAll('tr.panel');
   check('there is no evidence on the page at all', panels.length > 0);
   check('evidence is folded away with nothing to unfold it',

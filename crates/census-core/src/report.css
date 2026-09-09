@@ -600,6 +600,12 @@ button.disclose:focus-visible {
   transition: transform 0.15s ease;
 }
 
+/* Nothing to open without scripting, where every row is already open, so nothing should look
+   openable. The same reason the sort arrows go. */
+html:not(.js) .chevron {
+  display: none;
+}
+
 button.disclose[aria-expanded='true'] .chevron {
   transform: rotate(45deg);
 }
