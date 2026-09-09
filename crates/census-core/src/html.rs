@@ -88,7 +88,17 @@ fn page_header(out: &mut String, report: &Report) {
 /// never offered a box that does nothing. Twenty-one categories across several games is more
 /// than anyone can scan for one subject.
 fn filter(out: &mut String, report: &Report) {
-    let total = CORE_SPINE.len();
+    // Written once and handed to the script as well, so clearing the box puts back the
+    // wording the page was rendered with rather than a second phrasing of the same thing.
+    let showing = format!(
+        "all {} of them{}",
+        CORE_SPINE.len(),
+        if report.apps.len() > 1 {
+            ", in every table"
+        } else {
+            ""
+        }
+    );
     let _ = writeln!(
         out,
         "<form class=\"filter\" role=\"search\" hidden data-filter \
@@ -96,13 +106,9 @@ fn filter(out: &mut String, report: &Report) {
          <label for=\"filter-categories\">Show categories matching</label>\n\
          <input id=\"filter-categories\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" \
          placeholder=\"price, story, crashes\u{2026}\" data-filter-input>\n\
-         <span class=\"filter-count\" role=\"status\" data-filter-count>all {total} of \
-         them{}</span>\n</form>",
-        if report.apps.len() > 1 {
-            ", in every table"
-        } else {
-            ""
-        }
+         <span class=\"filter-count\" role=\"status\" data-filter-count \
+         data-showing-everything=\"{0}\">{0}</span>\n</form>",
+        escape(&showing)
     );
 }
 

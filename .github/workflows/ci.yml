@@ -37,3 +37,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
+
+  # The report's folding, filtering, sorting and deep links only exist once a browser has run
+  # them, so they are the one part of this tool no Rust test can reach. The runner's own
+  # Chrome drives a page rendered from a fixture, needing no corpus and no model.
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run -p census-core --example sample-report -- report.html
+      - run: node tools/report-check/check.mjs report.html

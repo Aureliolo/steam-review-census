@@ -152,7 +152,7 @@
       });
       var shown = Object.keys(matched).length;
       if (query === '') {
-        count.textContent = 'all ' + all + ' of them';
+        count.textContent = count.getAttribute('data-showing-everything') || '';
       } else if (shown === 0) {
         count.textContent = 'no category matches';
       } else {
