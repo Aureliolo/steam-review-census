@@ -1346,6 +1346,7 @@ fn print_fit(
     println!("  smoothing    {}", outcome.params.smoothing);
     println!("  secondary    {}", outcome.params.secondary_weight);
     println!("  margin       {}", outcome.params.mention_margin);
+    println!("  repulsion    {}", outcome.params.repulsion);
     println!(
         "  scoring      {}",
         match outcome.params.scoring {
