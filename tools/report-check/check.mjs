@@ -69,8 +69,15 @@ async function connect(url) {
   });
   let id = 0;
   const waiting = new Map();
+  // Every URL the page asks for, which is the only way to hold it to fetching nothing: the
+  // markup can be free of every http:// this tool would have written and still pull a font
+  // in from a stylesheet nobody read closely.
+  const asked = [];
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
+    if (message.method === "Network.requestWillBeSent") {
+      asked.push(message.params.request.url);
+    }
     const settle = waiting.get(message.id);
     if (settle) {
       waiting.delete(message.id);
@@ -86,6 +93,7 @@ async function connect(url) {
   return {
     socket,
     send,
+    asked,
     evaluate: (expression) =>
       send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }),
   };
@@ -578,7 +586,11 @@ const chrome = spawn(
 
 let failed = true;
 try {
-  const { socket, send, evaluate } = await connect(await debuggerUrl());
+  const { socket, send, asked, evaluate } = await connect(await debuggerUrl());
+  // Loaded once already by the launch, before anything could watch it, so it is loaded again
+  // with the network being listened to.
+  await send("Network.enable", {});
+  await send("Page.reload", { ignoreCache: true });
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const ready = await evaluate(
       "document.readyState === 'complete' && document.documentElement.classList.contains('js')",
@@ -587,6 +599,7 @@ try {
     await sleep(250);
   }
 
+  const fetched = asked.filter((url) => url !== page);
   const answer = await evaluate(PROBE);
   await send("Emulation.setDeviceMetricsOverride", {
     width: 420,
@@ -620,7 +633,11 @@ try {
     console.error("the page threw while being checked:");
     console.error(threw.result.exceptionDetails.exception?.description ?? threw.result.exceptionDetails.text);
   } else {
-    const wrong = answer.result.result.value
+    const wrong = (fetched.length === 0
+      ? []
+      : [`the page fetched ${fetched.length} thing(s): ${fetched.slice(0, 5).join(", ")}`]
+    )
+      .concat(answer.result.result.value)
       .concat(phone.result.result.value)
       .concat(ink.result.result.value)
       .concat(paper.result.result.value)
