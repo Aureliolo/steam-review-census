@@ -147,18 +147,34 @@ const PROBE = `(function () {
     check('clearing the filter rewords the count', count.textContent === everything);
   }
 
-  // Folding.
+  // Folding, whose control has to be a real button inside a row that stays a row.
   var row = document.querySelector('tr.row[data-expands]');
   var panel = row && document.getElementById(row.getAttribute('data-expands'));
-  if (panel) {
+  var button = row && row.querySelector('button.disclose');
+  check('no row has a control to open it', Boolean(button));
+  if (panel && button) {
+    check('a row was given a role that stops it being a row', row.getAttribute('role') === null);
+    check('the control does not say what it opens',
+      button.getAttribute('aria-controls') === panel.id);
+    check('the control does not start shut', button.getAttribute('aria-expanded') === 'false');
+    check('the control is empty', button.textContent.trim().length > 0);
+
     row.click();
     check('opening a row shows nothing', panel.hidden === false);
-    check('an opened row does not say so', row.getAttribute('aria-expanded') === 'true');
+    check('an opened row does not say so', button.getAttribute('aria-expanded') === 'true');
     check('opening one row opens others', Array.prototype.filter.call(panels, function (p) {
       return !p.hidden;
     }).length === 1);
     row.click();
     check('a row cannot be closed again', panel.hidden === true);
+
+    // Reaching the control by keyboard has to open it exactly once.
+    button.focus();
+    check('the control cannot be reached by keyboard', document.activeElement === button);
+    button.click();
+    check('activating the control does not open the row', panel.hidden === false);
+    button.click();
+    check('activating the control twice does not close the row', panel.hidden === true);
   }
 
   // Sorting, which has to carry each panel along with the row it belongs to.
@@ -194,8 +210,9 @@ const PROBE = `(function () {
       window.location.hash = link.getAttribute('href');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
       check('a link into the evidence lands on a closed row', target.hidden === false);
+      var opened = target.previousElementSibling.querySelector('button.disclose');
       check('a row opened by a link does not say so',
-        target.previousElementSibling.getAttribute('aria-expanded') === 'true');
+        opened && opened.getAttribute('aria-expanded') === 'true');
     }
   }
 

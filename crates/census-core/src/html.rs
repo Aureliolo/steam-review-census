@@ -549,12 +549,12 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
         "<tr class=\"row\" data-name=\"{}\"",
         escape(&category.label.to_lowercase())
     );
+    // Named as expandable but not dressed as a control. A `role` here would take the row out
+    // of the table for a screen reader, which is a worse trade than it sounds: the cells stop
+    // being cells. The control that opens it is built by the script, which is also the only
+    // circumstance in which there is anything to open.
     if has_examples {
-        let _ = write!(
-            out,
-            " tabindex=\"0\" role=\"button\" aria-controls=\"{panel}\" \
-             data-expands=\"{panel}\""
-        );
+        let _ = write!(out, " data-expands=\"{panel}\"");
     }
     out.push('>');
 

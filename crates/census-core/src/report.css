@@ -486,17 +486,28 @@ html:not(.js) .arrow {
   display: none;
 }
 
-tr.row[role='button'] {
+/* Only once the script has built the control that makes a row worth pointing at. */
+.js tr.row[data-expands] {
   cursor: pointer;
 }
 
-tr.row[role='button']:hover {
+.js tr.row[data-expands]:hover {
   background: var(--accent-soft);
 }
 
-tr.row:focus-visible {
+button.disclose {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.disclose:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline-offset: 3px;
 }
 
 .thin {
@@ -520,7 +531,7 @@ tr.row:focus-visible {
   transition: transform 0.15s ease;
 }
 
-tr.row[aria-expanded='true'] .chevron {
+button.disclose[aria-expanded='true'] .chevron {
   transform: rotate(45deg);
 }
 

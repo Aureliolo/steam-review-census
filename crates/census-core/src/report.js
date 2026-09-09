@@ -202,8 +202,9 @@
       return;
     }
     var row = panel.previousElementSibling;
-    if (row && row.getAttribute('data-expands') === id) {
-      row.setAttribute('aria-expanded', 'true');
+    var button = row && row.querySelector('button.disclose');
+    if (button && row.getAttribute('data-expands') === id) {
+      button.setAttribute('aria-expanded', 'true');
     }
     panel.hidden = false;
     panel.scrollIntoView();
@@ -227,25 +228,32 @@
     // no scripting would face rows that can never be opened.
     var rows = document.querySelectorAll('[data-expands]');
     Array.prototype.forEach.call(rows, function (row) {
-      var panel = document.getElementById(row.getAttribute('data-expands'));
-      if (!panel) {
+      var id = row.getAttribute('data-expands');
+      var panel = document.getElementById(id);
+      var head = row.cells[0];
+      if (!panel || !head) {
         return;
       }
       panel.hidden = true;
-      row.setAttribute('aria-expanded', 'false');
 
-      function toggle() {
-        var open = row.getAttribute('aria-expanded') === 'true';
-        row.setAttribute('aria-expanded', String(!open));
-        panel.hidden = open;
+      // A real button inside the row header rather than a role on the row itself: the row
+      // has to stay a row, or its cells stop being cells for anyone listening to the page.
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'disclose';
+      button.setAttribute('aria-controls', id);
+      button.setAttribute('aria-expanded', 'false');
+      while (head.firstChild) {
+        button.appendChild(head.firstChild);
       }
+      head.appendChild(button);
 
-      row.addEventListener('click', toggle);
-      row.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          toggle();
-        }
+      // Listened for on the row, so the whole row stays a target and the button's own
+      // keyboard activation arrives here as one click rather than two.
+      row.addEventListener('click', function () {
+        var open = button.getAttribute('aria-expanded') === 'true';
+        button.setAttribute('aria-expanded', String(!open));
+        panel.hidden = open;
       });
     });
 
