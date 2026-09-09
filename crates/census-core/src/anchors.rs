@@ -550,6 +550,9 @@ pub struct FitOutcome {
     /// What the blend was chosen to win. The other figure is a cost, not a claim.
     pub objective: Objective,
     pub folds: usize,
+    /// Whether each fold held out a whole game, which is what makes the figure above a
+    /// statement about a game the settings have not seen rather than about these ones.
+    pub by_game: bool,
     pub examples: usize,
 }
 
@@ -575,7 +578,7 @@ pub fn search(
     calibration: Calibration,
     objective: Objective,
 ) -> FitOutcome {
-    let folds = folds.max(2).min(examples.len().max(2));
+    let split = fold_of(examples, folds.max(2).min(examples.len().max(2)));
     let margins: &[f32] = match objective {
         // The margin cannot change which category scores highest, so trying it here would
         // only spend folds to arrive back where it started.
@@ -588,7 +591,7 @@ pub fn search(
             descriptions,
             examples,
             centroid,
-            folds,
+            &split,
             params,
             margins,
             objective,
@@ -668,7 +671,8 @@ pub fn search(
         mention_macro_f1,
         baseline_macro_f1,
         objective,
-        folds,
+        folds: split.folds,
+        by_game: split.by_game,
         examples: examples.len(),
     }
 }
@@ -705,7 +709,7 @@ fn across_margins(
     descriptions: &Anchors,
     examples: &[Example],
     centroid: &[f32],
-    folds: usize,
+    split: &Split,
     params: FitParams,
     margins: &[f32],
     objective: Objective,
@@ -714,11 +718,10 @@ fn across_margins(
     let mut total = vec![0_u64; margins.len()];
     let mut confusion = vec![vec![Counts::default(); CORE_SPINE.len()]; margins.len()];
 
-    let (folds, held) = fold_of(examples, folds);
-    for fold in 0..folds {
+    for fold in 0..split.folds {
         let train: Vec<Example> = examples
             .iter()
-            .zip(&held)
+            .zip(&split.held)
             .filter(|(_, at)| **at != fold)
             .map(|(example, _)| example.clone())
             .collect();
@@ -727,7 +730,7 @@ fn across_margins(
 
         for example in examples
             .iter()
-            .zip(&held)
+            .zip(&split.held)
             .filter(|(_, at)| **at == fold)
             .map(|(example, _)| example)
         {
@@ -769,19 +772,36 @@ fn across_margins(
 /// Round-robin otherwise, which is right for a single game: the reference set arrives grouped
 /// by predicted category, so dealing examples out in turn gives every fold nearly the same
 /// class balance, and random assignment would not at these counts.
-fn fold_of(examples: &[Example], folds: usize) -> (usize, Vec<usize>) {
+fn fold_of(examples: &[Example], folds: usize) -> Split {
     let mut games: Vec<u32> = examples.iter().map(|example| example.game).collect();
     games.sort_unstable();
     games.dedup();
 
     if games.len() < 2 {
-        return (folds, (0..examples.len()).map(|at| at % folds).collect());
+        return Split {
+            folds,
+            by_game: false,
+            held: (0..examples.len()).map(|at| at % folds).collect(),
+        };
     }
-    let held = examples
-        .iter()
-        .map(|example| games.binary_search(&example.game).unwrap_or(0))
-        .collect();
-    (games.len(), held)
+    Split {
+        folds: games.len(),
+        by_game: true,
+        held: examples
+            .iter()
+            .map(|example| games.binary_search(&example.game).unwrap_or(0))
+            .collect(),
+    }
+}
+
+/// How the examples were dealt into folds, and what that says about the figures they made.
+struct Split {
+    folds: usize,
+    /// Whether each fold holds out a whole game. What the search then chooses is a setting
+    /// that carries to a game it has not seen, rather than one that fits the six it has.
+    by_game: bool,
+    /// The fold each example is held out in, in the order the examples arrived.
+    held: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1350,12 +1370,16 @@ mod tests {
         };
         let across: Vec<Example> = from(7, 5).chain(from(11, 5)).chain(from(13, 5)).collect();
 
-        let (folds, held) = fold_of(&across, 5);
-        assert_eq!(folds, 3, "three games should make three folds, not five");
+        let split = fold_of(&across, 5);
+        assert_eq!(
+            split.folds, 3,
+            "three games should make three folds, not five"
+        );
+        assert!(split.by_game, "the folds are meant to be games");
         for game in [7, 11, 13] {
             let mine: Vec<usize> = across
                 .iter()
-                .zip(&held)
+                .zip(&split.held)
                 .filter(|(example, _)| example.game == game)
                 .map(|(_, at)| *at)
                 .collect();
@@ -1367,9 +1391,10 @@ mod tests {
 
         // One game has nothing to hold out by, so the folds go back to round robin.
         let alone: Vec<Example> = from(7, 10).collect();
-        let (folds, held) = fold_of(&alone, 5);
-        assert_eq!(folds, 5);
-        assert_eq!(held, vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
+        let split = fold_of(&alone, 5);
+        assert_eq!(split.folds, 5);
+        assert!(!split.by_game, "one game has nothing to hold out by");
+        assert_eq!(split.held, vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
     }
 
     #[test]

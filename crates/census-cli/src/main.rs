@@ -1376,8 +1376,13 @@ fn print_fit(
     );
     println!("  anchors      {}", path.display());
     println!(
-        "\n  {}-fold cross-validation, on training reviews each fold did not see:",
-        outcome.folds
+        "\n  {}-fold cross-validation, {}:",
+        outcome.folds,
+        if outcome.by_game {
+            "each fold holding out a whole game, which is what chose the settings above"
+        } else {
+            "on training reviews each fold did not see"
+        }
     );
     let baseline_note = "descriptions alone, at their best";
     println!(
