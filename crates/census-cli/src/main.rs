@@ -434,6 +434,11 @@ fn run_report(
     examples: usize,
     seed: u64,
 ) -> Result<()> {
+    // Every game before any of them: a page of six corpora that dies on the sixth has read
+    // five of them and quoted a thousand reviews to say what one look would have said.
+    for &app_id in app_ids {
+        census_core::embed::latest_snapshot(out, app_id)?;
+    }
     let options = census_core::report::ReportOptions {
         out_dir: out.to_path_buf(),
         examples,
@@ -465,17 +470,24 @@ fn run_evaluate(app_ids: &[u32], out: &std::path::Path, reference: Option<&PathB
     if reference.is_some() && app_ids.len() > 1 {
         anyhow::bail!("--reference names one directory, so it cannot be used with several apps");
     }
+    // Every game is compared before any of them is printed. Printing as they arrived meant a
+    // set missing its fourth reference left three tables on screen and no pooled figure,
+    // which is the one worth quoting and the reason for naming six games at once.
     let mut reports = Vec::with_capacity(app_ids.len());
     let mut verified = true;
-    for (index, &app_id) in app_ids.iter().enumerate() {
+    for &app_id in app_ids {
+        let (report, human_verified) = evaluate_one(app_id, out, reference)?;
+        verified &= human_verified;
+        reports.push((report, human_verified));
+    }
+    for (index, (report, human_verified)) in reports.iter().enumerate() {
         if index > 0 {
             println!();
         }
-        let (report, human_verified) = evaluate_one(app_id, out, reference)?;
-        print_agreement(&report, human_verified);
-        verified &= human_verified;
-        reports.push(report);
+        print_agreement(report, *human_verified);
     }
+    let reports: Vec<census_core::AgreementReport> =
+        reports.into_iter().map(|(report, _)| report).collect();
     if reports.len() > 1 {
         println!("\npooled over {} games", reports.len());
         print_agreement(&census_core::evaluate::pooled(&reports), verified);
