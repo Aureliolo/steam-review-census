@@ -185,12 +185,19 @@ enum Command {
         /// Changing this draws a different sample. The same seed always draws the same one.
         #[arg(long, default_value_t = 1)]
         seed: u64,
-        /// Also write the category sheet labellers should work from.
-        #[arg(long)]
-        brief: bool,
         /// Split each sample into batches of this many reviews, ready to hand out.
         #[arg(long, default_value_t = 35)]
         batch_size: usize,
+    },
+
+    /// Write the category sheet labellers work from, generated from the taxonomy.
+    ///
+    /// Separate from `sample` because a boundary rule can change without anything needing to
+    /// be drawn again, and regenerating the sheet should never mean redrawing a sample.
+    Brief {
+        /// Where to write it.
+        #[arg(long, default_value = "reference/labelling-brief.txt")]
+        to: PathBuf,
     },
 
     /// Merge returned labels into a reference set, checking them against the drawn sample.
@@ -381,7 +388,6 @@ async fn main() -> Result<()> {
             random,
             per_category,
             seed,
-            brief,
             batch_size,
         } => run_sample(
             &app_ids,
@@ -391,9 +397,13 @@ async fn main() -> Result<()> {
                 stratified_per_category: per_category,
                 seed,
             },
-            brief,
             batch_size,
         ),
+        Command::Brief { to } => {
+            std::fs::write(&to, census_core::taxonomy::labelling_brief())?;
+            println!("brief    {}", to.display());
+            Ok(())
+        }
         Command::Report {
             app_ids,
             out,
@@ -692,7 +702,6 @@ fn run_sample(
     app_ids: &[u32],
     out: &std::path::Path,
     options: &census_core::SampleOptions,
-    brief: bool,
     batch_size: usize,
 ) -> Result<()> {
     let (drawn, reports) = census_core::sample::draw(out, app_ids, options)?;
@@ -722,12 +731,6 @@ fn run_sample(
         if !thin.is_empty() {
             println!("    supplies nothing for: {}", thin.join(", "));
         }
-    }
-
-    if brief {
-        let path = std::path::Path::new("reference").join("labelling-brief.txt");
-        std::fs::write(&path, census_core::taxonomy::labelling_brief())?;
-        println!("brief    {}", path.display());
     }
 
     let short: Vec<String> = census_core::CORE_SPINE

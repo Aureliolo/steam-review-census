@@ -18,10 +18,12 @@ Genre and comparisons (genre)
 Overall verdict only (verdict)
   A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, worth every penny, do not buy, waste of money, best game ever, I find this game childish, please make a sequel.
   RULE: Only when no aspect is named at all. A review that gives a verdict and then names one specific thing belongs to that thing: "super fun, worth every penny" is price. Asking for a sequel belongs here; asking for a port belongs to compatibility.
+  ONLY: this is the whole label. A review here covers nothing else, so it never takes a second category.
 
 Says nothing about the game (offtopic)
   The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
   RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest that names something the publisher requires belongs to policy. This is only for reviews from which a reader would learn nothing at all.
+  ONLY: this is the whole label. A review here covers nothing else, so it never takes a second category.
 
 Story and writing (story)
   The story, plot and characters. The writing, the dialogue, the humour, the ending, the world and its lore, the characters players grew fond of, and whether the narrative is worth following.

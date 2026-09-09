@@ -587,11 +587,24 @@ pub(crate) fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
         .max_by(|a, b| a.1.total_cmp(b.1))
         .map_or((0, 0.0), |(index, score)| (index, *score));
 
+    // A category that can only stand alone says no aspect was named, which nothing else can
+    // be true alongside. The taxonomy says so and the labellers apply it without being asked:
+    // "says nothing about the game" is the only label on every review that carries it.
+    if crate::taxonomy::CORE_SPINE
+        .get(primary)
+        .is_some_and(|c| c.alone)
+    {
+        return (primary, 1_u32 << primary);
+    }
+
     let cutoff = best - margin;
     // The primary category is always a mention: a review is about whatever it is most about.
     let mut mentions = 1_u32 << primary;
     for (index, sim) in sims.iter().enumerate() {
-        if *sim >= cutoff {
+        let alone = crate::taxonomy::CORE_SPINE
+            .get(index)
+            .is_some_and(|c| c.alone);
+        if *sim >= cutoff && !alone {
             mentions |= 1 << index;
         }
     }
@@ -847,6 +860,42 @@ mod tests {
         sims[7] = 0.92;
         let (_, mentions) = assign(&sims, 0.02);
         assert_eq!(mentions.count_ones(), 1);
+    }
+
+    /// A review that says nothing about the game cannot also be about something, and a
+    /// verdict with no reason names no aspect. Both are claims about absence.
+    #[test]
+    fn a_category_that_stands_alone_never_shares_a_review() {
+        let slot = |id: &str| CORE_SPINE.iter().position(|c| c.id == id).expect(id);
+        for exclusive in ["offtopic", "verdict"] {
+            assert!(
+                CORE_SPINE[slot(exclusive)].alone,
+                "{exclusive} is meant to stand alone"
+            );
+
+            // Winning outright: everything else is dropped however close it came.
+            let mut sims = vec![0.90; CORE_SPINE.len()];
+            sims[slot(exclusive)] = 0.95;
+            let (primary, mentions) = assign(&sims, 0.10);
+            assert_eq!(primary, slot(exclusive));
+            assert_eq!(
+                mentions,
+                1 << slot(exclusive),
+                "{exclusive} took a second subject with it"
+            );
+
+            // Coming a close second to a real subject: it is not a second subject either.
+            let mut sims = vec![0.10; CORE_SPINE.len()];
+            sims[slot("bugs")] = 0.95;
+            sims[slot(exclusive)] = 0.94;
+            let (primary, mentions) = assign(&sims, 0.10);
+            assert_eq!(primary, slot("bugs"));
+            assert_eq!(
+                mentions & (1 << slot(exclusive)),
+                0,
+                "{exclusive} was counted alongside a category it contradicts"
+            );
+        }
     }
 
     #[test]

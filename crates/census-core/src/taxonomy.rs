@@ -25,6 +25,15 @@ pub struct Category {
     pub description: &'static str,
     /// How to choose when this category competes with another. Never embedded.
     pub boundary: Option<&'static str>,
+    /// Whether a review in this category can be in no other.
+    ///
+    /// A claim about absence cannot share a review with a claim about presence. "Says
+    /// nothing about the game" and "a verdict with no reason given" are both statements that
+    /// no aspect was named, so pairing either with an aspect is a contradiction rather than a
+    /// second subject, and the labellers read them that way without being told to: across
+    /// the six reference sets `offtopic` is alone in 191 labels of 191 and `verdict` in 364
+    /// of 374.
+    pub alone: bool,
 }
 
 /// Version of the core spine. Any change to the categories or their descriptions changes
@@ -41,6 +50,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Frame rate and stuttering belong here. How the animation itself looks, and how \
              fast it plays out, belong to graphics.",
         ),
+        alone: false,
     },
     Category {
         id: "bugs",
@@ -48,6 +58,7 @@ pub const CORE_SPINE: &[Category] = &[
         description: "The game is broken and buggy. It crashes to desktop, freezes, corrupts \
                       or loses save files, and is full of glitches that block progress.",
         boundary: None,
+        alone: false,
     },
     // Narrow on purpose. Phrased as "how the game plays and whether it is fun" this became
     // the nearest match for any general discussion and took 47.7% of primaries, which is a
@@ -63,6 +74,7 @@ pub const CORE_SPINE: &[Category] = &[
              options are balanced against each other belongs to difficulty. How much game \
              there is belongs to content.",
         ),
+        alone: false,
     },
     // 35% of reviews in the first corpus measured named a genre or compared the game to
     // another one. With nowhere to put that, all of it landed in gameplay, which is most of
@@ -79,6 +91,7 @@ pub const CORE_SPINE: &[Category] = &[
              soon as a review says a mechanic is deep, shallow, satisfying or broken, that \
              part is gameplay.",
         ),
+        alone: false,
     },
     // Reviews that give a verdict and name no aspect are common, and without a home they
     // contaminate whichever category happens to sit nearest in the embedding space.
@@ -95,6 +108,7 @@ pub const CORE_SPINE: &[Category] = &[
              is price. Asking for a sequel belongs here; asking for a port belongs to \
              compatibility.",
         ),
+        alone: true,
     },
     // Joke and meme reviews were being counted as verdicts, which inflates the one category
     // whose whole purpose is to be the honest home of reviews that say nothing specific.
@@ -111,6 +125,7 @@ pub const CORE_SPINE: &[Category] = &[
              publisher requires belongs to policy. This is only for reviews from which a \
              reader would learn nothing at all.",
         ),
+        alone: true,
     },
     Category {
         id: "story",
@@ -123,6 +138,7 @@ pub const CORE_SPINE: &[Category] = &[
              event, and to gameplay when they are about a mechanic. Humour in the writing is \
              here; a charming art style is graphics.",
         ),
+        alone: false,
     },
     Category {
         id: "graphics",
@@ -134,6 +150,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Animation quality and animation speed belong here. Frame rate belongs to \
              performance.",
         ),
+        alone: false,
     },
     Category {
         id: "audio",
@@ -141,6 +158,7 @@ pub const CORE_SPINE: &[Category] = &[
         description: "How the game sounds. The soundtrack, the music, the sound effects, the \
                       voice acting and the audio mixing.",
         boundary: None,
+        alone: false,
     },
     Category {
         id: "controls",
@@ -152,6 +170,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Whether a controller is supported belongs here. Whether the game runs on a given \
              device belongs to compatibility.",
         ),
+        alone: false,
     },
     Category {
         id: "difficulty",
@@ -163,6 +182,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Balance complaints belong here rather than to gameplay, including when they name \
              a specific mechanic as overpowered or useless.",
         ),
+        alone: false,
     },
     Category {
         id: "content",
@@ -174,6 +194,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Replayability and repetitiveness are two ends of one axis and both belong here, \
              never to gameplay.",
         ),
+        alone: false,
     },
     Category {
         id: "price",
@@ -184,6 +205,7 @@ pub const CORE_SPINE: &[Category] = &[
             "What the base game costs belongs here. What is sold on top of it belongs to \
              monetisation.",
         ),
+        alone: false,
     },
     Category {
         id: "monetisation",
@@ -191,6 +213,7 @@ pub const CORE_SPINE: &[Category] = &[
         description: "Paid extras and how they are sold. Microtransactions, battle passes, \
                       loot boxes, paywalls, season passes and content cut out to sell as DLC.",
         boundary: None,
+        alone: false,
     },
     Category {
         id: "multiplayer",
@@ -201,6 +224,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Servers, matchmaking and connection quality belong here. What the other players \
              are like belongs to community.",
         ),
+        alone: false,
     },
     Category {
         id: "community",
@@ -208,6 +232,7 @@ pub const CORE_SPINE: &[Category] = &[
         description: "The people who play it. Whether the community is welcoming or toxic, \
                       griefing and harassment, and what the playerbase is like.",
         boundary: None,
+        alone: false,
     },
     Category {
         id: "updates",
@@ -219,6 +244,7 @@ pub const CORE_SPINE: &[Category] = &[
             "What the developers do to the game belongs here. What the publisher or the \
              platform requires of the player belongs to policy.",
         ),
+        alone: false,
     },
     // Review bombs over publisher decisions are the reviews Steam's own default filter hides,
     // and this tool exists partly to count them. On one corpus measured they are 16% of
@@ -236,6 +262,7 @@ pub const CORE_SPINE: &[Category] = &[
              review is angry and brief. A protest that names no requirement at all, and would \
              tell a reader nothing, is offtopic.",
         ),
+        alone: false,
     },
     Category {
         id: "compatibility",
@@ -247,6 +274,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Asking for a port to another platform belongs here. Asking for a sequel belongs \
              to verdict.",
         ),
+        alone: false,
     },
     Category {
         id: "accessibility",
@@ -255,6 +283,7 @@ pub const CORE_SPINE: &[Category] = &[
                       controls, difficulty options, text size, and the settings players need \
                       in order to play at all.",
         boundary: Some("Which languages the game is available in belongs to language, not here."),
+        alone: false,
     },
     // Bundled into accessibility until it was measured: language complaints were most of
     // that category's mass while having nothing to do with accommodation, and they are the
@@ -270,6 +299,7 @@ pub const CORE_SPINE: &[Category] = &[
             "Whether a language exists and how well it reads belongs here. Subtitles as an \
              accommodation, in a language that is already supported, belong to accessibility.",
         ),
+        alone: false,
     },
 ];
 
@@ -306,6 +336,13 @@ pub fn labelling_brief() -> String {
         );
         if let Some(rule) = category.boundary {
             let _ = writeln!(brief, "  RULE: {rule}");
+        }
+        if category.alone {
+            let _ = writeln!(
+                brief,
+                "  ONLY: this is the whole label. A review here covers nothing else, so it \
+                 never takes a second category."
+            );
         }
         brief.push('\n');
     }
