@@ -198,7 +198,12 @@ fn overview(out: &mut String, report: &Report) {
             .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(index, _)| index);
 
-        let _ = write!(out, "<tr><th scope=\"row\">{}</th>", escape(label));
+        let _ = write!(
+            out,
+            "<tr data-name=\"{}\"><th scope=\"row\">{}</th>",
+            escape(&label.to_lowercase()),
+            escape(label)
+        );
         for (index, rate) in rates.iter().enumerate() {
             match *rate {
                 Some(rate) => {
@@ -505,7 +510,11 @@ fn category_row(out: &mut String, app: &AppReport, category: &CategoryCount, wid
     let has_examples = !examples.is_empty();
     let panel = format!("panel-{}-{}", app.app_id(), category.id);
 
-    let _ = write!(out, "<tr class=\"row\"");
+    let _ = write!(
+        out,
+        "<tr class=\"row\" data-name=\"{}\"",
+        escape(&category.label.to_lowercase())
+    );
     if has_examples {
         let _ = write!(
             out,
@@ -1442,6 +1451,28 @@ mod tests {
         let mut none = String::new();
         how_well_this_row_is_known(&mut none, &scored(0, 0));
         assert!(none.contains("nothing here is measured"), "{none}");
+    }
+
+    /// The filter matches on this and nothing else, so a row without it silently stops
+    /// being findable and a panel with it would be filtered away from its own row.
+    #[test]
+    fn every_row_a_reader_can_filter_carries_the_name_being_matched() {
+        let page = render(&sample_report("ordinary text"));
+
+        assert!(page.contains("data-name=\"bugs and crashes\""));
+        assert!(page.contains("data-name=\"performance\""));
+        assert_eq!(
+            page.matches("data-name=").count(),
+            2,
+            "one game has two categories and no other row should claim a name"
+        );
+        for panel in page.split("<tr class=\"panel\"").skip(1) {
+            let opening = panel.split_once('>').expect("an unclosed row").0;
+            assert!(
+                !opening.contains("data-name"),
+                "a panel named itself: {opening}"
+            );
+        }
     }
 
     #[test]

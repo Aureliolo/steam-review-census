@@ -108,15 +108,17 @@
         return;
       }
       Array.prototype.forEach.call(body.rows, function (row) {
-        if (row.classList.contains('panel')) {
+        // The rendered cell carries a warning mark and text meant only for a screen
+        // reader, so the name is read off the row rather than out of it.
+        var name = row.getAttribute('data-name');
+        if (name === null) {
           return;
         }
-        var head = row.cells[0];
         var next = row.nextElementSibling;
         out.push({
           row: row,
           panel: next && next.classList.contains('panel') ? next : null,
-          name: head ? head.textContent.toLowerCase() : ''
+          name: name
         });
       });
     });
