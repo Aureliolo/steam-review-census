@@ -618,8 +618,10 @@ fn categories(out: &mut String, app: &AppReport) {
          is weak evidence rather than proof of absence. <strong>Recommended</strong> is the \
          share of the reviews raising a category that still recommended the game, against \
          this game's own baseline, marked warm or cold only where the gap is wider than the \
-         number of reviews behind it can explain. Select a row to read the reviews behind \
-         it.</p>\n",
+         number of reviews behind it can explain. Select a row to read the reviews behind it: \
+         a couple from the top of the pile where the category reaches it, and the rest drawn \
+         at random from everything filed there, so they are evidence rather than a \
+         selection.</p>\n",
     );
     // Otherwise the two identical columns on those rows look like a mistake.
     let alone: Vec<&str> = CORE_SPINE
