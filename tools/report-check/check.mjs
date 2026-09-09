@@ -1,9 +1,14 @@
-// Drives a rendered report in headless Chrome and fails if its scripting does not do what
-// the page promises.
+// Drives a rendered report in headless Chrome and fails if it does not do what it promises.
 //
-// The report is one self-contained file whose folding, filtering, sorting and deep links are
-// the only part of this tool no Rust test can reach: they exist only once a browser has run
-// them. Everything checked here is a promise the page makes in its own prose.
+// The report is one self-contained file whose folding, filtering, sorting and deep links
+// exist only once a browser has run them, and whose rendering only exists once a browser has
+// laid it out: a stylesheet rule can flatten a chart, put half of every review off the side
+// of a phone or turn a printed page into blocks of ink while the markup stays exactly right.
+// Both are the part of this tool no Rust test can reach.
+//
+// The same page is driven four times: on a desktop window, at 420 pixels, under print media
+// with the machine asking for a dark screen, and again with the script cut out, which is what
+// a reader with scripting off is served. Everything checked is a promise the page makes.
 //
 //   cargo run -p census-core --example sample-report -- page.html
 //   node tools/report-check/check.mjs page.html
