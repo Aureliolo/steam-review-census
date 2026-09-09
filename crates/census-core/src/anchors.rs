@@ -108,7 +108,10 @@ pub struct Anchor {
     pub id: String,
     /// Labelled examples behind this anchor, secondary mentions counted fractionally.
     pub evidence: f32,
-    /// How far the anchor moved from its written description towards those examples, 0 to 1.
+    /// How far the blend moved from the written description towards those examples, 0 to 1.
+    ///
+    /// The blend only. Repulsion moves the anchor again afterwards, away from reviews that
+    /// belong to somebody else, and that is a different direction from either end of this.
     pub learned_share: f32,
     /// This anchor's mean similarity to the corpus, subtracted before categories compete.
     /// Zero when the set has not been calibrated.
