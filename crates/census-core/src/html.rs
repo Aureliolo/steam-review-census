@@ -13,7 +13,7 @@
 use std::fmt::Write as _;
 
 use crate::{
-    report::{AppReport, CategoryCount, Example, Report},
+    report::{AppReport, CategoryCount, Example, Report, coverage},
     taxonomy::CORE_SPINE,
 };
 
@@ -1488,18 +1488,6 @@ fn nothing(reason: &str) -> String {
     )
 }
 
-/// A share of Valve's own total, which is the one figure a reader is entitled to read as a
-/// claim of completeness.
-///
-/// Rounding is a courtesy everywhere else on the page and a lie here: a capture that reached
-/// all but a hundred of a million reviews is not complete, and printing 100.0% says it is.
-fn coverage(share: f64) -> String {
-    if share < 1.0 && (share * 100.0).round() >= 100.0 {
-        return ">99.9%".to_owned();
-    }
-    percent(share)
-}
-
 fn percent(rate: f64) -> String {
     if rate > 0.0 && rate < 0.001 {
         return "<0.1%".to_owned();
@@ -1930,25 +1918,6 @@ mod tests {
         page.match_indices(opening)
             .filter_map(|(at, _)| page[at + opening.len()..].split_once('"').map(|(v, _)| v))
             .collect()
-    }
-
-    /// The one number on the page a reader may read as a claim of completeness, so it is
-    /// the one number that must never be rounded into one.
-    #[test]
-    fn a_capture_that_missed_something_never_claims_all_of_it() {
-        assert_eq!(coverage(1.0), "100.0%");
-        assert_eq!(
-            coverage(0.999_9),
-            ">99.9%",
-            "a hundred reviews short of a million"
-        );
-        assert_eq!(coverage(0.999_949), ">99.9%");
-        assert_eq!(
-            coverage(0.994),
-            "99.4%",
-            "an honest figure needs no hedging"
-        );
-        assert_eq!(coverage(0.5), "50.0%");
     }
 
     /// Every review raising a category recommending the game is 100% whether that is eight

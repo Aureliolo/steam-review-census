@@ -28,6 +28,20 @@ const FROM_THE_TOP: usize = 2;
 /// quote its bias. One in ten, so a fifty-review top needs five of them.
 const HEADLINE_TOP_SHARE: u64 = 10;
 
+/// A share of Valve's own total, which is the one figure anywhere in this tool that a reader
+/// is entitled to read as a claim of completeness.
+///
+/// Rounding is a courtesy everywhere else and a lie here: a capture that reached all but a
+/// hundred of a million reviews is not complete, and printing 100% says it is. Shared with
+/// the crawler's own summary, which was rounding the same figure up in the same way.
+#[must_use]
+pub fn coverage(share: f64) -> String {
+    if share < 1.0 && (share * 10_000.0).round() >= 10_000.0 {
+        return ">99.99%".to_owned();
+    }
+    format!("{:.2}%", share * 100.0)
+}
+
 #[derive(Debug, Clone)]
 pub struct ReportOptions {
     pub out_dir: PathBuf,
@@ -482,6 +496,26 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one number this tool reports that a reader may read as a claim of completeness,
+    /// so it is the one number that must never be rounded into one.
+    #[test]
+    fn a_capture_that_missed_something_never_claims_all_of_it() {
+        assert_eq!(coverage(1.0), "100.00%");
+        assert_eq!(
+            coverage(0.999_99),
+            ">99.99%",
+            "ten reviews short of a million"
+        );
+        assert_eq!(coverage(0.999_995), ">99.99%");
+        assert_eq!(
+            coverage(0.999_91),
+            "99.99%",
+            "an honest figure needs no hedging"
+        );
+        assert_eq!(coverage(0.994), "99.40%");
+        assert_eq!(coverage(0.5), "50.00%");
+    }
 
     fn app(top_helpful: u64, categories: Vec<(&str, u64, u64)>) -> AppReport {
         AppReport {

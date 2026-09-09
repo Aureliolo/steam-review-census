@@ -1646,10 +1646,10 @@ fn print_report(report: &CrawlReport) {
         "  coverage     {}",
         report.coverage().map_or_else(
             || "not applicable".to_owned(),
-            |c| format!("{:.2}%", c * 100.0)
+            census_core::report::coverage
         )
     );
-    println!("  elapsed      {:.1}s", report.elapsed.as_secs_f64());
+    println!("  elapsed      {}", elapsed(report.elapsed));
     println!("  capture      {}", report.dir.display());
     if report.shards_restarted > 0 {
         println!(
@@ -1704,6 +1704,23 @@ fn print_slices(slices: &[census_core::Slice], measure: &str) {
             slice.compared
         );
         println!("{}", row.trim_end());
+    }
+}
+
+/// A duration at the length a real run takes.
+///
+/// A million-review crawl is several hours, and "11455.3s" is a number the reader has to do
+/// arithmetic on before it means anything.
+fn elapsed(taken: std::time::Duration) -> String {
+    let seconds = taken.as_secs();
+    if seconds < 60 {
+        return format!("{:.1}s", taken.as_secs_f64());
+    }
+    let (hours, minutes, seconds) = (seconds / 3600, (seconds % 3600) / 60, seconds % 60);
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m {seconds:02}s")
+    } else {
+        format!("{minutes}m {seconds:02}s")
     }
 }
 
