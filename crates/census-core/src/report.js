@@ -54,10 +54,18 @@
       return 0;
     }
     var raw = cell.getAttribute('data-value');
-    if (raw === null) {
-      return cell.textContent.trim().toLowerCase();
+    if (raw !== null) {
+      return parseFloat(raw);
     }
-    return parseFloat(raw);
+    // The name cell also holds a warning mark and a sentence meant only for a screen reader,
+    // so the name is taken off the row, which carries it exactly.
+    if (index === 0) {
+      var name = row.getAttribute('data-name');
+      if (name !== null) {
+        return name;
+      }
+    }
+    return cell.textContent.trim().toLowerCase();
   }
 
   function sortable(table) {
@@ -262,6 +270,12 @@
       // Listened for on the row, so the whole row stays a target and the button's own
       // keyboard activation arrives here as one click rather than two.
       row.addEventListener('click', function () {
+        // Reading a table of rates means selecting numbers out of it, and a drag that ends
+        // inside a row is somebody copying a figure rather than asking to fold it away.
+        var selection = window.getSelection();
+        if (selection && String(selection).length > 0) {
+          return;
+        }
         var open = button.getAttribute('aria-expanded') === 'true';
         button.setAttribute('aria-expanded', String(!open));
         panel.hidden = open;

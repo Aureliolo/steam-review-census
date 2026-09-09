@@ -81,9 +81,11 @@ fn page_header(out: &mut String, report: &Report) {
         "<p class=\"lede\">What every reviewer said, counted, against what the loudest \
          handful said.</p>\n",
     );
+    // Named for the state it turns on rather than for the thing it changes: a control called
+    // "Theme" announced as pressed or not pressed says nothing about which theme that is.
     out.push_str(
         "<button class=\"theme\" type=\"button\" data-theme-toggle aria-pressed=\"false\">\
-         <span aria-hidden=\"true\">◐</span> Theme</button>\n",
+         <span aria-hidden=\"true\">◐</span> Dark theme</button>\n",
     );
     filter(out, report);
     out.push_str("</div>\n</header>\n");

@@ -166,6 +166,16 @@ const PROBE = `(function () {
     row.click();
     check('a row cannot be closed again', panel.hidden === true);
 
+    // Selecting a figure out of the table must not fold the row it was read from.
+    var selection = window.getSelection();
+    var range = document.createRange();
+    range.selectNodeContents(row);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    row.click();
+    check('copying a number out of a row folds it away', panel.hidden === true);
+    selection.removeAllRanges();
+
     // Reaching the control by keyboard has to open it exactly once.
     button.focus();
     check('the control cannot be reached by keyboard', document.activeElement === button);
@@ -196,6 +206,20 @@ const PROBE = `(function () {
       return i === 0 || values[i - 1] >= v;
     }));
     check('a sorted column does not say which way', button.parentNode.getAttribute('aria-sort') === 'descending');
+
+    // The name cell also holds a warning mark and a sentence for screen readers, so sorting
+    // by what is written in it is not the same as sorting by the category's name.
+    var byName = table.querySelector('thead th:not(.num) button.sort');
+    if (byName) {
+      byName.click();
+      var names = [];
+      Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
+        if (r.classList.contains('row')) { names.push(r.getAttribute('data-name')); }
+      });
+      check('sorting by category does not sort by category name', names.every(function (n, i) {
+        return i === 0 || names[i - 1] <= n;
+      }));
+    }
   }
 
   // A bar in the chart is a bar because its height is the number it stands for, and height on
