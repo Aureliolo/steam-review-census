@@ -1356,7 +1356,6 @@ fn print_fit(
     println!("  smoothing    {}", outcome.params.smoothing);
     println!("  secondary    {}", outcome.params.secondary_weight);
     println!("  margin       {}", outcome.params.mention_margin);
-    println!("  repulsion    {}", outcome.params.repulsion);
     println!(
         "  scoring      {}",
         match outcome.params.scoring {
@@ -1424,9 +1423,8 @@ fn print_fit(
     }
     println!(
         "\nEvidence is labelled reviews behind an anchor, secondary mentions counted at {}.\n\
-         Learned share is how far the blend moved off its written description, before any\n\
-         repulsion moved it again; a category with no labels keeps its description exactly\n\
-         and is unchanged by fitting.",
+         Learned share is how far the anchor moved off its written description; a category\n\
+         with no labels keeps its description exactly and is unchanged by fitting.",
         outcome.params.secondary_weight
     );
     println!(

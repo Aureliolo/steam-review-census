@@ -254,7 +254,6 @@ fn write_anchors(path: &Path) {
             secondary_weight: 0.5,
             mention_margin: 0.05,
             scoring: census_core::anchors::Scoring::Raw,
-            repulsion: 0.0,
         }),
         centre: None,
         categories: CORE_SPINE

@@ -87,10 +87,10 @@ every category counts the same however rare it is, and the fit reports what the 
 would have scored on the same held-back reviews, so the decision is a measurement rather than
 an opinion.
 
-Some categories are defined by what a review does *not* say, and a prototype built only from
-its own examples cannot tell those apart: a bare verdict and a joke are both short and about
-nothing in particular. So each anchor is also pushed away from the reviews it is measured to
-take off other categories, by an amount the fit chooses and can choose to be nothing.
+Some categories are defined by what a review does *not* say, and two of them cannot share a
+review with anything: a bare verdict and a review that says nothing about the game are both
+claims that no aspect was named. The taxonomy says so and the classifier is held to it, so it
+can never report a review as naming an aspect and naming none.
 
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,

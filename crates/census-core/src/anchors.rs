@@ -18,6 +18,14 @@
 //! five is mostly its description nudged towards them, and a category with none is its
 //! description unchanged. That makes fitting a strict improvement on the descriptions rather
 //! than a replacement that can regress the long tail.
+//!
+//! Each anchor is a prototype of its own examples and nothing else. Fitting them against
+//! each other instead is the obvious next idea and was tried: pushing each anchor away from
+//! the reviews it takes off its neighbours, by an amount the search chose. Measured on
+//! 2026-09-09 it bought a point on the six games it could see and cost more than two on the
+//! game it could not, 50.8% to 48.5% leave-one-game-out. Six reference sets are not enough
+//! to fit a category against its neighbours without learning those six games' neighbours,
+//! and the anchors that ship are for games nobody has labelled.
 
 use std::{collections::HashMap, path::Path};
 
@@ -58,14 +66,6 @@ const SECONDARY_GRID: &[f32] = &[0.0, 0.25, 0.5, 1.0];
 /// anchors change the scale of the similarity gaps the margin is measured in.
 const MARGIN_GRID: &[f32] = &[0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.06];
 
-/// How hard an anchor is pushed away from the reviews it wrongly attracts. Zero is in the
-/// grid, so the search can decline the whole idea rather than being made to use some of it.
-///
-/// Measured on 2026-09-09 across the six reference sets under gte-multilingual-base: the
-/// search picks 0.1, and the 600 held-back reviews go from 54.2% to 55.2% on the main
-/// subject and 0.498 to 0.516 on mention macro F1.
-const REPULSION_GRID: &[f32] = &[0.0, 0.1, 0.2, 0.35, 0.5];
-
 /// How the anchors were blended out of descriptions and labelled reviews.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FitParams {
@@ -75,10 +75,6 @@ pub struct FitParams {
     pub mention_margin: f32,
     /// What the corpus mean is used for before categories compete. See [`Scoring`].
     pub scoring: Scoring,
-    /// How far each anchor is moved away from the reviews it takes off other categories.
-    /// Zero leaves every anchor a pure prototype of its own examples.
-    #[serde(default)]
-    pub repulsion: f32,
 }
 
 impl Default for FitParams {
@@ -88,7 +84,6 @@ impl Default for FitParams {
             secondary_weight: DEFAULT_SECONDARY_WEIGHT,
             mention_margin: crate::classify::DEFAULT_MENTION_MARGIN,
             scoring: Scoring::Bias,
-            repulsion: 0.0,
         }
     }
 }
@@ -218,63 +213,13 @@ impl Anchors {
             })
             .collect();
 
-        let mut fitted = Self {
+        Self {
             spine_version: CORE_SPINE_VERSION.to_owned(),
             model: self.model.clone(),
             fitted_from: app_ids.to_vec(),
             params: Some(params),
             centre: None,
             categories,
-        };
-        fitted.push_away(examples, params.repulsion);
-        fitted
-    }
-
-    /// Moves each anchor away from the reviews it is currently taking off other categories.
-    ///
-    /// Some categories are defined by what a review does *not* say. A bare verdict and a
-    /// joke are both short and about nothing in particular, and a prototype built only from
-    /// its own examples cannot tell them apart, because what separates them is what each one
-    /// is not. Rocchio's negative feedback: subtract the mean of the reviews this anchor
-    /// wrongly attracts, so the part of the space the two share stops belonging to either.
-    ///
-    /// A review whose predicted category is one of its own secondary labels is not attracted
-    /// wrongly. Pushing away from those would teach the anchors to miss real mentions, which
-    /// is the failure this whole fit exists to avoid.
-    ///
-    /// Which reviews an anchor attracts is read off plain similarity, before any of the
-    /// treatments in [`Scoring`]. This is about where an anchor sits, and those shift what
-    /// its scores are compared against afterwards; the offsets are taken from the vectors
-    /// this leaves behind, so nothing downstream is reading a stale one.
-    fn push_away(&mut self, examples: &[Example], weight: f32) {
-        if weight <= 0.0 || examples.is_empty() {
-            return;
-        }
-        let mut attracted = vec![vec![0.0_f32; self.dimensions()]; CORE_SPINE.len()];
-        let mut counts = vec![0_u32; CORE_SPINE.len()];
-        for example in examples {
-            let sims = self.similarities(&example.vector);
-            let (primary, _) = crate::classify::assign(&sims, 0.0);
-            if primary == example.primary || example.secondary.contains(&primary) {
-                continue;
-            }
-            accumulate(&mut attracted[primary], &example.vector, 1.0);
-            counts[primary] += 1;
-        }
-
-        for (slot, anchor) in self.categories.iter_mut().enumerate() {
-            if counts[slot] == 0 {
-                continue;
-            }
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "reference sets are a few hundred reviews"
-            )]
-            let scale = weight / counts[slot] as f32;
-            for (value, sum) in anchor.vector.iter_mut().zip(&attracted[slot]) {
-                *value -= sum * scale;
-            }
-            normalise(&mut anchor.vector);
         }
     }
 
@@ -612,21 +557,18 @@ pub fn search(
     for &smoothing in SMOOTHING_GRID {
         for &secondary_weight in SECONDARY_GRID {
             for scoring in calibration.candidates() {
-                for &repulsion in REPULSION_GRID {
-                    let found = best_of(
-                        FitParams {
-                            smoothing,
-                            secondary_weight,
-                            mention_margin: margins[0],
-                            scoring,
-                            repulsion,
-                        },
-                        margins,
-                        objective,
-                    );
-                    if found.0 > best.0 {
-                        best = found;
-                    }
+                let found = best_of(
+                    FitParams {
+                        smoothing,
+                        secondary_weight,
+                        mention_margin: margins[0],
+                        scoring,
+                    },
+                    margins,
+                    objective,
+                );
+                if found.0 > best.0 {
+                    best = found;
                 }
             }
         }
@@ -691,11 +633,10 @@ pub enum Objective {
 /// examples out in turn gives every fold nearly the same class balance, which random
 /// assignment would not at these counts: several categories have five examples in total.
 ///
-/// Nothing about an anchor depends on the margin: it decides which of the finished vectors a
-/// review is judged to be near enough to, and even the repulsion pass reads the nearest one
-/// with no margin at all. Fitting the folds once and scoring each margin against the same
-/// vectors is the same measurement for a seventh of the arithmetic, which is most of what a
-/// search spends its time on.
+/// Nothing about an anchor depends on the margin, which only decides which of the finished
+/// vectors a review is judged to be near enough to. Fitting the folds once and scoring every
+/// margin against the same vectors is the same measurement for a seventh of the arithmetic,
+/// which is most of what a search spends its time on.
 fn across_margins(
     descriptions: &Anchors,
     examples: &[Example],
@@ -1168,118 +1109,6 @@ mod tests {
             calibrated.centre.is_none(),
             "calibrating needs nothing of the corpus at scoring time"
         );
-    }
-
-    /// Two categories defined by what a review does not say end up on top of each other, and
-    /// the only thing that separates them is the reviews each keeps taking off the other.
-    #[test]
-    fn an_anchor_is_pushed_off_the_reviews_it_takes_from_its_neighbour() {
-        let (mine, theirs) = (DIM - 2, DIM - 1);
-        let plane = |x: f32, y: f32| {
-            let mut vector = vec![0.0_f32; DIM];
-            vector[mine] = x;
-            vector[theirs] = y;
-            normalise(&mut vector);
-            vector
-        };
-
-        let mut descriptions = descriptions();
-        descriptions.categories[1].vector = plane(1.0, 0.0);
-        descriptions.categories[2].vector = plane(0.0, 1.0);
-        // Every one of these belongs to category 1 and leans just far enough the other way
-        // that category 2 takes all of them.
-        let examples: Vec<Example> = (0..20_u8)
-            .map(|index| Example {
-                vector: plane(0.5, 0.6 + f32::from(index) * 0.001),
-                primary: 1,
-                secondary: vec![],
-            })
-            .collect();
-
-        let taken = |set: &Anchors| {
-            examples
-                .iter()
-                .filter(|example| {
-                    crate::classify::assign(&set.similarities(&example.vector), 0.0).0 == 2
-                })
-                .count()
-        };
-
-        let pure = descriptions.fit(
-            &examples,
-            &[],
-            FitParams {
-                smoothing: f32::INFINITY,
-                repulsion: 0.0,
-                ..FitParams::default()
-            },
-        );
-        let pushed = descriptions.fit(
-            &examples,
-            &[],
-            FitParams {
-                smoothing: f32::INFINITY,
-                repulsion: 0.35,
-                ..FitParams::default()
-            },
-        );
-
-        assert!(
-            taken(&pure) > 0,
-            "the fixture does not set up the confusion"
-        );
-        assert!(
-            taken(&pushed) < taken(&pure),
-            "pushing category 2 off the reviews it steals changed nothing: {} then {}",
-            taken(&pure),
-            taken(&pushed)
-        );
-        assert!(
-            pushed
-                .categories
-                .iter()
-                .all(|a| (a.vector.iter().map(|v| v * v).sum::<f32>() - 1.0).abs() < 1e-4),
-            "anchors must stay unit length or the margin means nothing"
-        );
-    }
-
-    /// The whole point of the mention margin is that a review can raise several subjects, so
-    /// a category must never be pushed away from a review that genuinely mentions it.
-    #[test]
-    fn a_review_that_does_mention_a_category_never_pushes_it_away() {
-        let examples: Vec<Example> = (0..10)
-            .map(|index| Example {
-                vector: unit(index % 3),
-                primary: 1,
-                // Every category the anchors might reasonably pick is a real mention here.
-                secondary: (0..CORE_SPINE.len()).filter(|slot| *slot != 1).collect(),
-            })
-            .collect();
-        let params = FitParams {
-            repulsion: 0.5,
-            ..FitParams::default()
-        };
-
-        let pushed = descriptions().fit(&examples, &[], params);
-        let still = descriptions().fit(
-            &examples,
-            &[],
-            FitParams {
-                repulsion: 0.0,
-                ..params
-            },
-        );
-
-        for (a, b) in pushed.categories.iter().zip(&still.categories) {
-            assert!(
-                a.vector
-                    .iter()
-                    .zip(&b.vector)
-                    .all(|(x, y)| (x - y).abs() < 1e-6),
-                "{} moved away from reviews that mention it",
-                a.id
-            );
-        }
     }
 
     #[test]
