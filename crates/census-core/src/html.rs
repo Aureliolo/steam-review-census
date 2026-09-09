@@ -127,7 +127,7 @@ fn page_header(out: &mut String, report: &Report) {
 /// Narrows every table on the page to the categories whose name matches.
 ///
 /// Hidden in the markup rather than by a stylesheet rule, so a reader without scripting is
-/// never offered a box that does nothing. Twenty-one categories across several games is more
+/// never offered a box that does nothing. Two dozen categories across dozens of games is more
 /// than anyone can scan for one subject.
 fn filter(out: &mut String, report: &Report) {
     // Written once and handed to the script as well, so clearing the box puts back the
@@ -210,9 +210,9 @@ fn overview(out: &mut String, report: &Report) {
 
 /// The corpora themselves, before the subjects in them.
 ///
-/// The section compared what six games talk about and never the six games, so how big each
-/// one is, how warmly it is reviewed and how well the classifier does on it were six visits
-/// away from each other.
+/// The section compared what the games talk about and never the games themselves, so how big
+/// each one is, how warmly it is reviewed and how well the classifier does on it were one
+/// visit per game away from each other.
 fn corpora(out: &mut String, report: &Report) {
     out.push_str("<div class=\"scroll\">\n<table class=\"corpora\">\n<thead><tr>");
     heading(out, "Game", false);
@@ -2396,8 +2396,8 @@ mod tests {
         );
     }
 
-    /// A section comparing what six games talk about that never compares the six games
-    /// leaves how big each one is and how well it is measured six visits apart.
+    /// A section comparing what the games talk about that never compares the games
+    /// themselves leaves how big each one is and how well it is measured a visit apart.
     #[test]
     fn the_cross_game_section_compares_the_corpora_and_not_only_the_subjects() {
         let mut report = two_games();
