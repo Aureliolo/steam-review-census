@@ -202,6 +202,7 @@ fn overview(out: &mut String, report: &Report) {
     );
 
     matrix(out, report);
+    most_overstated(out, report);
     widest_apart(out, report);
     pooled_agreement(out, report);
     out.push_str("</div>\n</section>\n");
@@ -377,6 +378,32 @@ fn belongs_to(rates: &[Option<f64>]) -> Option<usize> {
         .enumerate()
         .all(|(index, rate)| index == best || rate.is_none_or(|rate| percent(rate) != leader))
         .then_some(best)
+}
+
+/// The claim the whole tool exists to make, over every game at once.
+///
+/// Each game's section opens with the same sentence about that game, and a single corpus can
+/// always be answered with "that is just that game". Made of every game in the report, it
+/// cannot be, and the reader is told how many corpora it took.
+fn most_overstated(out: &mut String, report: &Report) {
+    let Some((category, factor)) = report.worst_bias() else {
+        return;
+    };
+    let Some(overall) = category.rate() else {
+        return;
+    };
+    let _ = writeln!(
+        out,
+        "<p class=\"headline\">Across these {} games the top of the pile overstates \
+         <strong>{}</strong> by <strong>{factor:.1}\u{d7}</strong>: {} of the {} reviews Steam \
+         ranks most helpful raise it, against {} of all {}.</p>",
+        report.apps.len(),
+        escape(&category.label.to_lowercase()),
+        thousands(category.top_mentions),
+        thousands(category.top_reviews),
+        percent(overall),
+        thousands(category.reviews)
+    );
 }
 
 /// The one finding only a table of several games can carry.
@@ -2170,6 +2197,45 @@ mod tests {
         assert!(
             !tied.contains("loudest"),
             "one review in a hundred thousand was drawn as a finding"
+        );
+    }
+
+    /// The claim this tool exists to make can always be answered with "that is just that
+    /// game" when it is made of one corpus. Made of every corpus in the report, it cannot be,
+    /// so the sentence has to be counted over all of them rather than read off the first.
+    #[test]
+    fn the_bias_claim_across_games_is_counted_over_all_of_them() {
+        let mut report = two_games();
+        let sentence = |page: &str| {
+            page.split_once("<p class=\"headline\">Across these ")
+                .expect("no cross-game bias claim")
+                .1
+                .split_once("</p>")
+                .expect("the claim never ends")
+                .0
+                .to_owned()
+        };
+
+        let claim = sentence(&render(&report));
+        assert!(
+            claim.contains(
+                "2 games the top of the pile overstates <strong>bugs and crashes</strong>"
+            ) && claim.contains("by <strong>1.5\u{d7}</strong>"),
+            "the pooled claim is not the one the pooled counts support: {claim}"
+        );
+        assert!(
+            claim.contains("60 of the 100 reviews Steam ranks most helpful")
+                && claim.contains("against 40.0% of all 2,000"),
+            "the claim is counted over one game rather than both: {claim}"
+        );
+
+        // A subject the second game's most-helpful reviews are full of and its corpus is not.
+        // Reading either game alone still names bugs; only pooling moves the claim.
+        report.apps[1].classification.categories[1].top_mention_count = 45;
+        let moved = sentence(&render(&report));
+        assert!(
+            moved.contains("<strong>performance</strong>"),
+            "a subject only the pooled counts find was not found: {moved}"
         );
     }
 

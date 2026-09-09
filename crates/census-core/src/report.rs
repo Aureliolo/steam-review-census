@@ -309,6 +309,101 @@ pub struct Report {
     pub generated_unix: i64,
 }
 
+/// One category counted over every game in a report at once.
+#[derive(Debug, Clone, Copy)]
+pub struct Pooled {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub top_mentions: u64,
+    pub top_reviews: u64,
+    pub mentions: u64,
+    pub reviews: u64,
+}
+
+impl Pooled {
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn rate(&self) -> Option<f64> {
+        (self.reviews > 0).then(|| self.mentions as f64 / self.reviews as f64)
+    }
+
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "the top of the pile is a few dozen reviews a game"
+    )]
+    pub fn top_rate(&self) -> Option<f64> {
+        (self.top_reviews > 0).then(|| self.top_mentions as f64 / self.top_reviews as f64)
+    }
+
+    #[must_use]
+    pub fn bias(&self) -> Option<f64> {
+        let overall = self.rate()?;
+        let top = self.top_rate()?;
+        (overall > 0.0).then_some(top / overall)
+    }
+}
+
+impl Report {
+    /// Every category counted over every game, so a rate is about the whole set of corpora.
+    #[must_use]
+    pub fn pooled(&self) -> Vec<Pooled> {
+        crate::CORE_SPINE
+            .iter()
+            .map(|category| {
+                let mut pooled = Pooled {
+                    id: category.id,
+                    label: category.label,
+                    top_mentions: 0,
+                    top_reviews: 0,
+                    mentions: 0,
+                    reviews: 0,
+                };
+                for app in &self.apps {
+                    // A game that never had this category counted still contributes its
+                    // reviews to the denominator: it is a game where nobody raised it, not a
+                    // game that was not asked.
+                    pooled.reviews += app.classification.reviews;
+                    pooled.top_reviews += app.classification.top_helpful;
+                    if let Some(count) = app
+                        .classification
+                        .categories
+                        .iter()
+                        .find(|c| c.id == category.id)
+                    {
+                        pooled.mentions += count.mention_count;
+                        pooled.top_mentions += count.top_mention_count;
+                    }
+                }
+                pooled
+            })
+            .collect()
+    }
+
+    /// The category the top of the pile overstates most, over every game at once.
+    ///
+    /// The same claim each game's own section opens with, and the one this tool exists to
+    /// make, except that a single corpus can always be answered with "that is just that
+    /// game". Made of every game in the report, it cannot be.
+    ///
+    /// The eligibility floor is the per-game one scaled to the pooled top of the pile: a
+    /// category raised by two of two thousand most-helpful reviews produces an enormous ratio
+    /// out of a count of two, and leading with that would be reporting noise as a finding.
+    #[must_use]
+    pub fn worst_bias(&self) -> Option<(Pooled, f64)> {
+        self.pooled()
+            .into_iter()
+            .filter(|c| {
+                c.mentions > 0 && c.top_mentions >= c.top_reviews.div_ceil(HEADLINE_TOP_SHARE)
+            })
+            .filter_map(|c| c.bias().map(|factor| (c, factor)))
+            .max_by(|(_, a), (_, b)| a.total_cmp(b))
+    }
+}
+
 /// Builds a report for every named app.
 ///
 /// # Errors
