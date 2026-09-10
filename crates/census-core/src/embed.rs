@@ -282,18 +282,19 @@ pub fn embed_corpus(
     out_dir: &Path,
     app_id: u32,
     batch_size: usize,
+    unit: crate::taxonomy::Unit,
     mut on_progress: impl FnMut(EmbedProgress),
 ) -> Result<EmbedReport> {
     let started = Instant::now();
     let snapshot = latest_snapshot(out_dir, app_id)?;
-    let (mut counts, reviews) = text_counts(&snapshot)?;
+    let (mut counts, reviews) = text_counts(&snapshot, unit)?;
     let unique_texts = counts.len() as u64;
 
-    let path = snapshot.join("embeddings.parquet");
+    let path = snapshot.join(vectors_file(unit));
     // Written aside and renamed at the end. An interrupted run used to leave an empty
     // embeddings.parquet behind, which reads as a finished artefact and fails confusingly
     // everywhere downstream; a partial file under its own name cannot be mistaken for one.
-    let partial = snapshot.join("embeddings.parquet.partial");
+    let partial = snapshot.join(format!("{}.partial", vectors_file(unit)));
     let schema = embedding_schema(embedder.dimensions());
     // A row group is buffered whole before it reaches the disk, and the default holds a
     // million rows, which for any corpus smaller than that is the entire file in memory. It
@@ -312,7 +313,7 @@ pub fn embed_corpus(
     let mut window: Vec<(String, u32)> = Vec::with_capacity(LENGTH_WINDOW);
     let mut written: u64 = 0;
 
-    for_each_review_text(&snapshot, |text| {
+    for_each_text(&snapshot, unit, |text| {
         // Removing rather than looking up means the second and later copies of a repeated
         // review find nothing and are skipped, and the map shrinks as the corpus is walked.
         let Some(seen) = counts.remove(&sha256_bytes(text)) else {
@@ -350,14 +351,15 @@ pub fn embed_corpus(
     // batch-invariant, so two corpora embedded at different batch sizes are not strictly
     // comparable, and a reader has no other way to find out.
     std::fs::write(
-        snapshot.join("embeddings.json"),
+        snapshot.join(vectors_sidecar(unit)),
         serde_json::to_vec_pretty(&serde_json::json!({
             "model": embedder.encoder().id(),
             "precision": embedder.precision().as_str(),
             "dimensions": embedder.dimensions(),
             "batch_size": batch_size,
             "device": embedder.device(),
-            "reviews": reviews,
+            "unit": if unit == crate::taxonomy::Unit::Claim { "claim" } else { "review" },
+            "texts": reviews,
             "unique_texts": unique_texts,
             "note": "Vectors from two encoders are not comparable and must never be mixed. \
                      Both float builds are batch-invariant, so batch size changes how long \
@@ -377,6 +379,22 @@ pub fn embed_corpus(
             .unwrap_or_default(),
         path,
     })
+}
+
+/// Where a unit's vectors live. Two files rather than one, because a corpus mid-migration
+/// holds both and a single name would make the older set look like the newer one.
+const fn vectors_file(unit: crate::taxonomy::Unit) -> &'static str {
+    match unit {
+        crate::taxonomy::Unit::Review => "embeddings.parquet",
+        crate::taxonomy::Unit::Claim => "claim-embeddings.parquet",
+    }
+}
+
+const fn vectors_sidecar(unit: crate::taxonomy::Unit) -> &'static str {
+    match unit {
+        crate::taxonomy::Unit::Review => "embeddings.json",
+        crate::taxonomy::Unit::Claim => "claim-embeddings.json",
+    }
 }
 
 /// Memory a Parquet row group is allowed to occupy before it is flushed.
@@ -485,7 +503,23 @@ fn batch_to_record(
     Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
 }
 
-/// Distinct review texts and how many reviews carry each, plus the total review count.
+/// Visits every text to be embedded, one at a time: whole reviews, or the points they make.
+fn for_each_text(
+    snapshot: &Path,
+    unit: crate::taxonomy::Unit,
+    mut visit: impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    for_each_review_text(snapshot, |text| match unit {
+        crate::taxonomy::Unit::Review => visit(text),
+        crate::taxonomy::Unit::Claim => {
+            for claim in crate::claims::split(text) {
+                visit(claim)?;
+            }
+            Ok(())
+        }
+    })
+}
+
 /// Visits the text of every review in a snapshot, one at a time.
 fn for_each_review_text(snapshot: &Path, mut visit: impl FnMut(&str) -> Result<()>) -> Result<()> {
     let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
@@ -536,11 +570,14 @@ fn for_each_review_text(snapshot: &Path, mut visit: impl FnMut(&str) -> Result<(
 /// a few hundred characters is well over a gigabyte, and embedding Cyberpunk 2077 was killed
 /// by the operating system for exactly that. A hash is thirty-two bytes whatever the review
 /// says, and the text is read back from the capture when it is actually needed.
-fn text_counts(snapshot: &Path) -> Result<(HashMap<[u8; 32], u32>, u64)> {
+fn text_counts(
+    snapshot: &Path,
+    unit: crate::taxonomy::Unit,
+) -> Result<(HashMap<[u8; 32], u32>, u64)> {
     let mut counts: HashMap<[u8; 32], u32> = HashMap::new();
     let mut reviews = 0_u64;
 
-    for_each_review_text(snapshot, |text| {
+    for_each_text(snapshot, unit, |text| {
         reviews += 1;
         *counts.entry(sha256_bytes(text)).or_insert(0) += 1;
         Ok(())

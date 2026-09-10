@@ -56,41 +56,46 @@ Where a figure is not a mention rate, it is labelled. Two others appear:
 No percentage is ever shown without saying which of the three it is. The point of counting
 everything is lost if the denominator is ambiguous.
 
-### One category, and only more when a review earns it
+### The unit is a claim, not a review
 
-Every review gets a single primary category. That keeps the primary shares clean: they add up
-to the number of reviews, and the figure means what it appears to mean.
+A review is not one opinion. "Looks incredible, runs like a slideshow, and the story is the
+best in the series" is three, about three different things, and a single vector for the whole
+review is their average: a point that belongs to none of them. So every review is first split
+into the separate points it makes, and a subject belongs to a point rather than to a review.
 
-A review that genuinely covers more than one thing also records the other topics it touches,
-so "great simulation, awful interface" is not filed under one of those and stripped of the
-other. A review about a single thing gets a single category and nothing else. Secondary
-topics are recorded when they exist, never invented to fill a slot.
+That is what keeps the arithmetic honest at both ends. A review that makes twelve points
+contributes to twelve subjects instead of being flattened into one. A review that makes one
+point can carry exactly one subject, which is the part that matters more than it sounds: a
+two-word review cannot be filed under four topics, because it does not contain four.
 
-### Categories are built from reviews, not from definitions
+A review's subjects are the union of its claims' subjects, and it still counts once towards
+each of them. The headline is a mention rate, a share of reviews, and it stays that way
+deliberately: counting claims instead would let whoever writes most set the numbers, which is
+the same distortion the tool exists to expose at the top of the pile.
 
-A category has to be described to a machine before it can be counted. Describing it is not
-enough: a written definition of a topic is prose *about* that topic, and reviews about it are
-not. "amauzing" is nowhere near a paragraph on audio mixing.
+### What reads a claim
 
-So each category is anchored by the reviews that belong to it, taken from labelled reference
-sets, and falls back to its written description only in proportion to how few of those exist.
-A category with plenty of labelled examples is defined by them; one with none is defined by
-its description alone and behaves exactly as it would without any of this. Fitting can
-therefore improve a category but never leaves one worse off for lack of data.
+A model trained on labelled claims, and nothing else. It says which subject a claim is about,
+whether it is praise, a complaint or neither, and how sure it is. Below a calibrated threshold
+it says nothing at all, and those claims are reported as unclassified rather than filed under
+whichever category happened to be nearest.
 
-A review usually raises several subjects and is mostly about one of them, and those are two
-different questions to be good at. Fitting for the second one alone is a trap: the setting
-that best identifies a review's main subject is to ignore secondary subjects entirely, which
-leaves every category that is usually somebody's *second* subject, graphics and audio and
-price among them, with almost nothing to be built from. Anchors are therefore fitted so that
-every category counts the same however rare it is, and the fit reports what the other choice
-would have scored on the same held-back reviews, so the decision is a measurement rather than
-an opinion.
+That last sentence is the whole of what changed. The previous classifier compared a review to
+twenty-four category prototypes and kept the nearest ones. A prototype comparison has no way
+to express "this is about nothing", so every string got a subject: a review reading "gfg" was
+filed under graphics and art, and one reading "this game is a lot of fun" under community and
+players. Those are not edge cases. Steam is full of two-word reviews, and each one of them was
+adding a fraction of a percent to a rate that was supposed to be a fact about players.
 
-Some categories are defined by what a review does *not* say, and two of them cannot share a
-review with anything: a bare verdict and a review that says nothing about the game are both
-claims that no aspect was named. The taxonomy says so and the classifier is held to it, so it
-can never report a review as naming an aspect and naming none.
+The model is fine-tuned from a multilingual encoder and shipped as an ONNX graph, so it runs
+on the same local runtime as everything else. No API key, no network, no account. Which
+encoder it starts from is decided by measurement across candidates on identical labels and an
+identical split, judged on accuracy and throughput together, because a model that is two points
+better and three times slower is not better over thirteen million claims.
+
+Some categories are defined by what a claim does *not* say. A bare verdict and a claim that
+says nothing about the game are both statements that no aspect was named, and on a corpus of
+real reviews they are the commonest labels there are.
 
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,
@@ -108,15 +113,24 @@ labelling against the previous one.
 ### Depth is how closely each review is read
 
 Every review is analysed. Depth does not decide how many are included, it decides how finely
-each one is taken apart:
+each one is taken apart. **Deep** is the default and is described above: a review becomes the
+points it makes. **Shallow** treats the whole review as one point, which is faster and
+systematically understates anyone who wrote more than a sentence. Neither setting drops a
+review.
 
-- **Shallow** treats a review as one opinion about one thing.
-- **Deep** breaks it into the separate points it makes, so a long review contributes several
-  distinct opinions instead of one blurred average of them.
+### Praised, criticised, or both
 
-Deep reading is the default, because it is also what makes a mention rate correct: a review
-counts towards a category when any of its points belongs there. Shallow is faster and
-systematically understates multi-topic reviews. Neither setting drops a review.
+A thumb is attached to a review, not to a subject. Somebody who loves the art and despairs of
+the framerate has one thumb and two opposite opinions, and crediting both subjects with the
+same verdict is a straightforward misreading of what they wrote.
+
+So polarity belongs to the claim, and is reported per review per subject: of the reviews that
+discuss performance, the share that criticise it, the share that praise it, and the share that
+do both. **Mixed** is a real answer and appears as one. It is the most interesting thing a long
+review has to say, and any tool that forces it to a single sign is throwing that away.
+
+Claim-level polarity is available underneath, for reading rather than for headlines, and is
+labelled as what it is: a count of opinions, which the most talkative reviewers dominate.
 
 ### Ratings that disagree with the text
 

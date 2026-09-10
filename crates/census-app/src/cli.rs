@@ -96,6 +96,26 @@ impl From<Select> for census_core::anchors::Objective {
 }
 
 /// How often to emit a progress line when stderr is not a terminal.
+/// What a pass works on. Named separately from the library's own type because clap owns the
+/// spelling a person types and the library owns the one the code reads.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum Grain {
+    /// One point a review makes.
+    #[default]
+    Claim,
+    /// A whole review, averaged over everything it says.
+    Review,
+}
+
+impl From<Grain> for census_core::taxonomy::Unit {
+    fn from(value: Grain) -> Self {
+        match value {
+            Grain::Claim => Self::Claim,
+            Grain::Review => Self::Review,
+        }
+    }
+}
+
 const PROGRESS_EVERY_SHARDS: usize = 5;
 const PROGRESS_EVERY_TEXTS: u64 = 5_000;
 
@@ -142,7 +162,6 @@ enum Command {
         top_up: bool,
     },
 
-    /// Embed the captured reviews locally, so nothing is sent anywhere.
     /// Split every review into the separate points it makes.
     ///
     /// A review is not one opinion, and a whole-review vector is the average of the ones it
@@ -155,6 +174,8 @@ enum Command {
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
     },
+
+    /// Embed the captured reviews locally, so nothing is sent anywhere.
     Embed {
         /// Steam app ID whose most recent capture should be embedded.
         app_id: u32,
@@ -175,6 +196,59 @@ enum Command {
         /// Where to cache the model. Defaults to the platform cache directory.
         #[arg(long)]
         model_dir: Option<PathBuf>,
+        /// What to embed: whole reviews, or the separate points they make.
+        #[arg(long, default_value = "claim")]
+        unit: Grain,
+    },
+
+    /// Draw reviews at random, split them into claims, and write batches to be labelled.
+    ///
+    /// Every claim of every drawn review is labelled, never a subset of them: a review
+    /// labelled in part cannot say what share of a corpus names no aspect at all, which is
+    /// the first thing worth knowing about one.
+    SampleClaims {
+        /// Steam app ID to draw from.
+        app_id: u32,
+        /// Directory holding the capture.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Reviews to draw.
+        #[arg(long, default_value_t = 700)]
+        reviews: usize,
+        /// Reviews per batch file. Around forty is roughly a hundred and thirty claims.
+        #[arg(long, default_value_t = 40)]
+        batch_size: usize,
+        /// Changing this draws a different sample. The same seed always draws the same one.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Where to write the sample and its batches. Defaults to reference/claims/<app id>.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+
+    /// Merge returned claim labels into a reference set.
+    IngestClaims {
+        /// Steam app ID whose labels are being merged.
+        app_id: u32,
+        /// Directory holding the returned label files, one JSON array per batch.
+        #[arg(long)]
+        from: PathBuf,
+        /// The reference set. Defaults to reference/claims/<app id>.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+
+    /// Write every labelled claim, with its text, as JSONL for training.
+    ///
+    /// The file holds review text and is not for publishing. What gets published is the
+    /// label set: ids, offsets and labels, which anyone can rehydrate with this tool.
+    ExportTraining {
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        from: PathBuf,
+        /// Where to write the JSONL.
+        #[arg(long, default_value = "training/data/claims.jsonl")]
+        to: PathBuf,
     },
 
     /// Sort embedded reviews into the core-spine categories and report what players say.
@@ -380,6 +454,20 @@ pub async fn run() -> Result<()> {
             run_crawl(app_id, &options, Duration::from_millis(pace_ms)).await
         }
         Command::Claims { app_id, out } => run_claims(app_id, &out),
+        Command::SampleClaims {
+            app_id,
+            out,
+            reviews,
+            batch_size,
+            seed,
+            to,
+        } => run_sample_claims(app_id, &out, reviews, batch_size, seed, to),
+        Command::IngestClaims { app_id, from, to } => run_ingest_claims(app_id, &from, to),
+        Command::ExportTraining { from, to } => {
+            let written = census_core::claimset::export_training(&from, &to)?;
+            println!("{written} labelled claims -> {}", to.display());
+            Ok(())
+        }
         Command::Embed {
             app_id,
             out,
@@ -387,6 +475,7 @@ pub async fn run() -> Result<()> {
             model,
             model_dir,
             precision,
+            unit,
         } => {
             run_embed(
                 app_id,
@@ -395,6 +484,7 @@ pub async fn run() -> Result<()> {
                 model_dir,
                 model.into(),
                 precision.into(),
+                unit.into(),
             )
             .await
         }
@@ -1645,6 +1735,109 @@ fn print_classification(report: &census_core::ClassifyReport) {
     );
 }
 
+fn run_sample_claims(
+    app_id: u32,
+    out: &std::path::Path,
+    reviews: usize,
+    batch_size: usize,
+    seed: u64,
+    to: Option<PathBuf>,
+) -> Result<()> {
+    let dir = to.unwrap_or_else(|| {
+        PathBuf::from("reference")
+            .join("claims")
+            .join(app_id.to_string())
+    });
+    let drawn = census_core::claimset::draw(out, app_id, reviews, seed)?;
+    let report = census_core::claimset::write_set(&dir, &drawn, batch_size)?;
+
+    let mut languages: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for review in &drawn {
+        *languages.entry(review.language.as_str()).or_default() += 1;
+    }
+    let mut ranked: Vec<(&str, usize)> = languages.into_iter().collect();
+    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+
+    println!("drawn        {} reviews", report.reviews);
+    println!("claims       {}", report.claims);
+    println!("per review   {:.2}", report.per_review());
+    println!("batches      {} in {}", report.batches, dir.display());
+    println!(
+        "languages    {}",
+        ranked
+            .iter()
+            .take(6)
+            .map(|(name, count)| format!("{name} {count}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(())
+}
+
+fn run_ingest_claims(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -> Result<()> {
+    let dir = to.unwrap_or_else(|| {
+        PathBuf::from("reference")
+            .join("claims")
+            .join(app_id.to_string())
+    });
+    let (labels, report) = census_core::claimset::ingest(&dir, from)?;
+
+    let mut subjects: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let mut polarity: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let mut contested = 0;
+    let mut miscut = 0;
+    for label in &labels {
+        *subjects.entry(label.subject.as_str()).or_default() += 1;
+        *polarity.entry(label.polarity.as_str()).or_default() += 1;
+        contested += usize::from(label.ambiguous);
+        miscut += usize::from(label.split_wrong);
+    }
+    let mut ranked: Vec<(&str, usize)> = subjects.into_iter().collect();
+    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+
+    println!("app          {app_id}");
+    println!("accepted     {} claims", report.accepted);
+    println!("contested    {contested}");
+    println!("mis-split    {miscut}");
+    println!(
+        "polarity     {}",
+        ["praise", "complaint", "neutral"]
+            .iter()
+            .map(|name| format!("{name} {}", polarity.get(name).copied().unwrap_or(0)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!(
+        "commonest    {}",
+        ranked
+            .iter()
+            .take(6)
+            .map(|(name, count)| format!("{name} {count}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    if !report.is_clean() {
+        println!("\nnot clean:");
+        if !report.missing.is_empty() {
+            println!("  {} claims drawn but never labelled", report.missing.len());
+            for one in report.missing.iter().take(8) {
+                println!("    {one}");
+            }
+        }
+        if !report.unknown.is_empty() {
+            println!("  {} labels naming a claim nobody drew", report.unknown.len());
+        }
+        if !report.rejected.is_empty() {
+            println!("  {} labels the sheet does not offer", report.rejected.len());
+            for one in report.rejected.iter().take(8) {
+                println!("    {one}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run_brief(to: &std::path::Path) -> Result<()> {
     use census_core::taxonomy::{Unit, labelling_brief};
 
@@ -1698,6 +1891,7 @@ async fn run_embed(
     model_dir: Option<PathBuf>,
     encoder: census_core::Encoder,
     precision: census_core::model::Precision,
+    unit: census_core::taxonomy::Unit,
 ) -> Result<()> {
     // Before the model, which on a first run is a download, and which a game that was never
     // crawled has no use for.
@@ -1734,7 +1928,7 @@ async fn run_embed(
     let mut embedder = census_core::Embedder::load(&cache, encoder, precision)?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
-    let report = census_core::embed_corpus(&mut embedder, out, app_id, batch_size, |progress| {
+    let report = census_core::embed_corpus(&mut embedder, out, app_id, batch_size, unit, |progress| {
         let line = format!(
             "  {} of {} distinct texts",
             thousands(progress.embedded),

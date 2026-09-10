@@ -1,0 +1,306 @@
+"""Fine-tunes a multilingual encoder to read one claim.
+
+Two heads on a shared trunk: which subject the claim is about, and whether it is praise, a
+complaint, or neither. One forward pass produces both, plus the pooled vector the clustering
+uses, which is the reason for fine-tuning the encoder rather than bolting a classifier onto a
+frozen one.
+
+The loss is weighted by the labeller's own confidence. A claim they called "low" moves the
+model less than one they called "high", because throwing that away and training on a flattened
+id discards the only thing the annotator said about their own uncertainty.
+
+    python train.py --backbone xlm-roberta-base
+    python train.py --backbone Alibaba-NLP/gte-multilingual-base --epochs 4
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import subprocess
+import time
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Dataset
+from transformers import AutoConfig, AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
+
+import data as claimdata
+
+HERE = Path(__file__).resolve().parent
+POLARITIES = claimdata.POLARITIES
+
+
+class Claims(Dataset):
+    def __init__(self, claims, tokenizer, subjects, max_length):
+        self.claims = claims
+        self.tokenizer = tokenizer
+        self.subjects = {name: index for index, name in enumerate(subjects)}
+        self.polarities = {name: index for index, name in enumerate(POLARITIES)}
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.claims)
+
+    def __getitem__(self, at):
+        claim = self.claims[at]
+        encoded = self.tokenizer(
+            claim.text,
+            truncation=True,
+            max_length=self.max_length,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        return {
+            "input_ids": encoded["input_ids"][0],
+            "attention_mask": encoded["attention_mask"][0],
+            "subject": torch.tensor(self.subjects[claim.subject]),
+            "polarity": torch.tensor(self.polarities.get(claim.polarity, 2)),
+            "weight": torch.tensor(claim.weight, dtype=torch.float),
+        }
+
+
+class ClaimReader(torch.nn.Module):
+    """The trunk, plus the two heads, plus the pooled vector everything else wants."""
+
+    def __init__(self, backbone: str, subjects: int, dropout: float = 0.1):
+        super().__init__()
+        config = AutoConfig.from_pretrained(backbone, trust_remote_code=True)
+        self.trunk = AutoModel.from_pretrained(backbone, trust_remote_code=True)
+        width = getattr(config, "hidden_size", 768)
+        self.drop = torch.nn.Dropout(dropout)
+        self.subject = torch.nn.Linear(width, subjects)
+        self.polarity = torch.nn.Linear(width, len(POLARITIES))
+
+    def forward(self, input_ids, attention_mask):
+        hidden = self.trunk(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        # Mean pooling rather than the first token: the backbones being compared were not all
+        # pretrained with a sentence-level CLS, and a pooling choice that only suits some of
+        # them would decide the bake-off instead of the models doing it.
+        mask = attention_mask.unsqueeze(-1).to(hidden.dtype)
+        pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        dropped = self.drop(pooled)
+        return self.subject(dropped), self.polarity(dropped), pooled
+
+
+def macro_f1(truth, predicted, classes):
+    scores = []
+    per_class = {}
+    for index, name in enumerate(classes):
+        hit = int(((predicted == index) & (truth == index)).sum())
+        said = int((predicted == index).sum())
+        was = int((truth == index).sum())
+        if was == 0:
+            continue
+        precision = hit / said if said else 0.0
+        recall = hit / was
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        per_class[name] = {"precision": precision, "recall": recall, "f1": f1, "support": was}
+        scores.append(f1)
+    return (sum(scores) / len(scores) if scores else 0.0), per_class
+
+
+def expected_calibration_error(confidence, correct, bins=15):
+    """How far the model's stated certainty is from how often it is right.
+
+    A threshold for abstention is only meaningful if 0.6 means roughly 60%, so this is
+    reported beside accuracy rather than after somebody asks.
+    """
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    error = 0.0
+    for low, high in zip(edges[:-1], edges[1:]):
+        inside = (confidence > low) & (confidence <= high)
+        if not inside.any():
+            continue
+        error += inside.mean() * abs(correct[inside].mean() - confidence[inside].mean())
+    return float(error)
+
+
+@torch.no_grad()
+def evaluate(model, loader, device, subjects, claims):
+    model.eval()
+    subject_logits, polarity_logits = [], []
+    for batch in loader:
+        subject, polarity, _ = model(
+            batch["input_ids"].to(device), batch["attention_mask"].to(device)
+        )
+        subject_logits.append(subject.float().cpu())
+        polarity_logits.append(polarity.float().cpu())
+
+    subject_logits = torch.cat(subject_logits)
+    polarity_logits = torch.cat(polarity_logits)
+    probabilities = torch.softmax(subject_logits, dim=1).numpy()
+    predicted = probabilities.argmax(axis=1)
+    index_of = {name: index for index, name in enumerate(subjects)}
+    truth = np.array([index_of[claim.subject] for claim in claims])
+
+    confidence = probabilities.max(axis=1)
+    correct = (predicted == truth).astype(float)
+    macro, per_class = macro_f1(truth, predicted, subjects)
+
+    polarity_index = {name: index for index, name in enumerate(POLARITIES)}
+    polarity_truth = np.array([polarity_index.get(claim.polarity, 2) for claim in claims])
+    polarity_predicted = polarity_logits.argmax(axis=1).numpy()
+    polarity_macro, _ = macro_f1(polarity_truth, polarity_predicted, POLARITIES)
+
+    by_language = defaultdict(list)
+    by_length = defaultdict(list)
+    for claim, hit in zip(claims, correct):
+        by_language[claim.language or "unknown"].append(hit)
+        bucket = "short" if len(claim.text) < 40 else "medium" if len(claim.text) < 140 else "long"
+        by_length[bucket].append(hit)
+
+    contested = np.array([claim.ambiguous for claim in claims])
+    abstention = {}
+    for floor in (0.3, 0.5, 0.7, 0.9):
+        sure = confidence >= floor
+        abstention[str(floor)] = {
+            "answers_for": float(sure.mean()),
+            "accuracy": float(correct[sure].mean()) if sure.any() else None,
+        }
+
+    return {
+        "accuracy": float(correct.mean()),
+        "macro_f1": macro,
+        "polarity_macro_f1": polarity_macro,
+        "calibration_error": expected_calibration_error(confidence, correct),
+        "on_clear_cut": float(correct[~contested].mean()) if (~contested).any() else None,
+        "on_contested": float(correct[contested].mean()) if contested.any() else None,
+        "per_subject": per_class,
+        "per_language": {
+            name: {"accuracy": float(np.mean(hits)), "claims": len(hits)}
+            for name, hits in sorted(by_language.items(), key=lambda pair: -len(pair[1]))
+        },
+        "per_length": {
+            name: {"accuracy": float(np.mean(hits)), "claims": len(hits)}
+            for name, hits in by_length.items()
+        },
+        "abstention": abstention,
+    }
+
+
+def git_sha() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
+
+
+def run(args) -> dict:
+    claims = claimdata.load(args.data)
+    train, validation, test = claimdata.split_by_game(claims, seed=args.split_seed)
+    subjects = claimdata.subjects_in(claims)
+    print(claimdata.summarise(claims))
+    print(f"train {len(train)}  validation {len(validation)}  test {len(test)} (frozen)")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tokenizer = AutoTokenizer.from_pretrained(args.backbone, trust_remote_code=True)
+    model = ClaimReader(args.backbone, len(subjects)).to(device)
+
+    loaders = {
+        name: DataLoader(
+            Claims(part, tokenizer, subjects, args.max_length),
+            batch_size=args.batch_size,
+            shuffle=name == "train",
+            num_workers=0,
+        )
+        for name, part in (("train", train), ("validation", validation))
+    }
+
+    steps = len(loaders["train"]) * args.epochs
+    optimiser = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=0.01)
+    schedule = get_linear_schedule_with_warmup(optimiser, int(steps * 0.1), steps)
+    scaler = torch.amp.GradScaler(device, enabled=device == "cuda")
+
+    # Rare subjects would otherwise be drowned by `verdict`, which is most of any corpus.
+    counts = claimdata.distribution(train)
+    weights = torch.tensor(
+        [len(train) / (len(subjects) * max(1, counts.get(name, 0))) for name in subjects],
+        dtype=torch.float,
+        device=device,
+    )
+
+    started = time.time()
+    for epoch in range(args.epochs):
+        model.train()
+        running = 0.0
+        for step, batch in enumerate(loaders["train"]):
+            optimiser.zero_grad(set_to_none=True)
+            with torch.amp.autocast(device, enabled=device == "cuda", dtype=torch.bfloat16):
+                subject, polarity, _ = model(
+                    batch["input_ids"].to(device), batch["attention_mask"].to(device)
+                )
+                trust = batch["weight"].to(device)
+                subject_loss = torch.nn.functional.cross_entropy(
+                    subject, batch["subject"].to(device), weight=weights, reduction="none"
+                )
+                polarity_loss = torch.nn.functional.cross_entropy(
+                    polarity, batch["polarity"].to(device), reduction="none"
+                )
+                loss = ((subject_loss + args.polarity_weight * polarity_loss) * trust).mean()
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimiser)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(optimiser)
+            scaler.update()
+            schedule.step()
+            running += float(loss)
+            if step % 50 == 0:
+                print(f"  epoch {epoch + 1} step {step}/{len(loaders['train'])} loss {running / (step + 1):.4f}")
+
+        metrics = evaluate(model, loaders["validation"], device, subjects, validation)
+        print(
+            f"epoch {epoch + 1}: accuracy {metrics['accuracy']:.3f}  "
+            f"macro F1 {metrics['macro_f1']:.3f}  polarity {metrics['polarity_macro_f1']:.3f}  "
+            f"calibration {metrics['calibration_error']:.3f}"
+        )
+
+    elapsed = time.time() - started
+    record = {
+        "backbone": args.backbone,
+        "epochs": args.epochs,
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+        "max_length": args.max_length,
+        "polarity_weight": args.polarity_weight,
+        "split_seed": args.split_seed,
+        "device": device,
+        "git_sha": git_sha(),
+        "data_fingerprint": claimdata.fingerprint(claims),
+        "claims": {"train": len(train), "validation": len(validation), "test": len(test)},
+        "subjects": subjects,
+        "seconds": round(elapsed),
+        "validation": metrics,
+    }
+
+    run_id = args.run_id or f"{args.backbone.replace('/', '-')}-{int(time.time())}"
+    out = HERE / "runs" / run_id
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "run.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    if args.save:
+        torch.save(model.state_dict(), out / "model.bin")
+        tokenizer.save_pretrained(out / "tokenizer")
+    print(f"\nwritten to {out}")
+    return record
+
+
+def parse():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+    parser.add_argument("--backbone", default="xlm-roberta-base")
+    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--learning-rate", type=float, default=2e-5)
+    parser.add_argument("--max-length", type=int, default=128)
+    parser.add_argument("--polarity-weight", type=float, default=0.5)
+    parser.add_argument("--split-seed", type=int, default=1)
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--save", action="store_true")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    run(parse())

@@ -36,6 +36,16 @@ credentials.*
 models/
 *.onnx
 
+# Training data carries review text, for the same reason the captures are not here. The
+# label set beside it names claims by review id and byte offset and is committed.
+training/data/
+# What a run produced. Its metrics and config are committed as a summary; the weights,
+# checkpoints and logs are not, because a model belongs on Hugging Face with a card.
+training/runs/*/checkpoints/
+training/runs/*/*.bin
+training/runs/*/*.safetensors
+training/.venv/
+
 # Build and dependency artefacts
 target/
 target-*/
