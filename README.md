@@ -157,6 +157,10 @@ from and to measure against, and never good enough to quote as truth. Every mani
 `human_verified: false`, and until that changes the tool reports **agreement** and refuses the
 word accuracy.
 
+Which model wrote them is recorded per set, in `produced_by`, and printed with every result.
+A set labelled by one model and a set labelled by another are not the same evidence and must
+not be pooled without saying so; the sets shipped here were written by Claude Fable 5.1.
+
 What the set spends its size on is games rather than depth. A hundred reviews of one title,
 labelled twice over, would say how consistent two labellers are and nothing about whether a
 category survives contact with a corpus it was not built from. So the set runs to thousands of
