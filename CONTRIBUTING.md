@@ -36,6 +36,21 @@ Chrome is found in the usual places per platform, or wherever `CHROME_PATH` says
 check in it is a promise the page makes in its own prose; if you change what the page says
 it does, change the check with it.
 
+### Build directories
+
+There are exactly two, and adding a third is how a repository ends up with twenty gigabytes of
+them. `target/` is what the gates above use, with default features. `target-dml/` is the same
+tree built with a GPU backend, because switching `--features` in one directory recompiles
+everything each way and a corpus takes long enough already:
+
+```sh
+cargo build --release -p census-cli --features directml --target-dir target-dml
+```
+
+On Windows a running `census.exe` holds its own binary open, so a build started while a crawl
+or an embed is in flight fails with "Access is denied". The fix is to wait for the run, or to
+build the other tree; it is not to invent a directory per occasion.
+
 Two of those promises are watched rather than read. The page is reloaded with the network
 being listened to and fails on any request but the file itself, because a stylesheet pulling
 a font would pass any amount of reading the markup for URLs. And every piece of text on it is
