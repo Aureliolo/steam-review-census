@@ -1,11 +1,11 @@
 {
-  "app_id": 296970,
+  "app_id": 597180,
   "produced_by": "claude-fable-5-1 labellers working in parallel from reference/labelling-brief.txt, each shown the review text alone",
   "spine_version": "core-4",
   "human_verified": false,
   "notes": [
-    "Renowned Explorers: International Society. Labelled from snapshot=1788873134, which holds 2,909 of the 2,909 reviews Valve reports (100.00%). Valve scores it Very Positive.",
-    "160 labels: 60 stratified and 100 random. The two subsets have different jobs and must not be merged. The stratified labels are TRAINING DATA, so any figure measured over them says what the anchors memorised. The random labels are held back from fitting entirely and are the only ones that measure anything.",
+    "Old World. Labelled from snapshot=1788941509, which holds 6,872 of the 6,872 reviews Valve reports (100.00%). Valve scores it Very Positive.",
+    "165 labels: 65 stratified and 100 random. The two subsets have different jobs and must not be merged. The stratified labels are TRAINING DATA, so any figure measured over them says what the anchors memorised. The random labels are held back from fitting entirely and are the only ones that measure anything.",
     "Labellers were given the review text and the category sheet, and never the game, the rating or the classifier's prediction. The classifier reads the text alone, so a label made from more than that would measure the difference in what the two were shown rather than how well the classifier reads.",
     "Because no person has checked these labels, results measured against this set are AGREEMENT WITH A MODEL and must never be reported as accuracy. Two language models agreeing can be wrong together, and the sarcasm and boundary cases where this classifier is weakest are exactly where that correlation is strongest. Set human_verified to true only once a person has labelled a subset independently, and record how large that subset was."
   ]
