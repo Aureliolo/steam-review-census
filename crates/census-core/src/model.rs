@@ -404,22 +404,33 @@ pub fn session(
     encoder: Encoder,
     precision: Precision,
 ) -> Result<(Session, &'static str)> {
-    let path = model_path(cache_dir, encoder, precision);
+    session_at(&model_path(cache_dir, encoder, precision))
+}
 
+/// The same, for a graph this project trained rather than downloaded.
+///
+/// CUDA is tried first where the build has it. `DirectML` reaches every vendor and is the
+/// right default breadth, but on a machine that has both it is the slower way to use the same
+/// card, and the difference is hours over a corpus of millions of claims.
+///
+/// # Errors
+///
+/// Fails if no backend, including the CPU fallback, can load the graph.
+pub fn session_at(path: &Path) -> Result<(Session, &'static str)> {
+    #[cfg(feature = "cuda")]
+    if let Ok(session) = try_session(path, ort::ep::CUDA::default().build()) {
+        return Ok((session, "cuda"));
+    }
     #[cfg(feature = "directml")]
-    if let Ok(session) = try_session(&path, ort::ep::DirectML::default().build()) {
+    if let Ok(session) = try_session(path, ort::ep::DirectML::default().build()) {
         return Ok((session, "directml"));
     }
     #[cfg(feature = "coreml")]
-    if let Ok(session) = try_session(&path, ort::ep::CoreML::default().build()) {
+    if let Ok(session) = try_session(path, ort::ep::CoreML::default().build()) {
         return Ok((session, "coreml"));
     }
-    #[cfg(feature = "cuda")]
-    if let Ok(session) = try_session(&path, ort::ep::CUDA::default().build()) {
-        return Ok((session, "cuda"));
-    }
 
-    Ok((try_session(&path, ort::ep::CPU::default().build())?, "cpu"))
+    Ok((try_session(path, ort::ep::CPU::default().build())?, "cpu"))
 }
 
 fn try_session(path: &Path, provider: ort::ep::ExecutionProviderDispatch) -> Result<Session> {
