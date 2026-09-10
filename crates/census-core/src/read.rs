@@ -177,7 +177,7 @@ pub fn read_corpus(
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
 
-    let answers = read_distinct_claims(model, &snapshot, options.batch_size, &mut on_progress)?;
+    let answers = read_distinct_claims(model, &snapshot, options, &mut on_progress)?;
     let counted = count_reviews(app_id, &snapshot, options, &answers, &mut on_progress)?;
 
     Ok(ReadReport {
@@ -194,14 +194,24 @@ pub fn read_corpus(
 fn read_distinct_claims(
     model: &mut ClaimReader,
     snapshot: &Path,
-    batch_size: usize,
+    options: &ReadOptions,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<HashMap<[u8; 32], Reading>> {
+    let batch_size = options.batch_size;
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
     let mut pending: Vec<String> = Vec::with_capacity(batch_size);
     let mut keys: Vec<[u8; 32]> = Vec::with_capacity(batch_size);
 
-    crate::capture::for_each_body(snapshot, |_, _, text| {
+    crate::capture::for_each_body(snapshot, |_, language, text| {
+        // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
+        // where the named language is a third of the reviews it is most of the work.
+        if options
+            .language
+            .as_ref()
+            .is_some_and(|wanted| wanted != language)
+        {
+            return Ok(());
+        }
         for claim in crate::claims::split(text) {
             let key = crate::embed::sha256_bytes(&claim);
             if answers.contains_key(&key) || keys.contains(&key) {

@@ -34,8 +34,10 @@ use crate::Result;
 ///
 /// `claims-2` added the rules the first labellers asked for: bullet markers stripped rather
 /// than kept, a heading ending in a colon joined to what it introduces, and no splitting
-/// inside a quotation.
-pub const SPLITTER_VERSION: &str = "claims-2";
+/// inside a quotation. `claims-3` added the rest of what they found: Steam's markup removed,
+/// semicolons no longer ending a thought, numbered list markers, parenthetical asides, web
+/// addresses and abbreviations.
+pub const SPLITTER_VERSION: &str = "claims-3";
 
 /// Below this much of a piece it is not a point, it is the tail of one. "Yes." and "10/10."
 /// are joined to what they qualify rather than counted as opinions of their own.
@@ -49,7 +51,19 @@ const DENSE_CHARACTER: usize = 3;
 /// Where a sentence can end, across the scripts Steam reviews arrive in. Latin and Cyrillic
 /// share the first three; the rest are the full-width forms used in Chinese, Japanese and
 /// Korean, Arabic's full stop, and the Devanagari danda.
-const TERMINATORS: [char; 10] = ['.', '!', '?', '\u{2026}', '\u{3002}', '\u{FF01}', '\u{FF1F}', '\u{06D4}', '\u{0964}', ';'];
+/// A semicolon is deliberately absent. "It's not just a game; it's an experience" is one
+/// thought with a hinge in it, and cutting there leaves two halves that each say nothing.
+const TERMINATORS: [char; 9] = [
+    '.',
+    '!',
+    '?',
+    '\u{2026}',
+    '\u{3002}',
+    '\u{FF01}',
+    '\u{FF1F}',
+    '\u{06D4}',
+    '\u{0964}',
+];
 
 /// The points a review makes, in the order it makes them.
 ///
@@ -79,6 +93,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
     let mut pieces: Vec<(usize, usize)> = Vec::new();
     let mut start = 0;
     let mut quoted = false;
+    let mut open_brackets = 0_i32;
     let mut chars = text.char_indices().peekable();
 
     while let Some((at, ch)) = chars.next() {
@@ -97,12 +112,17 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
         if let Some(open) = quote_state(ch, quoted) {
             quoted = open;
         }
-        // A full stop inside a quotation ends the quoted sentence, not the reviewer's. "Так
-        // денег никто не даст. Давай по-новой" is one joke being retold, and cutting it in
-        // half leaves two fragments that mean nothing apart.
+        match ch {
+            '(' | '\u{FF08}' => open_brackets += 1,
+            ')' | '\u{FF09}' => open_brackets = (open_brackets - 1).max(0),
+            _ => {}
+        }
+        // A full stop inside a quotation or an aside ends that, not the reviewer's sentence.
+        // "Так денег никто не даст. Давай по-новой" is one joke being retold, and cutting it
+        // in half leaves two fragments that mean nothing apart.
         let ends = if ch == '\n' {
             true
-        } else if quoted {
+        } else if quoted || open_brackets > 0 {
             false
         } else if inside_a_link(text, at) {
             false
@@ -110,7 +130,10 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
             // The only ambiguous terminator. Every other one in TERMINATORS ends a thought
             // wherever it appears, including the full-width stops, which sit between
             // characters with no space anywhere near them.
-            !continues_a_number(text, at) && !continues_a_word(text, at + ch.len_utf8())
+            !numbers_a_list(&text[start..at])
+                && !continues_a_number(text, at)
+                && !abbreviates(text, at)
+                && !continues_a_word(text, at + ch.len_utf8())
         } else if TERMINATORS.contains(&ch) {
             true
         } else {
@@ -288,6 +311,22 @@ fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> 
         piece = stripped;
     }
 
+    // "1." and "2)" in front of a point are numbering, not what somebody said.
+    let digits = piece
+        .char_indices()
+        .take_while(|(_, ch)| ch.is_ascii_digit())
+        .count();
+    if digits > 0 && digits <= 3 {
+        let after = &piece[digits..];
+        if after.starts_with(['.', ')', ':']) {
+            let rest = after[1..].trim_start();
+            if !rest.is_empty() {
+                start += piece.len() - rest.len();
+                piece = rest;
+            }
+        }
+    }
+
     let trimmed = piece.trim_end();
     let mut end = start + trimmed.len();
     let stripped = trimmed.trim_end_matches(MARKERS).trim_end();
@@ -298,6 +337,37 @@ fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> 
     }
 
     (start < end).then_some(start..end)
+}
+
+/// Whether everything before this full stop is just the number of a list item.
+///
+/// "1. The interface is unusable" is one point with a marker in front of it, and splitting at
+/// the stop leaves "1." as a claim about nothing.
+fn numbers_a_list(so_far: &str) -> bool {
+    let trimmed = so_far.trim_start_matches(|ch: char| ch.is_whitespace() || ch == '(');
+    !trimmed.is_empty() && trimmed.len() <= 3 && trimmed.chars().all(|ch| ch.is_ascii_digit())
+}
+
+/// Abbreviations that take a full stop without ending a sentence.
+///
+/// A list rather than a rule, because every rule general enough to catch "ca." also catches
+/// "fun." A short list of the ones that actually appear in reviews costs nothing and is wrong
+/// about nothing else. Reviews arrive in many languages, so this is not only English.
+const ABBREVIATIONS: [&str; 34] = [
+    "mr", "mrs", "ms", "dr", "prof", "vs", "etc", "eg", "ie", "approx", "max", "vol", "ch", "pp",
+    "st", "inc", "ltd", "jr", "sr", "ca", "bzw", "evtl", "ggf", "usw", "zb", "dh", "uvm", "inkl",
+    "bspw", "eig", "sog", "bzgl", "env", "ecc",
+];
+
+/// Whether the word before this stop is one of them.
+fn abbreviates(text: &str, at: usize) -> bool {
+    let word_start = text[..at]
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !ch.is_alphabetic())
+        .map_or(0, |(index, ch)| index + ch.len_utf8());
+    let word = text[word_start..at].to_ascii_lowercase();
+    ABBREVIATIONS.contains(&word.as_str())
 }
 
 /// Whether a full stop is a decimal point rather than the end of a thought, as in "9.5/10"
@@ -709,6 +779,38 @@ mod tests {
 
     /// Reviews are full of non-breaking spaces, and stepping over one by a single byte lands
     /// in the middle of a character.
+    #[test]
+    fn a_semicolon_joins_rather_than_ends() {
+        let claims = split("It is not just a game; it is an experience worth having twice.");
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+    }
+
+    #[test]
+    fn a_numbered_list_is_numbered_points_rather_than_numbers_and_points() {
+        let claims = split("1. The interface is unusable.\n2. The tutorial explains nothing.");
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].starts_with("The interface"), "got {:?}", claims[0]);
+        assert!(claims[1].starts_with("The tutorial"), "got {:?}", claims[1]);
+    }
+
+    #[test]
+    fn an_abbreviation_in_any_language_does_not_end_a_point() {
+        assert_eq!(split("Es dauert ca. 40 Stunden bis zum Ende der Kampagne.").len(), 1);
+        assert_eq!(split("Roughly 40 hours, vs. 20 for the first one, which is generous.").len(), 1);
+    }
+
+    #[test]
+    fn a_short_word_before_a_stop_is_still_a_sentence_ending() {
+        let claims = split("The combat is genuinely fun. 10 out of 10 from me, no notes at all.");
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+    }
+
+    #[test]
+    fn an_aside_in_brackets_does_not_end_the_sentence_around_it() {
+        let claims = split("The campaign (which took me 40 hrs. and change) is the best part.");
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+    }
+
     #[test]
     fn a_multi_byte_space_before_a_boundary_does_not_panic() {
         let claims = split("The soundtrack is superb.\u{a0}The mixing is not. It sits far too low.");

@@ -101,87 +101,208 @@ function choose(appId) {
 
 async function loadTopics(game) {
   const panel = el('topics');
-  if (game.stage !== 'classified') {
-    panel.hidden = true;
-    set(
-      el('game-note'),
-      'Downloaded but not counted yet. Reading a corpus turns it into rates you can open.',
-    );
-    return;
-  }
   try {
-    const counted = await invoke('analysis', { appId: game.app_id });
+    const counted = await invoke('reading', { appId: game.app_id });
     if (counted.app_id !== chosen) return;
     drawTopics(counted);
     panel.hidden = false;
+    set(el('game-note'), '');
   } catch (failure) {
     panel.hidden = true;
-    set(el('game-note'), String(failure));
+    set(
+      el('game-note'),
+      game.stage === 'crawled'
+        ? 'Downloaded but not read yet. Reading a corpus turns it into rates you can open.'
+        : String(failure),
+    );
   }
 }
 
+function cell(text, className) {
+  const td = document.createElement('td');
+  td.className = className ? `num ${className}` : 'num';
+  const span = document.createElement('span');
+  span.textContent = text;
+  td.append(span);
+  return td;
+}
+
 function drawTopics(counted) {
-  const ranked = counted.topics
-    .filter((topic) => topic.mentions > 0)
-    .sort((left, right) => right.mentions - left.mentions);
+  const ranked = counted.subjects
+    .filter((subject) => subject.reviews > 0)
+    .sort((left, right) => right.reviews - left.reviews);
   const widest = ranked.length > 0 ? (ranked[0].rate ?? 0) : 0;
 
+  const parts = [`${whole.format(counted.reviews)} reviews`];
+  if (counted.language) {
+    parts[0] = `${whole.format(counted.reviews)} ${counted.language} reviews of ${whole.format(
+      counted.corpus_reviews,
+    )} in the corpus`;
+  }
+  parts.push(`${whole.format(counted.claims)} separate points`);
+  if (counted.positive_baseline !== null) {
+    parts.push(`${share.format(counted.positive_baseline)} recommending the game`);
+  }
+  set(el('topics-lede'), `${parts.join(', ')}.`);
+
+  const unread = counted.claims > 0 ? counted.unclassified_claims / counted.claims : 0;
   set(
-    el('topics-lede'),
-    counted.positive_baseline === null
-      ? `${whole.format(counted.reviews)} reviews counted.`
-      : `${whole.format(counted.reviews)} reviews counted, ${share.format(
-          counted.positive_baseline,
-        )} of them recommending the game. Every rate below opens into the reviews behind it.`,
+    el('topics-footnote'),
+    `Mention rates count a review once for every subject it raises, however many times it ` +
+      `raises it, so they add up to more than 100% and are meant to. ` +
+      `${share.format(unread)} of points name no subject the model would commit to, and ` +
+      `${whole.format(counted.silent_reviews)} reviews name none at all. Those are counted ` +
+      `here rather than filed under whatever came closest.`,
   );
 
   const rows = el('topic-rows');
   rows.replaceChildren();
-  for (const topic of ranked) {
+  for (const subject of ranked) {
     const row = document.createElement('tr');
 
-    const subject = document.createElement('td');
+    const name = document.createElement('td');
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'subject';
-    open.textContent = topic.label;
-    open.addEventListener('click', () => openBehind(topic, 0));
-    subject.append(open);
+    open.textContent = subject.label;
+    open.addEventListener('click', () => openClaims(subject, 0));
+    name.append(open);
 
     const rate = document.createElement('td');
     rate.className = 'num rate';
-    const reading = document.createElement('span');
-    reading.textContent = topic.rate === null ? '—' : share.format(topic.rate);
+    const value = document.createElement('span');
+    value.textContent = subject.rate === null ? '—' : share.format(subject.rate);
     const bar = document.createElement('i');
     bar.className = 'bar';
-    bar.style.transform = `scaleX(${widest > 0 ? (topic.rate ?? 0) / widest : 0})`;
-    rate.append(reading, bar);
+    bar.style.transform = `scaleX(${widest > 0 ? (subject.rate ?? 0) / widest : 0})`;
+    rate.append(value, bar);
 
-    const recommend = document.createElement('td');
-    recommend.className = 'num';
-    const liked = document.createElement('span');
-    liked.textContent = topic.positive === null ? '—' : share.format(topic.positive);
-    if (counted.positive_baseline !== null && topic.positive !== null) {
-      liked.className = topic.positive < counted.positive_baseline ? 'over' : 'under';
-    }
-    recommend.append(liked);
-
-    const top = document.createElement('td');
-    top.className = 'num';
-    const gauge = document.createElement('span');
-    if (topic.bias === null) {
-      gauge.textContent = '—';
-      gauge.className = 'faint';
+    const gauge = document.createElement('td');
+    gauge.className = 'num';
+    const factor = document.createElement('span');
+    if (subject.bias === null) {
+      factor.textContent = '—';
+      factor.className = 'faint';
     } else {
-      gauge.textContent = `${topic.bias.toFixed(1)}×`;
-      if (topic.bias >= 1.15) gauge.className = 'over';
-      else if (topic.bias <= 0.87) gauge.className = 'under';
-      else gauge.className = 'faint';
+      factor.textContent = `${subject.bias.toFixed(1)}×`;
+      factor.className = subject.bias >= 1.15 ? 'over' : subject.bias <= 0.87 ? 'under' : 'faint';
     }
-    top.append(gauge);
+    gauge.append(factor);
 
-    row.append(subject, rate, recommend, top);
+    row.append(
+      name,
+      rate,
+      cell(whole.format(subject.praised), 'under'),
+      cell(whole.format(subject.criticised), 'over'),
+      cell(whole.format(subject.mixed), 'faint'),
+      gauge,
+    );
     rows.append(row);
+  }
+}
+
+async function openClaims(subject, from) {
+  reading = { subject, from };
+  show('evidence');
+  set(el('evidence-name'), subject.label);
+  set(el('evidence-lede'), 'Finding them...');
+  el('quotes').replaceChildren();
+  el('earlier').disabled = true;
+  el('later').disabled = true;
+
+  let page;
+  try {
+    page = await invoke('claims_behind', {
+      appId: chosen,
+      subject: subject.id,
+      from,
+      count: PER_PAGE,
+    });
+  } catch (failure) {
+    set(el('evidence-lede'), String(failure));
+    return;
+  }
+  if (reading?.subject.id !== subject.id || reading.from !== from) return;
+
+  set(
+    el('evidence-lede'),
+    `${whole.format(page.total)} separate points about this, raised in ` +
+      `${whole.format(subject.reviews)} reviews. Each one is shown as it was written.`,
+  );
+  drawClaims(page.claims);
+
+  const upTo = from + page.claims.length;
+  set(el('paging-note'), `${whole.format(from + 1)} to ${whole.format(upTo)}`);
+  el('earlier').disabled = from === 0;
+  el('later').disabled = upTo >= page.total;
+}
+
+function drawClaims(claims) {
+  const list = el('quotes');
+  list.replaceChildren();
+  for (const found of claims) {
+    const item = document.createElement('li');
+
+    const body = document.createElement('p');
+    body.lang = bcp47(found.language);
+    /* The claim is shown inside the review it came from, so a reader can see whether it was
+       cut in the right place rather than taking the split on trust. */
+    const at = found.review.indexOf(found.claim);
+    if (at === -1) {
+      body.textContent = found.claim;
+    } else {
+      const before = document.createElement('span');
+      before.className = 'quiet';
+      before.textContent = found.review.slice(Math.max(0, at - 160), at);
+      const it = document.createElement('b');
+      it.textContent = found.claim;
+      const after = document.createElement('span');
+      after.className = 'quiet';
+      after.textContent = found.review.slice(at + found.claim.length, at + found.claim.length + 160);
+      body.append(before, it, after);
+    }
+
+    const byline = document.createElement('div');
+    byline.className = 'byline';
+
+    const polarity = document.createElement('span');
+    polarity.className =
+      found.polarity === 'praise' ? 'verdict-up' : found.polarity === 'complaint' ? 'verdict-down' : '';
+    polarity.textContent =
+      found.polarity === 'praise' ? 'Praise' : found.polarity === 'complaint' ? 'Complaint' : 'Neutral';
+    byline.append(polarity);
+
+    const sure = document.createElement('span');
+    sure.textContent = `${share.format(found.confidence)} sure`;
+    byline.append(sure);
+
+    const verdict = document.createElement('span');
+    verdict.textContent = found.voted_up ? 'Recommended the game' : 'Did not recommend it';
+    byline.append(verdict);
+
+    if (found.votes_up > 0) {
+      const votes = document.createElement('span');
+      votes.textContent = `${whole.format(found.votes_up)} found it helpful`;
+      byline.append(votes);
+    }
+
+    const when = document.createElement('span');
+    when.textContent = day.format(new Date(found.created * 1000));
+    byline.append(when);
+
+    if (found.url) {
+      const link = document.createElement('a');
+      link.href = '#';
+      link.textContent = 'On Steam';
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        openOutside(found.url);
+      });
+      byline.append(link);
+    }
+
+    item.append(body, byline);
+    list.append(item);
   }
 }
 

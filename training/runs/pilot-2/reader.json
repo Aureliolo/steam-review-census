@@ -1,0 +1,28 @@
+{
+  "spine_version": "core-4",
+  "subjects": [
+    "audio",
+    "bugs",
+    "compatibility",
+    "content",
+    "controls",
+    "difficulty",
+    "gameplay",
+    "genre",
+    "graphics",
+    "language",
+    "monetisation",
+    "offtopic",
+    "performance",
+    "policy",
+    "price",
+    "story",
+    "tutorial",
+    "updates",
+    "verdict"
+  ],
+  "threshold": 0.05,
+  "max_tokens": 128,
+  "trained_from": "xlm-roberta-base",
+  "data_fingerprint": "15619efd9a045aaf"
+}
