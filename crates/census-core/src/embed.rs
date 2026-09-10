@@ -513,7 +513,7 @@ fn for_each_text(
         crate::taxonomy::Unit::Review => visit(text),
         crate::taxonomy::Unit::Claim => {
             for claim in crate::claims::split(text) {
-                visit(claim)?;
+                visit(&claim)?;
             }
             Ok(())
         }

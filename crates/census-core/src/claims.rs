@@ -26,6 +26,17 @@ use parquet::{
 
 use crate::Result;
 
+/// Which set of splitting rules produced a set of claims.
+///
+/// Recorded with every drawn sample because it decides what a claim index refers to. Two sets
+/// drawn under different versions are not the same claims, and a label from one applied to
+/// the other is a label on whatever text happens to sit at that index now.
+///
+/// `claims-2` added the rules the first labellers asked for: bullet markers stripped rather
+/// than kept, a heading ending in a colon joined to what it introduces, and no splitting
+/// inside a quotation.
+pub const SPLITTER_VERSION: &str = "claims-2";
+
 /// Below this much of a piece it is not a point, it is the tail of one. "Yes." and "10/10."
 /// are joined to what they qualify rather than counted as opinions of their own.
 const MIN_CLAIM_WEIGHT: usize = 12;
@@ -45,24 +56,56 @@ const TERMINATORS: [char; 10] = ['.', '!', '?', '\u{2026}', '\u{3002}', '\u{FF01
 /// Never empty for text with any content in it: a review that terminates nothing comes back
 /// as one claim, which is the honest reading of a reviewer who wrote one long sentence.
 #[must_use]
-pub fn split(text: &str) -> Vec<&str> {
-    spans(text).into_iter().map(|at| &text[at]).collect()
+pub fn split(text: &str) -> Vec<std::borrow::Cow<'_, str>> {
+    claims_of(text).into_iter().map(|(_, claim)| claim).collect()
 }
 
-/// The same split as [`split`], as byte ranges into the review.
+/// The same split, as byte ranges into the review.
 ///
 /// Offsets rather than text is what a published dataset can carry: the labels point at spans
 /// of reviews anyone can fetch from Steam themselves, so the labelling is shareable without
 /// redistributing a word anybody wrote.
 #[must_use]
 pub fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    claims_of(text).into_iter().map(|(at, _)| at).collect()
+}
+
+/// Every claim, as where it sits in the review and what it says once markup is taken out.
+///
+/// Both together because they are two views of one answer and computing them separately
+/// invites them to disagree, which would put a label on the wrong span.
+#[must_use]
+pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_, str>)> {
     let mut pieces: Vec<(usize, usize)> = Vec::new();
     let mut start = 0;
+    let mut quoted = false;
     let mut chars = text.char_indices().peekable();
 
     while let Some((at, ch)) = chars.next() {
+        if ch == '[' {
+            if let Some((after, kind)) = markup_at(text, at) {
+                while chars.peek().is_some_and(|(next, _)| *next < after) {
+                    chars.next();
+                }
+                if kind == Markup::Break && !text[start..at].trim().is_empty() {
+                    pieces.push((start, at));
+                    start = at;
+                }
+                continue;
+            }
+        }
+        if let Some(open) = quote_state(ch, quoted) {
+            quoted = open;
+        }
+        // A full stop inside a quotation ends the quoted sentence, not the reviewer's. "Так
+        // денег никто не даст. Давай по-новой" is one joke being retold, and cutting it in
+        // half leaves two fragments that mean nothing apart.
         let ends = if ch == '\n' {
             true
+        } else if quoted {
+            false
+        } else if inside_a_link(text, at) {
+            false
         } else if ch == '.' {
             // The only ambiguous terminator. Every other one in TERMINATORS ends a thought
             // wherever it appears, including the full-width stops, which sit between
@@ -102,14 +145,159 @@ pub fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
 
     join_the_fragments(text, pieces)
         .into_iter()
-        .filter_map(|(from, to)| {
-            let piece = &text[from..to];
-            let lead = piece.len() - piece.trim_start().len();
-            let trail = piece.len() - piece.trim_end().len();
-            let (from, to) = (from + lead, to - trail);
-            (from < to).then_some(from..to)
+        .filter_map(|(from, to)| tidied(text, from, to))
+        .filter_map(|at| {
+            let piece = &text[at.clone()];
+            let cleaned = without_markup(piece);
+            let cleaned = cleaned.trim();
+            if cleaned.is_empty() {
+                return None;
+            }
+            let claim = if cleaned.len() == piece.len() {
+                std::borrow::Cow::Borrowed(piece)
+            } else {
+                std::borrow::Cow::Owned(cleaned.to_owned())
+            };
+            Some((at, claim))
         })
         .collect()
+}
+
+/// What a piece of Steam's markup does to the text around it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Markup {
+    /// Starts a new point: a list item, a heading, a rule, a table cell.
+    Break,
+    /// Styling around text that carries on: bold, italic, spoiler, a link.
+    Skip,
+}
+
+/// Tags that separate one point from the next. Everything else wraps a point without
+/// interrupting it.
+const BREAKING_TAGS: [&str; 12] = [
+    "*", "h1", "h2", "h3", "hr", "list", "olist", "quote", "table", "tr", "td", "th",
+];
+
+/// Recognises Steam's markup at `at`, returning where it ends and what it does.
+///
+/// Reviews are written with BBCode and the tags are not what anybody said. Left in, `[h3]`
+/// and `[/list]` are tokens the model sees in every category and learns nothing from, and a
+/// labeller was handed `[h3] ... [/h3]` as though it were a claim.
+fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
+    const LONGEST_TAG: usize = 200;
+
+    let rest = &text[at + 1..];
+    let end = rest.char_indices().take(LONGEST_TAG).find_map(|(offset, ch)| {
+        (ch == ']').then_some(offset)
+    })?;
+    let inside = &rest[..end];
+    if inside.is_empty() {
+        return None;
+    }
+
+    let name = inside
+        .split(['=', ' '])
+        .next()
+        .unwrap_or(inside)
+        .trim_start_matches('/')
+        .to_ascii_lowercase();
+    // A tag name is letters, digits or the list bullet. Anything else is a bracket somebody
+    // typed, and "[10/10]" is a claim rather than markup.
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '*')
+    {
+        return None;
+    }
+
+    let kind = if BREAKING_TAGS.contains(&name.as_str()) {
+        Markup::Break
+    } else {
+        Markup::Skip
+    };
+    Some((at + 1 + end + 1, kind))
+}
+
+/// Removes Steam's markup from a claim, leaving what was written.
+fn without_markup(piece: &str) -> String {
+    let mut clean = String::with_capacity(piece.len());
+    let mut at = 0;
+    while at < piece.len() {
+        let ch = piece[at..].chars().next().unwrap_or('\0');
+        if ch == '[' {
+            if let Some((after, _)) = markup_at(piece, at) {
+                at = after;
+                continue;
+            }
+        }
+        clean.push(ch);
+        at += ch.len_utf8();
+    }
+    clean
+}
+
+/// Whether a terminator sits inside a web address, where "?" starts a query string and "."
+/// separates a hostname rather than ending anything.
+fn inside_a_link(text: &str, at: usize) -> bool {
+    // Stepping over the whitespace by its own width rather than by one: reviews are full of
+    // non-breaking spaces, and a byte past the start of one is not a character boundary.
+    let token_start = text[..at]
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| ch.is_whitespace())
+        .map_or(0, |(index, ch)| index + ch.len_utf8());
+    let token = &text[token_start..at];
+    token.contains("://") || token.contains("www.")
+}
+
+/// Whether a character opens or closes a quotation, given whether one is already open.
+///
+/// The straight double quote is both, so it toggles. The paired forms do not, which matters
+/// for the languages that use them: a Chinese review full of 「」 would otherwise flip in and
+/// out of quoted state on every mark.
+fn quote_state(ch: char, quoted: bool) -> Option<bool> {
+    match ch {
+        '"' => Some(!quoted),
+        '\u{201C}' | '\u{00AB}' | '\u{300C}' | '\u{300E}' => Some(true),
+        '\u{201D}' | '\u{00BB}' | '\u{300D}' | '\u{300F}' => Some(false),
+        _ => None,
+    }
+}
+
+/// Trims whitespace and the marks that hold a list together rather than say anything.
+///
+/// Reviews are written with bullets, and "- 教学纯靠自己领悟" is a point about the tutorial
+/// with a hyphen in front of it. Leaving the hyphen on gives the model a token that appears
+/// in every category and means nothing in any of them.
+fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> {
+    const MARKERS: [char; 8] = ['-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>'];
+
+    let mut piece = &text[from..to];
+    let mut start = from;
+
+    loop {
+        let trimmed = piece.trim_start();
+        start += piece.len() - trimmed.len();
+        let stripped = trimmed.trim_start_matches(MARKERS);
+        if stripped.len() == trimmed.len() {
+            piece = trimmed;
+            break;
+        }
+        start += trimmed.len() - stripped.len();
+        piece = stripped;
+    }
+
+    let trimmed = piece.trim_end();
+    let mut end = start + trimmed.len();
+    let stripped = trimmed.trim_end_matches(MARKERS).trim_end();
+    // Only where something is left: a claim that is nothing but dashes is a divider, and
+    // stripping it to nothing is the correct reading of one.
+    if !stripped.is_empty() {
+        end = start + stripped.len();
+    }
+
+    (start < end).then_some(start..end)
 }
 
 /// Whether a full stop is a decimal point rather than the end of a thought, as in "9.5/10"
@@ -167,7 +355,12 @@ fn join_the_fragments(text: &str, pieces: Vec<(usize, usize)>) -> Vec<(usize, us
             Some((earlier, _)) => (earlier, to),
             None => (from, to),
         };
-        if weight(text[from..to].trim()) < MIN_CLAIM_WEIGHT {
+        let piece = text[from..to].trim();
+        // A piece ending in a colon introduces the next one rather than saying anything
+        // itself. "Spoiler zur Spieldynamik:" on its own line is a heading, and on its own
+        // it is a claim about nothing.
+        let introduces = piece.ends_with(':') || piece.ends_with('\u{FF1A}');
+        if introduces || weight(piece) < MIN_CLAIM_WEIGHT {
             held = Some((from, to));
         } else {
             joined.push((from, to));
@@ -275,15 +468,14 @@ pub fn extract_corpus(
 
     crate::capture::for_each_body(&snapshot, |id, language, text| {
         report.reviews += 1;
-        let found = spans(text);
+        let found = claims_of(text);
         if found.is_empty() {
             report.empty += 1;
         }
-        for (index, at) in found.into_iter().enumerate() {
-            let claim = &text[at.clone()];
-            seen.insert(crate::embed::sha256_bytes(claim));
+        for (index, (at, claim)) in found.into_iter().enumerate() {
+            seen.insert(crate::embed::sha256_bytes(&claim));
             report.claims += 1;
-            pending.push(id, app_id, index, &at, language, claim);
+            pending.push(id, app_id, index, &at, language, &claim);
         }
         if pending.len() >= 16_384 {
             writer.write(&pending.take(&schema)?)?;
@@ -443,11 +635,91 @@ mod tests {
         assert!(split("").is_empty());
     }
 
+    /// Every case below was flagged by a labeller reading real reviews, which is the only
+    /// evidence any splitting rule here has.
+    #[test]
+    fn a_bullet_is_not_part_of_the_point_it_introduces() {
+        let claims = split("- The tutorial explains nothing at all\n- The interface is a mess");
+        assert_eq!(claims.len(), 2);
+        assert!(claims[0].starts_with("The tutorial"), "got {:?}", claims[0]);
+        assert!(claims[1].starts_with("The interface"), "got {:?}", claims[1]);
+    }
+
+    #[test]
+    fn trailing_dashes_used_as_a_divider_are_not_part_of_the_claim() {
+        let claims = split("The translation is full of mistakes, --\nEverything else is fine.");
+        assert_eq!(claims[0], "The translation is full of mistakes,");
+    }
+
+    #[test]
+    fn a_heading_belongs_to_what_it_introduces() {
+        let claims = split("Spoiler about the endgame:\nThe last chapter undoes the whole story.");
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+        assert!(claims[0].contains("last chapter"));
+    }
+
+    #[test]
+    fn a_sentence_inside_a_quotation_is_not_the_reviewers_own() {
+        let claims = split("The devs keep saying \"we hear you. we are working on it.\" and nothing changes.");
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+    }
+
+    #[test]
+    fn a_row_of_dashes_is_a_divider_rather_than_a_claim() {
+        let claims = split("Great game.\n-----\nWould buy again at that price honestly.");
+        assert!(
+            claims.iter().all(|claim| !claim.chars().all(|ch| ch == '-')),
+            "got {claims:?}"
+        );
+    }
+
+    #[test]
+    fn steam_markup_is_not_something_anybody_said() {
+        let claims = split("[b]Great[/b] combat and [i]awful[/i] menus throughout the game.");
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0], "Great combat and awful menus throughout the game.");
+    }
+
+    #[test]
+    fn a_heading_tag_starts_a_new_point() {
+        let claims = split("[h3]Combat[/h3]The parrying is the best in years.[h3]Sound[/h3]Muffled and thin.");
+        assert!(claims.len() >= 2, "got {claims:?}");
+        assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
+    }
+
+    #[test]
+    fn a_list_of_points_is_a_list_of_claims() {
+        let claims = split("[list][*]The interface is unusable[*]The tutorial explains nothing[/list]");
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].contains("interface"));
+        assert!(claims[1].contains("tutorial"));
+    }
+
+    #[test]
+    fn a_score_in_brackets_is_a_claim_rather_than_markup() {
+        let claims = split("[10/10] would freeze to death again in this wonderful city builder.");
+        assert!(claims[0].contains("10/10"), "got {claims:?}");
+    }
+
+    #[test]
+    fn a_web_address_is_not_two_thoughts() {
+        let claims = split("Compare the charts at https://example.com/a?b=1&c=2 before you buy it.");
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+    }
+
+    /// Reviews are full of non-breaking spaces, and stepping over one by a single byte lands
+    /// in the middle of a character.
+    #[test]
+    fn a_multi_byte_space_before_a_boundary_does_not_panic() {
+        let claims = split("The soundtrack is superb.\u{a0}The mixing is not. It sits far too low.");
+        assert!(claims.len() >= 2, "got {claims:?}");
+    }
+
     #[test]
     fn every_claim_is_a_slice_of_what_went_in() {
         let review = "Great port. Runs at 4k60 on a 3060. Steam Deck verified too.";
         for claim in split(review) {
-            assert!(review.contains(claim));
+            assert!(review.contains(claim.as_ref()));
         }
     }
 }

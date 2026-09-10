@@ -203,12 +203,12 @@ fn read_distinct_claims(
 
     crate::capture::for_each_body(snapshot, |_, _, text| {
         for claim in crate::claims::split(text) {
-            let key = crate::embed::sha256_bytes(claim);
+            let key = crate::embed::sha256_bytes(&claim);
             if answers.contains_key(&key) || keys.contains(&key) {
                 continue;
             }
             keys.push(key);
-            pending.push(claim.to_owned());
+            pending.push(claim.into_owned());
             if pending.len() >= batch_size {
                 for (key, reading) in keys.drain(..).zip(model.read(&pending)?) {
                     answers.insert(key, reading);
@@ -253,7 +253,7 @@ fn judge(text: &str, answers: &HashMap<[u8; 32], Reading>) -> Verdict {
 
     for claim in crate::claims::split(text) {
         claims += 1;
-        let Some(reading) = answers.get(&crate::embed::sha256_bytes(claim)) else {
+        let Some(reading) = answers.get(&crate::embed::sha256_bytes(&claim)) else {
             unclassified += 1;
             continue;
         };
@@ -359,7 +359,7 @@ fn count_reviews(
             }
         }
         for (index, claim) in crate::claims::split(text).into_iter().enumerate() {
-            let reading = answers.get(&crate::embed::sha256_bytes(claim));
+            let reading = answers.get(&crate::embed::sha256_bytes(&claim));
             if let Some(reading) = reading {
                 if let Some(subject) = reading.subject {
                     tallies[subject].claims += 1;

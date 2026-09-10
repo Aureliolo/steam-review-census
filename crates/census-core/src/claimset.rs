@@ -76,18 +76,18 @@ pub fn draw(out_dir: &Path, app_id: u32, wanted: usize, seed: u64) -> Result<Vec
         crate::bounded::Smallest::new(wanted);
 
     crate::capture::for_each_body(&snapshot, |id, language, text| {
-        let spans = crate::claims::spans(text);
-        if spans.is_empty() {
+        let found = crate::claims::claims_of(text);
+        if found.is_empty() {
             return Ok(());
         }
-        let claims = spans
+        let claims = found
             .into_iter()
             .enumerate()
-            .map(|(index, at)| DrawnClaim {
+            .map(|(index, (at, claim))| DrawnClaim {
                 index: u16::try_from(index).unwrap_or(u16::MAX),
                 start: u32::try_from(at.start).unwrap_or(u32::MAX),
                 end: u32::try_from(at.end).unwrap_or(u32::MAX),
-                text: text[at].to_owned(),
+                text: claim.into_owned(),
             })
             .collect();
         best.offer(
