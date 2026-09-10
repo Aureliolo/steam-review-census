@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Census</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <nav class="rail" aria-label="Library">
+        <div class="rail-head">
+          <h1 class="mark">Census</h1>
+          <button type="button" id="add" class="add" aria-label="Add a game">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+          </button>
+        </div>
+        <div class="rail-find">
+          <label class="sr" for="filter">Filter the library</label>
+          <input type="search" id="filter" placeholder="Filter" autocomplete="off" spellcheck="false" />
+        </div>
+        <ul class="shelf" id="shelf"></ul>
+        <p class="rail-foot" id="where"></p>
+      </nav>
+
+      <main class="stage" id="stage">
+        <section class="empty" id="welcome" hidden>
+          <h2>Nothing counted yet</h2>
+          <p>
+            Give it a Steam app ID and it downloads every review for that game, not a sample,
+            then sorts what people said and counts how often they said it.
+          </p>
+          <p class="quiet">
+            The app ID is the number in the store URL:
+            <code>store.steampowered.com/app/<b>1091500</b>/</code>
+          </p>
+          <button type="button" class="primary" id="welcome-add">Add a game</button>
+        </section>
+
+        <section class="finder" id="finder" hidden>
+          <h2>Add a game</h2>
+          <form id="lookup-form" autocomplete="off">
+            <label for="appid">Steam app ID</label>
+            <div class="row">
+              <input
+                type="text"
+                id="appid"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                placeholder="1091500"
+                spellcheck="false"
+              />
+              <button type="submit" class="primary" id="lookup">Look up</button>
+            </div>
+            <p class="note" id="lookup-note" role="status" aria-live="polite"></p>
+          </form>
+
+          <div class="found" id="found" hidden>
+            <h3 id="found-name"></h3>
+            <dl class="facts" id="found-facts"></dl>
+            <p class="note" id="found-note"></p>
+            <div class="row">
+              <button type="button" class="primary" id="start">Download every review</button>
+              <button type="button" class="quiet-button" id="cancel">Cancel</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="game" id="game" hidden>
+          <header class="game-head">
+            <h2 id="game-name"></h2>
+            <p class="quiet" id="game-sub"></p>
+          </header>
+          <dl class="facts wide" id="game-facts"></dl>
+          <div class="work" id="work" hidden>
+            <p class="work-line"><span id="work-what"></span><span class="num" id="work-count"></span></p>
+            <div class="track"><span class="fill" id="work-fill"></span></div>
+          </div>
+          <p class="note" id="game-note" role="status" aria-live="polite"></p>
+
+          <div class="topics" id="topics" hidden>
+            <h3>What people talk about</h3>
+            <p class="lede" id="topics-lede"></p>
+            <table class="counts">
+              <thead>
+                <tr>
+                  <th scope="col">Subject</th>
+                  <th scope="col" class="num">Mention rate</th>
+                  <th scope="col" class="num">Recommend</th>
+                  <th scope="col" class="num">At the top</th>
+                </tr>
+              </thead>
+              <tbody id="topic-rows"></tbody>
+            </table>
+            <p class="footnote">
+              Mention rates count a review once for every subject it raises, so they add up to
+              more than 100%, and they are meant to. Every one of them opens.
+            </p>
+          </div>
+        </section>
+
+        <section class="evidence" id="evidence" hidden>
+          <button type="button" class="back" id="back">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3 5 8l5 5" /></svg>
+            All subjects
+          </button>
+          <h2 id="evidence-name"></h2>
+          <p class="lede" id="evidence-lede"></p>
+          <ol class="quotes" id="quotes"></ol>
+          <div class="row paging">
+            <button type="button" class="quiet-button" id="earlier">Previous</button>
+            <button type="button" class="quiet-button" id="later">Next</button>
+            <span class="quiet" id="paging-note"></span>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

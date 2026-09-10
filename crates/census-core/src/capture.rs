@@ -308,6 +308,53 @@ pub fn texts_for<S: std::hash::BuildHasher>(
     Ok(found)
 }
 
+/// Streams every review's id, language and text, in capture order.
+///
+/// Unlike [`texts_for`] this holds nothing: a corpus of a million reviews is several
+/// gigabytes of text, and every pass that walks all of it has to be able to walk away from
+/// what it has already seen.
+///
+/// # Errors
+///
+/// Fails if a shard cannot be read, or if the visitor does.
+pub fn for_each_body(
+    snapshot: &Path,
+    mut visit: impl FnMut(&str, &str, &str) -> Result<()>,
+) -> Result<()> {
+    use arrow::array::{Array, StringArray};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    for shard in shards_of(snapshot)? {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let column = |name: &'static str| -> Result<&StringArray> {
+                batch
+                    .column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let ids = column("recommendationid")?;
+            let languages = column("language")?;
+            let bodies = column("review")?;
+            for row in 0..batch.num_rows() {
+                if bodies.is_null(row) {
+                    continue;
+                }
+                let language = if languages.is_null(row) {
+                    ""
+                } else {
+                    languages.value(row)
+                };
+                visit(ids.value(row), language, bodies.value(row))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// One captured review, with everything a reader needs to judge it for themselves.
 #[derive(Debug, Clone)]
 pub struct CapturedReview {

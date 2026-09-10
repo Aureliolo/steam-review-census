@@ -1,0 +1,453 @@
+//! Splitting a review into the separate points it makes.
+//!
+//! A review is not one opinion. "Looks incredible, runs like a slideshow, and the story is
+//! the best in the series" is three, about three different things, and a single vector for
+//! the whole review is their average: a point in embedding space that belongs to none of
+//! them. Every category a review touches has to be reachable, and averaging is what puts a
+//! long multi-topic review nearest to nothing in particular.
+//!
+//! The split is deliberately mechanical. It knows about sentence terminators in the scripts
+//! reviews are written in and nothing else: no grammar, no model, no language detection. A
+//! wrong split costs one claim landing in the wrong category, which is measurable. A model
+//! here would cost a second thing to keep honest.
+
+use std::{collections::HashSet, path::Path, sync::Arc};
+
+use arrow::{
+    array::{ArrayRef, StringBuilder, UInt16Builder, UInt32Builder},
+    datatypes::{DataType, Field, Schema},
+    record_batch::RecordBatch,
+};
+use parquet::{
+    arrow::ArrowWriter,
+    basic::{Compression, ZstdLevel},
+    file::properties::WriterProperties,
+};
+
+use crate::Result;
+
+/// Below this much of a piece it is not a point, it is the tail of one. "Yes." and "10/10."
+/// are joined to what they qualify rather than counted as opinions of their own.
+const MIN_CLAIM_WEIGHT: usize = 12;
+
+/// What one character of a script that writes without spaces is worth against one Latin
+/// character. A Japanese sentence is eight characters where its English translation is
+/// thirty, so counting characters alone would file every CJK review as fragments.
+const DENSE_CHARACTER: usize = 3;
+
+/// Where a sentence can end, across the scripts Steam reviews arrive in. Latin and Cyrillic
+/// share the first three; the rest are the full-width forms used in Chinese, Japanese and
+/// Korean, Arabic's full stop, and the Devanagari danda.
+const TERMINATORS: [char; 10] = ['.', '!', '?', '\u{2026}', '\u{3002}', '\u{FF01}', '\u{FF1F}', '\u{06D4}', '\u{0964}', ';'];
+
+/// The points a review makes, in the order it makes them.
+///
+/// Never empty for text with any content in it: a review that terminates nothing comes back
+/// as one claim, which is the honest reading of a reviewer who wrote one long sentence.
+#[must_use]
+pub fn split(text: &str) -> Vec<&str> {
+    spans(text).into_iter().map(|at| &text[at]).collect()
+}
+
+/// The same split as [`split`], as byte ranges into the review.
+///
+/// Offsets rather than text is what a published dataset can carry: the labels point at spans
+/// of reviews anyone can fetch from Steam themselves, so the labelling is shareable without
+/// redistributing a word anybody wrote.
+#[must_use]
+pub fn spans(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut pieces: Vec<(usize, usize)> = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+
+    while let Some((at, ch)) = chars.next() {
+        let ends = if ch == '\n' {
+            true
+        } else if ch == '.' {
+            // The only ambiguous terminator. Every other one in TERMINATORS ends a thought
+            // wherever it appears, including the full-width stops, which sit between
+            // characters with no space anywhere near them.
+            !continues_a_number(text, at) && !continues_a_word(text, at + ch.len_utf8())
+        } else if TERMINATORS.contains(&ch) {
+            true
+        } else {
+            false
+        };
+
+        if !ends {
+            continue;
+        }
+
+        // Run out any further terminators and the whitespace after them, so "Wait... what?!"
+        // is one boundary rather than five.
+        let mut end = at + ch.len_utf8();
+        while let Some(&(next_at, next)) = chars.peek() {
+            if next == '\n' || next.is_whitespace() || TERMINATORS.contains(&next) {
+                end = next_at + next.len_utf8();
+                chars.next();
+            } else {
+                break;
+            }
+        }
+
+        if !text[start..end].trim().is_empty() {
+            pieces.push((start, end));
+        }
+        start = end;
+    }
+
+    if !text[start..].trim().is_empty() {
+        pieces.push((start, text.len()));
+    }
+
+    join_the_fragments(text, pieces)
+        .into_iter()
+        .filter_map(|(from, to)| {
+            let piece = &text[from..to];
+            let lead = piece.len() - piece.trim_start().len();
+            let trail = piece.len() - piece.trim_end().len();
+            let (from, to) = (from + lead, to - trail);
+            (from < to).then_some(from..to)
+        })
+        .collect()
+}
+
+/// Whether a full stop is a decimal point rather than the end of a thought, as in "9.5/10"
+/// and "1.6 patch".
+fn continues_a_number(text: &str, at: usize) -> bool {
+    let before = text[..at].chars().next_back().is_some_and(char::is_numeric);
+    let after = text[at + 1..].chars().next().is_some_and(char::is_numeric);
+    before && after
+}
+
+/// Whether what follows a full stop reads as the middle of a sentence rather than the start
+/// of one, which is what separates "e.g. this one" and "Mr. Freeman" from a real boundary.
+///
+/// Scripts without letter case, which is most of the ones this has to handle, have no
+/// lowercase to find, so this only ever suppresses a split in the scripts that do.
+fn continues_a_word(text: &str, from: usize) -> bool {
+    let rest = text[from..].trim_start();
+    if rest.len() == text[from..].len() && !rest.is_empty() {
+        // No space at all after the stop: "www.example.com", "4.Great".
+        return true;
+    }
+    rest.chars().next().is_some_and(char::is_lowercase)
+}
+
+/// How much a piece says, in Latin characters or their equivalent.
+fn weight(piece: &str) -> usize {
+    piece
+        .chars()
+        .map(|ch| if writes_without_spaces(ch) { DENSE_CHARACTER } else { 1 })
+        .sum()
+}
+
+/// Whether a character belongs to a script that carries about a word per character and puts
+/// no spaces between them.
+fn writes_without_spaces(ch: char) -> bool {
+    matches!(ch as u32,
+        0x3040..=0x30FF   // Hiragana and Katakana
+        | 0x3400..=0x4DBF // CJK unified ideographs, extension A
+        | 0x4E00..=0x9FFF // CJK unified ideographs
+        | 0xAC00..=0xD7AF // Hangul syllables
+        | 0xF900..=0xFAFF // CJK compatibility ideographs
+    )
+}
+
+/// Joins pieces too short to be a point of their own to the point they qualify.
+///
+/// Forward, because a short opener is nearly always a verdict on what follows ("Yes. Buy
+/// it while it is on sale"), and a short piece with nothing after it has only one neighbour.
+fn join_the_fragments(text: &str, pieces: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    let mut joined: Vec<(usize, usize)> = Vec::with_capacity(pieces.len());
+    let mut held: Option<(usize, usize)> = None;
+
+    for (from, to) in pieces {
+        let (from, to) = match held.take() {
+            Some((earlier, _)) => (earlier, to),
+            None => (from, to),
+        };
+        if weight(text[from..to].trim()) < MIN_CLAIM_WEIGHT {
+            held = Some((from, to));
+        } else {
+            joined.push((from, to));
+        }
+    }
+
+    if let Some((from, to)) = held {
+        match joined.last_mut() {
+            Some(last) => last.1 = to,
+            None => joined.push((from, to)),
+        }
+    }
+
+    joined
+}
+
+/// What splitting a corpus produced.
+#[derive(Debug, Clone)]
+pub struct ClaimReport {
+    pub app_id: u32,
+    pub reviews: u64,
+    /// Reviews with nothing in them to split, which are stored but say nothing at all.
+    pub empty: u64,
+    pub claims: u64,
+    /// Claims whose text nothing else in the corpus repeats. This is what has to be embedded,
+    /// and on a corpus full of "Great game." it is far below the claim count.
+    pub distinct: u64,
+}
+
+impl ClaimReport {
+    /// Claims per review, which is how much a whole-review vector was averaging away.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "corpus counts are far below 2^53"
+    )]
+    pub fn per_review(&self) -> f64 {
+        if self.reviews == 0 {
+            return 0.0;
+        }
+        self.claims as f64 / self.reviews as f64
+    }
+
+    /// Share of claims that something else in the corpus says in the same words.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "corpus counts are far below 2^53"
+    )]
+    pub fn repeated(&self) -> Option<f64> {
+        (self.claims > 0).then(|| 1.0 - self.distinct as f64 / self.claims as f64)
+    }
+}
+
+fn claim_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("recommendationid", DataType::Utf8, false),
+        Field::new("appid", DataType::UInt32, false),
+        Field::new("claim_index", DataType::UInt16, false),
+        // Byte offsets into the review as captured, so a claim can be recovered from the
+        // corpus rather than stored twice.
+        Field::new("start", DataType::UInt32, false),
+        Field::new("end", DataType::UInt32, false),
+        Field::new("language", DataType::Utf8, false),
+        Field::new("text_sha256", DataType::Utf8, false),
+    ]))
+}
+
+/// Splits every review in the most recent capture into the points it makes.
+///
+/// Writes `claims.parquet` beside the capture: one row per claim, carrying offsets rather
+/// than text, so the corpus is not stored twice and a published label set can point at spans
+/// of reviews without redistributing them.
+///
+/// # Errors
+///
+/// Fails if there is no capture, or if reading or writing fails.
+pub fn extract_corpus(
+    out_dir: &Path,
+    app_id: u32,
+    mut on_progress: impl FnMut(u64, u64),
+) -> Result<ClaimReport> {
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let path = snapshot.join("claims.parquet");
+    let schema = claim_schema();
+    let mut writer = ArrowWriter::try_new(
+        std::fs::File::create(&path)?,
+        Arc::clone(&schema),
+        Some(
+            WriterProperties::builder()
+                .set_compression(Compression::ZSTD(ZstdLevel::default()))
+                .build(),
+        ),
+    )?;
+
+    let mut seen: HashSet<[u8; 32]> = HashSet::new();
+    let mut report = ClaimReport {
+        app_id,
+        reviews: 0,
+        empty: 0,
+        claims: 0,
+        distinct: 0,
+    };
+    let mut pending = ClaimBatch::default();
+
+    crate::capture::for_each_body(&snapshot, |id, language, text| {
+        report.reviews += 1;
+        let found = spans(text);
+        if found.is_empty() {
+            report.empty += 1;
+        }
+        for (index, at) in found.into_iter().enumerate() {
+            let claim = &text[at.clone()];
+            seen.insert(crate::embed::sha256_bytes(claim));
+            report.claims += 1;
+            pending.push(id, app_id, index, &at, language, claim);
+        }
+        if pending.len() >= 16_384 {
+            writer.write(&pending.take(&schema)?)?;
+            on_progress(report.reviews, report.claims);
+        }
+        Ok(())
+    })?;
+
+    if pending.len() > 0 {
+        writer.write(&pending.take(&schema)?)?;
+    }
+    writer.close()?;
+    report.distinct = seen.len() as u64;
+    Ok(report)
+}
+
+#[derive(Default)]
+struct ClaimBatch {
+    ids: Vec<String>,
+    appids: Vec<u32>,
+    indexes: Vec<u16>,
+    starts: Vec<u32>,
+    ends: Vec<u32>,
+    languages: Vec<String>,
+    digests: Vec<String>,
+}
+
+impl ClaimBatch {
+    fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    fn push(
+        &mut self,
+        id: &str,
+        app_id: u32,
+        index: usize,
+        at: &std::ops::Range<usize>,
+        language: &str,
+        claim: &str,
+    ) {
+        self.ids.push(id.to_owned());
+        self.appids.push(app_id);
+        self.indexes.push(u16::try_from(index).unwrap_or(u16::MAX));
+        self.starts.push(u32::try_from(at.start).unwrap_or(u32::MAX));
+        self.ends.push(u32::try_from(at.end).unwrap_or(u32::MAX));
+        self.languages.push(language.to_owned());
+        self.digests.push(crate::embed::sha256_hex(claim));
+    }
+
+    fn take(&mut self, schema: &Arc<Schema>) -> Result<RecordBatch> {
+        let mut ids = StringBuilder::new();
+        let mut appids = UInt32Builder::new();
+        let mut indexes = UInt16Builder::new();
+        let mut starts = UInt32Builder::new();
+        let mut ends = UInt32Builder::new();
+        let mut languages = StringBuilder::new();
+        let mut digests = StringBuilder::new();
+
+        for row in 0..self.len() {
+            ids.append_value(&self.ids[row]);
+            appids.append_value(self.appids[row]);
+            indexes.append_value(self.indexes[row]);
+            starts.append_value(self.starts[row]);
+            ends.append_value(self.ends[row]);
+            languages.append_value(&self.languages[row]);
+            digests.append_value(&self.digests[row]);
+        }
+        self.ids.clear();
+        self.appids.clear();
+        self.indexes.clear();
+        self.starts.clear();
+        self.ends.clear();
+        self.languages.clear();
+        self.digests.clear();
+
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(ids.finish()),
+            Arc::new(appids.finish()),
+            Arc::new(indexes.finish()),
+            Arc::new(starts.finish()),
+            Arc::new(ends.finish()),
+            Arc::new(languages.finish()),
+            Arc::new(digests.finish()),
+        ];
+        Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_review_about_three_things_is_three_claims() {
+        let claims = split("Looks incredible. Runs like a slideshow on my machine. The story is the best in the series.");
+        assert_eq!(claims.len(), 3);
+        assert_eq!(claims[0], "Looks incredible.");
+        assert!(claims[2].starts_with("The story"));
+    }
+
+    #[test]
+    fn a_score_is_not_a_sentence_boundary() {
+        assert_eq!(split("Solid 9.5 out of 10 for the soundtrack alone."), vec![
+            "Solid 9.5 out of 10 for the soundtrack alone."
+        ]);
+    }
+
+    #[test]
+    fn full_width_stops_split_where_there_are_no_spaces() {
+        let claims = split("\u{753B}\u{9762}\u{304C}\u{7DBA}\u{9E97}\u{3067}\u{3059}\u{3002}\u{3067}\u{3082}\u{5024}\u{6BB5}\u{304C}\u{9AD8}\u{3059}\u{304E}\u{307E}\u{3059}\u{3002}");
+        assert_eq!(claims.len(), 2);
+    }
+
+    #[test]
+    fn a_trailing_verdict_joins_what_it_qualifies() {
+        // "Buy it." on its own is not a point about anything; attached, it is the verdict on
+        // the point before it.
+        let claims = split("The combat finally feels weighty and fast. Buy it.");
+        assert_eq!(claims.len(), 1);
+    }
+
+    #[test]
+    fn an_opening_fragment_joins_what_follows_it() {
+        let claims = split("Yes. It is worth every penny at full price.");
+        assert_eq!(claims, vec!["Yes. It is worth every penny at full price."]);
+    }
+
+    #[test]
+    fn one_long_sentence_is_one_claim() {
+        let claims = split("i played this for six hundred hours and i still have no idea what is going on");
+        assert_eq!(claims.len(), 1);
+    }
+
+    #[test]
+    fn newlines_end_a_point_even_without_punctuation() {
+        let claims = split("Pros\nThe driving model is superb\nCons\nThe menus are a disaster");
+        assert_eq!(claims.len(), 2);
+        assert!(claims[0].contains("driving model"));
+    }
+
+    #[test]
+    fn runs_of_punctuation_are_one_boundary() {
+        let claims = split("Wait... what?! The ending was cut out of the retail release.");
+        assert_eq!(claims.len(), 2);
+    }
+
+    #[test]
+    fn an_abbreviation_does_not_end_a_point() {
+        let claims = split("Bring a friend, e.g. someone who likes being shouted at, and it is a great time.");
+        assert_eq!(claims.len(), 1);
+    }
+
+    #[test]
+    fn text_with_nothing_in_it_makes_no_claims() {
+        assert!(split("   \n\n  ").is_empty());
+        assert!(split("").is_empty());
+    }
+
+    #[test]
+    fn every_claim_is_a_slice_of_what_went_in() {
+        let review = "Great port. Runs at 4k60 on a 3060. Steam Deck verified too.";
+        for claim in split(review) {
+            assert!(review.contains(claim));
+        }
+    }
+}

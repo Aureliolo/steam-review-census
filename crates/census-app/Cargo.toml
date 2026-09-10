@@ -1,6 +1,6 @@
 [package]
-name = "census-cli"
-description = "Command-line interface for steam-review-census."
+name = "census-app"
+description = "Desktop application and command-line interface for steam-review-census."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,8 +16,14 @@ path = "src/main.rs"
 anyhow = "1.0.104"
 census-core.workspace = true
 clap = { version = "4.6.6", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-opener = "2.5.5"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
 
 [features]
 default = []

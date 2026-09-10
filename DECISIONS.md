@@ -80,6 +80,28 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Measured error **corrects the reported prevalence** | measured, **never applied as a correction** |
 | The sets are a silver standard, and the README says so rather than calling them gold | done |
 
+## The classifier
+
+Settled after the shipped classifier was opened up in the app and found to be filing "gfg",
+"game" and "☺" under Graphics and art. Prototype anchors are not being tuned, they are being
+removed.
+
+| Decided | State |
+|---|---|
+| The unit is a **claim**, not a review. A review is split into the points it makes and each point carries one subject | splitter written and tested |
+| A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | to build |
+| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | to build |
+| **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | to build |
+| **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | to build |
+| **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
+| Model is **multilingual**, reports default to **English** with a working language switch | to build |
+| Labelling is **cluster-stratified in round one**, then **active learning** (uncertainty crossed with diversity) | to build |
+| **One game first**, about 2,000 claims, then decide whether to commit the rest | to build |
+| The 26 games already labelled at review level get **re-labelled at claim level**, so old and new are the same sample | to build |
+| Full MLOps, **reproducible in this repository**: soft targets from labeller confidence, automated label auditing, frozen test set, per-language and per-length slice metrics, calibration, ONNX parity assertion, a CI gate that fails on F1 regression, hash-versioned label sets, plus self-training and multi-seed ensemble as measured experiments | to build |
+| Run tracking is a local JSON log carrying git sha, data hash, config and metrics. No external service | to build |
+| Model and dataset published to **Hugging Face**. The dataset is review ids, claim offsets and labels, **never review text**, because this repository holds no review data | to build |
+
 ## What this leaves
 
 Four things stand between the current tool and what was agreed, in the order they matter:

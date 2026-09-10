@@ -40,11 +40,13 @@ it does, change the check with it.
 
 `target/`, and nothing beside it. The gates above build test binaries under `target/debug` and
 never produce a release one, so the only binary anyone runs for real work is
-`target/release/census.exe`. Where there is a GPU, build it with the backend for it, because
-embedding a million reviews on a CPU is the difference between an afternoon and a week:
+`target/release/census.exe`. That one binary is both front ends: opened with no arguments it
+is the desktop application, and given arguments it is the pipeline. Where there is a GPU,
+build it with the backend for it, because embedding a million reviews on a CPU is the
+difference between an afternoon and a week:
 
 ```sh
-cargo build --release -p census-cli --features directml
+cargo build --release -p census-app --features directml
 ```
 
 Two things follow. A build without that flag replaces the same file with a CPU one, and the

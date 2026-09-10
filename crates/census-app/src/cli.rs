@@ -143,6 +143,18 @@ enum Command {
     },
 
     /// Embed the captured reviews locally, so nothing is sent anywhere.
+    /// Split every review into the separate points it makes.
+    ///
+    /// A review is not one opinion, and a whole-review vector is the average of the ones it
+    /// holds. This writes claims.parquet beside the capture, carrying offsets rather than
+    /// text so the corpus is not stored twice.
+    Claims {
+        /// Steam app ID, as it appears in the store URL.
+        app_id: u32,
+        /// Directory holding the capture.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+    },
     Embed {
         /// Steam app ID whose most recent capture should be embedded.
         app_id: u32,
@@ -215,8 +227,8 @@ enum Command {
     /// Separate from `sample` because a boundary rule can change without anything needing to
     /// be drawn again, and regenerating the sheet should never mean redrawing a sample.
     Brief {
-        /// Where to write it.
-        #[arg(long, default_value = "reference/labelling-brief.txt")]
+        /// Where to write it. Both sheets are written when this is a directory.
+        #[arg(long, default_value = "reference")]
         to: PathBuf,
     },
 
@@ -347,8 +359,7 @@ struct FitArgs {
     precision: Precision,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+pub async fn run() -> Result<()> {
     match Cli::parse().command {
         Command::Crawl {
             app_id,
@@ -368,6 +379,7 @@ async fn main() -> Result<()> {
             };
             run_crawl(app_id, &options, Duration::from_millis(pace_ms)).await
         }
+        Command::Claims { app_id, out } => run_claims(app_id, &out),
         Command::Embed {
             app_id,
             out,
@@ -411,11 +423,7 @@ async fn main() -> Result<()> {
             },
             batch_size,
         ),
-        Command::Brief { to } => {
-            std::fs::write(&to, census_core::taxonomy::labelling_brief())?;
-            println!("brief    {}", to.display());
-            Ok(())
-        }
+        Command::Brief { to } => run_brief(&to),
         Command::Report {
             app_ids,
             out,
@@ -624,16 +632,6 @@ fn print_agreement(report: &census_core::AgreementReport, human_verified: bool) 
     );
 }
 
-/// Where anchors are looked for, best first: a set fitted for this game, then the set
-/// shipped with the tool, which is fitted across several games and is what a game nobody
-/// has labelled gets.
-fn anchor_paths(app_id: u32) -> [PathBuf; 2] {
-    [
-        census_core::evaluate::default_reference_dir(app_id).join("anchors.json"),
-        PathBuf::from("reference").join("anchors.json"),
-    ]
-}
-
 /// Loads fitted anchors if there are any, falling back to embedding the descriptions.
 ///
 /// Only the fallback needs the embedding model, so classifying with a fitted set never
@@ -646,10 +644,11 @@ async fn load_anchors(
     encoder: census_core::Encoder,
     precision: census_core::model::Precision,
 ) -> Result<census_core::Anchors> {
-    let found = anchor_paths(app_id).into_iter().find(|path| path.exists());
-    let path = explicit.clone().or(found).unwrap_or_default();
-    if !force_descriptions && (explicit.is_some() || path.exists()) {
-        let anchors = census_core::Anchors::load(&path)?;
+    if !force_descriptions {
+        let anchors = match explicit {
+            Some(ref path) => census_core::Anchors::load(path)?,
+            None => census_core::Anchors::for_app(app_id)?,
+        };
         if !anchors.fitted_from.is_empty() && !anchors.fitted_from.contains(&app_id) {
             eprintln!(
                 "note: these anchors were fitted on {}, which does not include {app_id}. \
@@ -663,7 +662,13 @@ async fn load_anchors(
                     .join(", ")
             );
         }
-        eprintln!("anchors      {}", path.display());
+        eprintln!(
+            "anchors      {}",
+            explicit.as_ref().map_or_else(
+                || format!("fitted on {} games, compiled in", anchors.fitted_from.len()),
+                |path| path.display().to_string()
+            )
+        );
         return Ok(anchors);
     }
 
@@ -1638,6 +1643,52 @@ fn print_classification(report: &census_core::ClassifyReport) {
         "\nAccuracy of these assignments is UNMEASURED. No gold set exists yet, so treat \
          every figure above as provisional."
     );
+}
+
+fn run_brief(to: &std::path::Path) -> Result<()> {
+    use census_core::taxonomy::{Unit, labelling_brief};
+
+    let sheets = [
+        ("labelling-brief.txt", Unit::Review),
+        ("claim-brief.txt", Unit::Claim),
+    ];
+    // A file path names one sheet, which is what a caller who wants only the review sheet
+    // asks for. A directory gets both, because the two drift apart the moment one is
+    // regenerated without the other.
+    if to.extension().is_some() {
+        std::fs::write(to, labelling_brief(Unit::Review))?;
+        println!("brief    {}", to.display());
+        return Ok(());
+    }
+    std::fs::create_dir_all(to)?;
+    for (name, unit) in sheets {
+        let path = to.join(name);
+        std::fs::write(&path, labelling_brief(unit))?;
+        println!("brief    {}", path.display());
+    }
+    Ok(())
+}
+
+fn run_claims(app_id: u32, out: &std::path::Path) -> Result<()> {
+    eprintln!("splitting app {app_id}");
+    let mut announced = 0;
+    let report = census_core::claims::extract_corpus(out, app_id, |reviews, claims| {
+        if reviews / 100_000 > announced {
+            announced = reviews / 100_000;
+            eprintln!("  {reviews} reviews, {claims} claims");
+        }
+    })?;
+
+    println!("app          {}", report.app_id);
+    println!("reviews      {}", report.reviews);
+    println!("claims       {}", report.claims);
+    println!("per review   {:.2}", report.per_review());
+    println!("distinct     {}", report.distinct);
+    if let Some(share) = report.repeated() {
+        println!("repeated     {:.1}% of claims are said in the same words elsewhere", share * 100.0);
+    }
+    println!("empty        {} reviews split into nothing", report.empty);
+    Ok(())
 }
 
 async fn run_embed(

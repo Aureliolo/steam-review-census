@@ -114,6 +114,9 @@ pub struct Anchor {
     pub vector: Vec<f32>,
 }
 
+/// The fitted anchors this build carries, so a binary on its own can classify a corpus.
+const SHIPPED: &str = include_str!("../../../reference/anchors.json");
+
 /// The full set of category anchors, in [`CORE_SPINE`] order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Anchors {
@@ -337,8 +340,41 @@ impl Anchors {
         let bytes = std::fs::read(path).map_err(|_| Error::NoAnchors {
             path: path.to_path_buf(),
         })?;
-        let anchors: Self = serde_json::from_slice(&bytes)?;
+        Self::checked(serde_json::from_slice(&bytes)?)
+    }
 
+    /// The fitted set compiled into this build.
+    ///
+    /// A downloaded binary has no repository beside it, and a classifier that only works
+    /// when it is started from a checkout is not something anyone can be given. This is what
+    /// a game nobody has labelled is classified against, and it is why the tool needs no
+    /// setup at all.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the compiled-in set was fitted against a different taxonomy from this build,
+    /// which is a repository that was committed mid-change rather than anything a user did.
+    pub fn shipped() -> Result<Self> {
+        Self::checked(serde_json::from_str(SHIPPED)?)
+    }
+
+    /// The best anchors available for one game: its own if it has been fitted, else the set
+    /// this build ships with.
+    ///
+    /// # Errors
+    ///
+    /// Fails if a set exists for the game but was fitted against another taxonomy, which is
+    /// worth refusing rather than silently replacing with the general set: the numbers would
+    /// change without anything appearing to go wrong.
+    pub fn for_app(app_id: u32) -> Result<Self> {
+        let own = crate::evaluate::default_reference_dir(app_id).join("anchors.json");
+        if own.exists() {
+            return Self::load(&own);
+        }
+        Self::shipped()
+    }
+
+    fn checked(anchors: Self) -> Result<Self> {
         if anchors.spine_version != CORE_SPINE_VERSION {
             return Err(Error::StaleAnchors {
                 field: "taxonomy",

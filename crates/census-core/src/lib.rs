@@ -6,6 +6,7 @@ pub mod anchors;
 pub mod api;
 mod bounded;
 pub mod capture;
+pub mod claims;
 pub mod classify;
 pub mod crawl;
 pub mod embed;

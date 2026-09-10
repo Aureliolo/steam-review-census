@@ -391,18 +391,50 @@ pub fn by_id(id: &str) -> Option<&'static Category> {
 /// labellers, and they disagreed about the same boundary in near-identical cases because the
 /// instructions never settled it. Generating the sheet from the taxonomy means a rule can
 /// only be fixed in one place, and every labeller sees the same one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Unit {
+    /// A whole review, which is what the first reference sets labelled.
+    Review,
+    /// One point a review makes. What the model is trained on, because a review is not one
+    /// opinion and a vector for the whole of it is the average of the ones it holds.
+    #[default]
+    Claim,
+}
+
 #[must_use]
-pub fn labelling_brief() -> String {
+pub fn labelling_brief(unit: Unit) -> String {
     use std::fmt::Write as _;
 
-    let mut brief = format!(
-        "Categories (spine {CORE_SPINE_VERSION}). Each review gets exactly one primary \
-         category, plus any others it genuinely also covers.\n\n\
-         You are shown the text of a review and nothing else: not which game it is, not \
-         whether the reviewer recommended it, not what the classifier guessed. The tool being \
-         measured sorts reviews from their text alone, so a label made from more than that \
-         would measure what you were told rather than how well it reads.\n\n"
-    );
+    let mut brief = match unit {
+        Unit::Review => format!(
+            "Categories (spine {CORE_SPINE_VERSION}). Each review gets exactly one primary \
+             category, plus any others it genuinely also covers.\n\n\
+             You are shown the text of a review and nothing else: not which game it is, not \
+             whether the reviewer recommended it, not what the classifier guessed. The tool \
+             being measured sorts reviews from their text alone, so a label made from more \
+             than that would measure what you were told rather than how well it reads.\n\n"
+        ),
+        Unit::Claim => format!(
+            "Categories (spine {CORE_SPINE_VERSION}). You are labelling CLAIMS: the separate \
+             points a review makes. Each claim gets exactly one subject.\n\n\
+             A review arrives split into numbered claims, and you label every one of them. \
+             The review is there so a claim like \"it doesn't\" or \"same here\" can be read \
+             in context; the label is about the claim, not about the review around it. A \
+             review that makes one point has one claim, and a review that makes twelve has \
+             twelve, which is the whole reason for labelling this way: the tool used to \
+             average a long review into a single vector and then file a two-word review under \
+             four subjects.\n\n\
+             You are not told which game it is, whether the reviewer recommended it, or what \
+             the model guessed. The model reads the text alone, so a label made from more \
+             than that measures what you were told rather than how well it reads.\n\n\
+             Most claims name no aspect at all. \"Great game\", \"10/10\", \"gfg\", a row of \
+             emoji: these are not graphics, not gameplay and not story, and filing them as \
+             any of those is the exact failure this set exists to fix. They are `verdict` \
+             when they judge the game and `offtopic` when they say nothing about it. Expect \
+             to use those two more than anything else, and do not go looking for a subject \
+             that is not there.\n\n"
+        ),
+    };
     for category in CORE_SPINE {
         let _ = writeln!(
             brief,
@@ -412,7 +444,7 @@ pub fn labelling_brief() -> String {
         if let Some(rule) = category.boundary {
             let _ = writeln!(brief, "  RULE: {rule}");
         }
-        if category.alone {
+        if category.alone && unit == Unit::Review {
             let _ = writeln!(
                 brief,
                 "  ONLY: this is the whole label. A review here covers nothing else, so it \
@@ -421,7 +453,15 @@ pub fn labelling_brief() -> String {
         }
         brief.push('\n');
     }
-    brief.push_str(&FIELDS.replace(CONFIDENCE_SLOT, &CONFIDENCE.join(", ")));
+    let fields = match unit {
+        Unit::Review => FIELDS,
+        Unit::Claim => CLAIM_FIELDS,
+    };
+    brief.push_str(
+        &fields
+            .replace(CONFIDENCE_SLOT, &CONFIDENCE.join(", "))
+            .replace(POLARITY_SLOT, &POLARITY.join(", ")),
+    );
     brief
 }
 
@@ -434,6 +474,61 @@ pub const CONFIDENCE: [&str; 3] = ["high", "medium", "low"];
 
 /// Where the sheet names them, so the words are written down once.
 const CONFIDENCE_SLOT: &str = "{confidence}";
+
+/// The answers `polarity` may take.
+///
+/// Three rather than two, because a claim can state a fact about the game without judging it,
+/// and forcing "it is a roguelike deckbuilder" to be praise or complaint would put a verdict
+/// in a reviewer's mouth. Mixed is deliberately absent: a claim that both praises and
+/// complains is two claims the splitter failed to separate, and `split_wrong` records that
+/// instead of hiding it in a fourth value.
+pub const POLARITY: [&str; 3] = ["praise", "complaint", "neutral"];
+
+const POLARITY_SLOT: &str = "{polarity}";
+
+/// What every claim label carries.
+///
+/// The review-level sheet asks for a primary and a secondary category. A claim takes exactly
+/// one subject, and that is the point of the unit: where two genuinely fit, the split was
+/// wrong, and saying so is worth more than a second category. `split_wrong` is how the
+/// splitter gets measured by the people best placed to see it fail.
+const CLAIM_FIELDS: &str = "\
+Every claim label is six fields.
+
+subject
+  The one category this claim is about. Exactly one, always. Most claims name no aspect at
+  all: those are `verdict` if they judge the game and `offtopic` if they do not.
+
+polarity
+  What the claim does about its subject, in one of these words: {polarity}. Praise and
+  complaint are about the game, not about the reviewer's mood. Neutral is for a claim that
+  states something without judging it, which is common and is not a failure to decide.
+
+ironic
+  The text says the opposite of what it appears to say. \"0/10, I have not slept in three
+  days\" is praise; \"10/10 would lose my save file again\" is a complaint. Judge this from
+  the words alone. You are not told whether the reviewer recommended the game, so that you
+  cannot be led by it. Where a claim is ironic, `polarity` is what the reviewer MEANS.
+
+confidence
+  How sure you are of the subject, in one of these words: {confidence}. This one is about
+  you, and it is used: the model is trained against your uncertainty rather than against a
+  flattened guess, so a truthful \"low\" is worth more than a confident wrong answer.
+
+ambiguous
+  Whether the call is genuinely contested: two subjects fit and the rules above do not settle
+  which. This is about the claim and the taxonomy rather than about you, and it is read back.
+  Agreement is reported separately over the claims marked here.
+
+split_wrong
+  Whether this claim is really two points stuck together, or half of one that was cut in the
+  wrong place. The splitting is mechanical and it will be wrong sometimes; this is the only
+  signal that it was, and it is what improves it. Leave it false unless the text in front of
+  you is genuinely mis-cut.
+
+Return every one of these for every claim, in the order the claims are given. A judgement left
+out is not a judgement, and a label missing one is refused rather than filled in with a guess.
+";
 
 /// What every label carries besides its categories.
 ///
@@ -556,22 +651,56 @@ mod tests {
 
     #[test]
     fn the_labelling_brief_carries_every_category_and_every_rule() {
-        let brief = labelling_brief();
-        assert!(brief.contains(CORE_SPINE_VERSION));
-        for category in CORE_SPINE {
-            assert!(brief.contains(category.id), "{} missing", category.id);
-            assert!(brief.contains(category.description));
-            if let Some(rule) = category.boundary {
-                assert!(brief.contains(rule), "{}'s rule missing", category.id);
+        for unit in [Unit::Review, Unit::Claim] {
+            let brief = labelling_brief(unit);
+            assert!(brief.contains(CORE_SPINE_VERSION));
+            for category in CORE_SPINE {
+                assert!(brief.contains(category.id), "{} missing", category.id);
+                assert!(brief.contains(category.description));
+                if let Some(rule) = category.boundary {
+                    assert!(brief.contains(rule), "{}'s rule missing", category.id);
+                }
             }
         }
+    }
+
+    /// The claim sheet asks for one subject and a polarity, and the failure it exists to stop
+    /// is a labeller hunting for a topic in "Great game".
+    #[test]
+    fn the_claim_brief_asks_for_one_subject_and_a_polarity() {
+        let brief = labelling_brief(Unit::Claim);
+        for field in [
+            "subject",
+            "polarity",
+            "ironic",
+            "confidence",
+            "ambiguous",
+            "split_wrong",
+        ] {
+            assert!(
+                brief.contains(&format!("\n{field}\n")),
+                "{field} goes unexplained"
+            );
+        }
+        for word in POLARITY {
+            assert!(brief.contains(word), "polarity {word} is asked for but not named");
+        }
+        assert!(!brief.contains(POLARITY_SLOT));
+        assert!(
+            brief.contains("Return every one of these for every claim"),
+            "the sheet does not say that every judgement is required"
+        );
+        assert!(
+            !brief.contains("secondary"),
+            "a claim takes one subject; offering a secondary invites the averaging this unit exists to remove"
+        );
     }
 
     /// The judgements besides the categories were left to whatever each batch of labellers
     /// was told, and one of them decides how a headline figure is reported.
     #[test]
     fn the_brief_says_what_the_other_judgements_mean() {
-        let brief = labelling_brief();
+        let brief = labelling_brief(Unit::Review);
         for field in ["primary", "secondary", "ironic", "confidence", "ambiguous"] {
             assert!(
                 brief.contains(&format!("\n{field}\n")),
@@ -609,15 +738,21 @@ mod tests {
         // tool, which makes it capable of drifting from the taxonomy it claims to describe.
         // A reference set labelled against a stale sheet is silently mislabelled, and the
         // first set produced by this project lost consistency exactly that way.
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../reference/labelling-brief.txt");
-        let committed = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} is missing: {e}", path.display()));
-        assert_eq!(
-            committed.replace("\r\n", "\n"),
-            labelling_brief(),
-            "reference/labelling-brief.txt is stale; regenerate it with `census sample --brief`"
-        );
+        for (file, unit) in [
+            ("labelling-brief.txt", Unit::Review),
+            ("claim-brief.txt", Unit::Claim),
+        ] {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../reference")
+                .join(file);
+            let committed = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("{} is missing: {e}", path.display()));
+            assert_eq!(
+                committed.replace("\r\n", "\n"),
+                labelling_brief(unit),
+                "reference/{file} is stale; regenerate it with `census brief`"
+            );
+        }
     }
 
     #[test]
