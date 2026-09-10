@@ -251,6 +251,27 @@ enum Command {
         to: PathBuf,
     },
 
+    /// Read every claim in a corpus with the trained model.
+    Read {
+        /// Steam app ID whose most recent capture should be read.
+        app_id: u32,
+        /// Directory holding the capture.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Directory holding model.onnx, tokenizer.json and reader.json.
+        #[arg(long, default_value = "models/claim-reader")]
+        model: PathBuf,
+        /// Claims per forward pass.
+        #[arg(long, default_value_t = census_core::read::DEFAULT_READ_BATCH)]
+        batch_size: usize,
+        /// Count only reviews written in this language. The capture stays whole either way.
+        #[arg(long)]
+        language: Option<String>,
+        /// How many of the most-helpful reviews count as the top of the pile.
+        #[arg(long, default_value_t = census_core::classify::DEFAULT_TOP_HELPFUL)]
+        top_helpful: usize,
+    },
+
     /// Sort embedded reviews into the core-spine categories and report what players say.
     Classify(ClassifyArgs),
 
@@ -463,6 +484,23 @@ pub async fn run() -> Result<()> {
             to,
         } => run_sample_claims(app_id, &out, reviews, batch_size, seed, to),
         Command::IngestClaims { app_id, from, to } => run_ingest_claims(app_id, &from, to),
+        Command::Read {
+            app_id,
+            out,
+            model,
+            batch_size,
+            language,
+            top_helpful,
+        } => run_read(
+            app_id,
+            &model,
+            &census_core::read::ReadOptions {
+                out_dir: out,
+                top_helpful,
+                batch_size,
+                language,
+            },
+        ),
         Command::ExportTraining { from, to } => {
             let written = census_core::claimset::export_training(&from, &to)?;
             println!("{written} labelled claims -> {}", to.display());
@@ -1771,6 +1809,80 @@ fn run_sample_claims(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    Ok(())
+}
+
+fn run_read(
+    app_id: u32,
+    model_dir: &std::path::Path,
+    options: &census_core::read::ReadOptions,
+) -> Result<()> {
+    census_core::embed::latest_snapshot(&options.out_dir, app_id)?;
+    let mut model = census_core::reader::ClaimReader::load(model_dir)?;
+    eprintln!("model        {} on {}", model_dir.display(), model.device());
+    eprintln!("threshold    {:.2}", model.provenance().threshold);
+    eprintln!("reading app {app_id}");
+
+    let interactive = std::io::stderr().is_terminal();
+    let mut announced = 0;
+    let report = census_core::read::read_corpus(&mut model, app_id, options, |progress| {
+        if !interactive || progress.done / 100_000 <= announced {
+            return;
+        }
+        announced = progress.done / 100_000;
+        let what = if progress.reading_claims {
+            "distinct claims read"
+        } else {
+            "reviews counted"
+        };
+        eprintln!("  {} {what}", thousands(progress.done));
+    })?;
+    let path = census_core::embed::latest_snapshot(&options.out_dir, app_id)?.join("reading.json");
+    report.save(&path)?;
+
+    println!("app          {}", report.app_id);
+    if let Some(language) = &report.language {
+        println!(
+            "counted      {} {language} reviews of {} in the corpus",
+            thousands(report.reviews),
+            thousands(report.corpus_reviews)
+        );
+    } else {
+        println!("counted      {} reviews", thousands(report.reviews));
+    }
+    println!("claims       {}", thousands(report.claims));
+    if let Some(share) = report.unclassified_share() {
+        println!(
+            "no subject   {} claims ({:.1}%), and {} reviews that name nothing at all",
+            thousands(report.unclassified_claims),
+            share * 100.0,
+            thousands(report.silent_reviews)
+        );
+    }
+    println!("took         {}", elapsed(report.elapsed));
+    println!("written to   {}\n", path.display());
+
+    let mut ranked: Vec<&census_core::read::SubjectCount> = report
+        .subjects
+        .iter()
+        .filter(|subject| subject.mention_reviews > 0)
+        .collect();
+    ranked.sort_by_key(|subject| std::cmp::Reverse(subject.mention_reviews));
+    println!(
+        "{:<26} {:>9} {:>8} {:>8} {:>8} {:>8}",
+        "subject", "reviews", "rate", "praise", "gripe", "mixed"
+    );
+    for subject in ranked {
+        println!(
+            "{:<26} {:>9} {:>8} {:>8} {:>8} {:>8}",
+            subject.label,
+            thousands(subject.mention_reviews),
+            share(subject.mention_reviews, report.reviews),
+            thousands(subject.praised),
+            thousands(subject.criticised),
+            thousands(subject.mixed),
+        );
+    }
     Ok(())
 }
 
