@@ -36,20 +36,22 @@ Chrome is found in the usual places per platform, or wherever `CHROME_PATH` says
 check in it is a promise the page makes in its own prose; if you change what the page says
 it does, change the check with it.
 
-### Build directories
+### One build directory
 
-There are exactly two, and adding a third is how a repository ends up with twenty gigabytes of
-them. `target/` is what the gates above use, with default features. `target-dml/` is the same
-tree built with a GPU backend, because switching `--features` in one directory recompiles
-everything each way and a corpus takes long enough already:
+`target/`, and nothing beside it. The gates above build test binaries under `target/debug` and
+never produce a release one, so the only binary anyone runs for real work is
+`target/release/census.exe`. Where there is a GPU, build it with the backend for it, because
+embedding a million reviews on a CPU is the difference between an afternoon and a week:
 
 ```sh
-cargo build --release -p census-cli --features directml --target-dir target-dml
+cargo build --release -p census-cli --features directml
 ```
 
-On Windows a running `census.exe` holds its own binary open, so a build started while a crawl
-or an embed is in flight fails with "Access is denied". The fix is to wait for the run, or to
-build the other tree; it is not to invent a directory per occasion.
+Two things follow. A build without that flag replaces the same file with a CPU one, and the
+only sign is the device `census embed` prints on its third line: read it. And on Windows a
+running `census.exe` holds its own binary open, so a build started mid-crawl fails with
+"Access is denied" — wait for the run rather than reaching for `--target-dir`, which is how
+this repository once ended up with four build trees and twenty gigabytes in them.
 
 Two of those promises are watched rather than read. The page is reloaded with the network
 being listened to and fails on any request but the file itself, because a stylesheet pulling
