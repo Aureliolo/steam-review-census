@@ -100,8 +100,16 @@ def fingerprint(claims: list[Claim]) -> str:
 def split_by_game(
     claims: list[Claim], seed: int = 1, test_share: float = 0.2, validation_share: float = 0.15
 ) -> tuple[list[Claim], list[Claim], list[Claim]]:
-    """Splits whole games, never claims, so a score is about a game nobody trained on."""
+    """Splits whole games, never claims, so a score is about a game nobody trained on.
+
+    With fewer than three games there is no such split to make, and whole reviews are held out
+    instead. That is a weaker guarantee and the number it produces is worth less: it says the
+    model generalises across reviews of one game, not across games. Anything reported from it
+    has to say so.
+    """
     games = sorted({claim.app_id for claim in claims})
+    if len(games) < 3:
+        return _split_by_review(claims, seed, test_share, validation_share)
     shuffled = list(games)
     random.Random(seed).shuffle(shuffled)
 
@@ -115,6 +123,30 @@ def split_by_game(
         if claim.app_id in test_games:
             test.append(claim)
         elif claim.app_id in validation_games:
+            validation.append(claim)
+        else:
+            train.append(claim)
+    return train, validation, test
+
+
+def _split_by_review(
+    claims: list[Claim], seed: int, test_share: float, validation_share: float
+) -> tuple[list[Claim], list[Claim], list[Claim]]:
+    reviews = sorted({(claim.app_id, claim.review_id) for claim in claims})
+    shuffled = list(reviews)
+    random.Random(seed).shuffle(shuffled)
+
+    held = max(1, round(len(shuffled) * test_share))
+    checked = max(1, round(len(shuffled) * validation_share))
+    test_reviews = set(shuffled[:held])
+    validation_reviews = set(shuffled[held : held + checked])
+
+    train, validation, test = [], [], []
+    for claim in claims:
+        key = (claim.app_id, claim.review_id)
+        if key in test_reviews:
+            test.append(claim)
+        elif key in validation_reviews:
             validation.append(claim)
         else:
             train.append(claim)

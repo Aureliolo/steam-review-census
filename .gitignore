@@ -44,6 +44,9 @@ training/data/
 training/runs/*/checkpoints/
 training/runs/*/*.bin
 training/runs/*/*.safetensors
+# A tokenizer is seventeen megabytes and is reproducible from the backbone name recorded in
+# run.json, so it belongs with the published model rather than in the history.
+training/runs/*/tokenizer/
 training/.venv/
 
 # Build and dependency artefacts

@@ -162,9 +162,24 @@ def evaluate(model, loader, device, subjects, claims):
             "accuracy": float(correct[sure].mean()) if sure.any() else None,
         }
 
+    # Where to stop answering. Chosen by the product of how often it answers and how often it
+    # is right when it does, because either alone has a trivial maximum: answer nothing, or
+    # answer everything. Chosen here on validation claims and never on the held-out ones,
+    # since a threshold tuned against the test set turns the test set into an opinion.
+    best_threshold, best_score = 0.0, -1.0
+    for floor in np.arange(0.05, 0.96, 0.05):
+        sure = confidence >= floor
+        if not sure.any():
+            continue
+        score = float(correct[sure].mean()) * float(sure.mean())
+        if score > best_score:
+            best_threshold, best_score = float(floor), score
+
     return {
         "accuracy": float(correct.mean()),
         "macro_f1": macro,
+        "threshold": best_threshold,
+        "threshold_score": best_score,
         "polarity_macro_f1": polarity_macro,
         "calibration_error": expected_calibration_error(confidence, correct),
         "on_clear_cut": float(correct[~contested].mean()) if (~contested).any() else None,

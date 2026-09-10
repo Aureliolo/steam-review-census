@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
     parser.add_argument("--opset", type=int, default=17)
     parser.add_argument("--check", type=int, default=256)
+    parser.add_argument("--spine", default="core-4", help="the taxonomy these labels were made against")
     args = parser.parse_args()
 
     run = Path(args.run)
@@ -73,6 +74,15 @@ def main():
         opset_version=args.opset,
     )
 
+    # One file, not a graph plus a weights blob beside it. What ships is verified by checksum
+    # before it is run, and a checksum over one of two files is a checksum over nothing.
+    import onnx
+
+    inlined = onnx.load(str(graph), load_external_data=True)
+    onnx.save(inlined, str(graph), save_as_external_data=False)
+    for stray in graph.parent.glob("model.onnx.data*"):
+        stray.unlink()
+
     import onnxruntime
 
     with torch.no_grad():
@@ -95,6 +105,24 @@ def main():
             f"the exported graph disagrees with the model it came from "
             f"({drift:.2e} > {TOLERANCE:.0e}, {moved} answers changed). Not shipping this."
         )
+
+    # What the Rust side needs to use the graph without being told anything else. The
+    # taxonomy version is in here so a model trained against another spine is refused rather
+    # than quietly asked about categories nobody labelled.
+    (run / "reader.json").write_text(
+        json.dumps(
+            {
+                "spine_version": args.spine,
+                "subjects": subjects,
+                "threshold": record["validation"].get("threshold", 0.5),
+                "max_tokens": record["max_length"],
+                "trained_from": record["backbone"],
+                "data_fingerprint": record["data_fingerprint"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     card = run / "MODEL_CARD.md"
     metrics = record["validation"]
