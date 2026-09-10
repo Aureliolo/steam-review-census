@@ -513,7 +513,7 @@ fn refuse_a_foreign_encoder(anchors: &Anchors, out_dir: &Path, app_id: u32) -> R
 fn group_reviews_by_text(snapshot: &Path) -> Result<(HashMap<String, Vec<ReviewRow>>, u64)> {
     let mut by_hash: HashMap<String, Vec<ReviewRow>> = HashMap::new();
     let mut reviews = 0_u64;
-    for_each_review(snapshot, |row| {
+    for_each_review(snapshot, |row, _| {
         reviews += 1;
         by_hash.entry(row.text_hash.clone()).or_default().push(row);
         Ok(())
@@ -735,7 +735,7 @@ fn column<'a, T: 'static>(batch: &'a RecordBatch, name: &'static str) -> Result<
 /// corpus in a `Vec` before yielding its first item, which reads as streaming and is not.
 pub(crate) fn for_each_review(
     snapshot: &Path,
-    mut visit: impl FnMut(ReviewRow) -> Result<()>,
+    mut visit: impl FnMut(ReviewRow, &str) -> Result<()>,
 ) -> Result<()> {
     use arrow::array::{BooleanArray, Float64Array, Int64Array, StringArray, UInt32Array};
 
@@ -767,31 +767,35 @@ pub(crate) fn for_each_review(
                 if texts.is_null(row) || texts.value(row).trim().is_empty() {
                     continue;
                 }
-                visit(ReviewRow {
-                    recommendationid: ids.value(row).to_owned(),
-                    text_hash: crate::embed::sha256_hex(texts.value(row)),
-                    helpfulness: if helpful.is_null(row) {
-                        0.0
-                    } else {
-                        helpful.value(row)
+                let body = texts.value(row);
+                visit(
+                    ReviewRow {
+                        recommendationid: ids.value(row).to_owned(),
+                        text_hash: crate::embed::sha256_hex(body),
+                        helpfulness: if helpful.is_null(row) {
+                            0.0
+                        } else {
+                            helpful.value(row)
+                        },
+                        votes_up: if votes.is_null(row) {
+                            0
+                        } else {
+                            votes.value(row)
+                        },
+                        voted_up: !recommended.is_null(row) && recommended.value(row),
+                        language: if languages.is_null(row) {
+                            String::new()
+                        } else {
+                            languages.value(row).to_owned()
+                        },
+                        created: if created.is_null(row) {
+                            0
+                        } else {
+                            created.value(row)
+                        },
                     },
-                    votes_up: if votes.is_null(row) {
-                        0
-                    } else {
-                        votes.value(row)
-                    },
-                    voted_up: !recommended.is_null(row) && recommended.value(row),
-                    language: if languages.is_null(row) {
-                        String::new()
-                    } else {
-                        languages.value(row).to_owned()
-                    },
-                    created: if created.is_null(row) {
-                        0
-                    } else {
-                        created.value(row)
-                    },
-                })?;
+                    body,
+                )?;
             }
         }
     }
@@ -823,7 +827,7 @@ mod tests {
         writer.close().unwrap();
 
         let mut seen = Vec::new();
-        for_each_review(&dir, |row| {
+        for_each_review(&dir, |row, _| {
             seen.push(row.recommendationid);
             Ok(())
         })

@@ -15,6 +15,7 @@ pub mod evaluate;
 pub mod html;
 pub mod model;
 pub mod query;
+pub mod read;
 pub mod reader;
 pub mod report;
 pub mod sample;
