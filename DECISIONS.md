@@ -102,6 +102,24 @@ removed.
 | Run tracking is a local JSON log carrying git sha, data hash, config and metrics. No external service | to build |
 | Model and dataset published to **Hugging Face**. The dataset is review ids, claim offsets and labels, **never review text**, because this repository holds no review data | to build |
 
+## What the pilot found
+
+One game, Frostpunk 2, 2,760 claims labelled by three agents against core-4. Everything here
+is measured rather than argued.
+
+| Question | Answer |
+|---|---|
+| Does the chain work end to end? | Yes: labels, training, ONNX export with a parity assertion at 1.7e-05 and zero answers changed, and a corpus pass |
+| What do more labels buy? | 430 training claims gave accuracy 0.25 and macro F1 0.17; 1,629 gave **0.46 and 0.41**, with polarity F1 0.21 to 0.62. Still climbing |
+| What does labelling cost? | ~305 tokens a claim, so 20,000 claims is about 6M tokens |
+| How often is a claim mis-split? | 12% to 17% by three labellers independently, which drove three rounds of splitter fixes |
+| What did labellers have nowhere to put? | Atmosphere and feel, by all three, and by six review-level labellers before them |
+
+The taxonomy is now **core-5**: `atmosphere` added on that evidence, plus rules for comparing a
+game with its own predecessor, for praise or blame aimed at the studio, and for a game that
+will not start at all. Every earlier reference set and the shipped anchors are core-4 and are
+refused by this build, which is the guard working rather than failing.
+
 ## What this leaves
 
 Four things stand between the current tool and what was agreed, in the order they matter:

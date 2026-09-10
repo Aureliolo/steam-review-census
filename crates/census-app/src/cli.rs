@@ -1823,13 +1823,14 @@ fn run_read(
     eprintln!("threshold    {:.2}", model.provenance().threshold);
     eprintln!("reading app {app_id}");
 
-    let interactive = std::io::stderr().is_terminal();
+    // Printed whether or not anyone is watching a terminal: this is the pass that takes
+    // hours, and a log with nothing in it is indistinguishable from a hang.
     let mut announced = 0;
     let report = census_core::read::read_corpus(&mut model, app_id, options, |progress| {
-        if !interactive || progress.done / 100_000 <= announced {
+        if progress.done / 25_000 <= announced {
             return;
         }
-        announced = progress.done / 100_000;
+        announced = progress.done / 25_000;
         let what = if progress.reading_claims {
             "distinct claims read"
         } else {

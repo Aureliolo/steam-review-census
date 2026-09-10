@@ -47,7 +47,7 @@ pub struct Category {
 
 /// Version of the core spine. Any change to the categories or their descriptions changes
 /// what the numbers mean, so this is recorded alongside every classification.
-pub const CORE_SPINE_VERSION: &str = "core-4";
+pub const CORE_SPINE_VERSION: &str = "core-5";
 
 pub const CORE_SPINE: &[Category] = &[
     Category {
@@ -100,7 +100,9 @@ pub const CORE_SPINE: &[Category] = &[
             "Naming what kind of game it is, or which games it resembles, belongs here, and \
              that includes calling it a co-op game or comparing it to other co-op games. As \
              soon as a review says a mechanic is deep, shallow, satisfying or broken, that \
-             part is gameplay, and whether the co-op itself works is multiplayer.",
+             part is gameplay, and whether the co-op itself works is multiplayer. A \
+             comparison with this game's own predecessor belongs here when the difference \
+             itself is the point, and to verdict when it is only better or worse.",
         ),
         alone: false,
     },
@@ -150,6 +152,30 @@ pub const CORE_SPINE: &[Category] = &[
             "Anecdotes from a playthrough belong here when they are about a character or an \
              event, and to gameplay when they are about a mechanic. Humour in the writing is \
              here; a charming art style is graphics.",
+        ),
+        alone: false,
+    },
+    // Asked for by nine labellers across two eras and two genres, which is more independent
+    // evidence than any other category in this spine had. Every labeller of Alien: Isolation
+    // named it, the DEVOUR labeller reached it from a different corpus, and all three claim
+    // labellers on a city builder called it the largest gap in the sheet. Without it, "you
+    // never FEEL it" and "the deaths are just numbers now" fall to story or gameplay at low
+    // confidence, and a report about a horror game cannot say that players found it
+    // frightening.
+    Category {
+        id: "atmosphere",
+        label: "Atmosphere and feel",
+        description: "What the game makes you feel while you are playing it. Genuinely \
+                      terrifying, the tension never lets up, put headphones on and turn the \
+                      lights off, it pulls you in and you lose whole evenings, the mood is \
+                      oppressive and lonely, it has lost the soul the first one had, the \
+                      people are just numbers to you now, you never really feel it.",
+        boundary: Some(
+            "This is the feeling itself, for reviews that name nothing that produces it. \
+             Where a review says what creates the mood, that part belongs to what creates \
+             it: a frightening creature design is graphics, a soundtrack that unsettles is \
+             audio, a mechanic that keeps you on edge is gameplay, and immersion broken by a \
+             crash is bugs.",
         ),
         alone: false,
     },
@@ -260,8 +286,9 @@ pub const CORE_SPINE: &[Category] = &[
                       progress, communication with players, whether promises were kept, and \
                       whether the game is abandoned.",
         boundary: Some(
-            "What the developers do to the game belongs here. What the publisher or the \
-             platform requires of the player belongs to policy.",
+            "What the developers do to the game belongs here, and so does praise or blame \
+             aimed at the studio itself, including thanking them and telling them to fix it. \
+             What the publisher or the platform requires of the player belongs to policy.",
         ),
         alone: false,
     },
@@ -290,8 +317,10 @@ pub const CORE_SPINE: &[Category] = &[
                       Linux and Proton, ultrawide and multi-monitor support, drivers and \
                       hardware, and asking for it on a console or handheld.",
         boundary: Some(
-            "Asking for a port to another platform belongs here. Asking for a sequel belongs \
-             to verdict, and anything about playing it in a headset belongs to VR.",
+            "Asking for a port to another platform belongs here, and so does a game that \
+             will not start at all when no reason is given. A game that starts and then \
+             crashes is bugs. Asking for a sequel belongs to verdict, and anything about \
+             playing it in a headset belongs to VR.",
         ),
         alone: false,
     },

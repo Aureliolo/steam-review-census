@@ -1,4 +1,4 @@
-Categories (spine core-4). You are labelling CLAIMS: the separate points a review makes. Each claim gets exactly one subject.
+Categories (spine core-5). You are labelling CLAIMS: the separate points a review makes. Each claim gets exactly one subject.
 
 A review arrives split into numbered claims, and you label every one of them. The review is there so a claim like "it doesn't" or "same here" can be read in context; the label is about the claim, not about the review around it. A review that makes one point has one claim, and a review that makes twelve has twelve, which is the whole reason for labelling this way: the tool used to average a long review into a single vector and then file a two-word review under four subjects.
 
@@ -19,7 +19,7 @@ Gameplay and mechanics (gameplay)
 
 Genre and comparisons (genre)
   What kind of game this is. A roguelike, turn-based tactics, a management sim, a deckbuilder, a soulslike. It plays like FTL, it is XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like this, it reminds me of the old games in the genre.
-  RULE: Naming what kind of game it is, or which games it resembles, belongs here, and that includes calling it a co-op game or comparing it to other co-op games. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay, and whether the co-op itself works is multiplayer.
+  RULE: Naming what kind of game it is, or which games it resembles, belongs here, and that includes calling it a co-op game or comparing it to other co-op games. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay, and whether the co-op itself works is multiplayer. A comparison with this game's own predecessor belongs here when the difference itself is the point, and to verdict when it is only better or worse.
 
 Overall verdict only (verdict)
   A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, worth every penny, do not buy, waste of money, best game ever, I find this game childish, please make a sequel.
@@ -32,6 +32,10 @@ Says nothing about the game (offtopic)
 Story and writing (story)
   The story, plot and characters. The writing, the dialogue, the humour, the ending, the world and its lore, the characters players grew fond of, and whether the narrative is worth following.
   RULE: Anecdotes from a playthrough belong here when they are about a character or an event, and to gameplay when they are about a mechanic. Humour in the writing is here; a charming art style is graphics.
+
+Atmosphere and feel (atmosphere)
+  What the game makes you feel while you are playing it. Genuinely terrifying, the tension never lets up, put headphones on and turn the lights off, it pulls you in and you lose whole evenings, the mood is oppressive and lonely, it has lost the soul the first one had, the people are just numbers to you now, you never really feel it.
+  RULE: This is the feeling itself, for reviews that name nothing that produces it. Where a review says what creates the mood, that part belongs to what creates it: a frightening creature design is graphics, a soundtrack that unsettles is audio, a mechanic that keeps you on edge is gameplay, and immersion broken by a crash is bugs.
 
 Graphics and art (graphics)
   How the game looks. The visuals, the art style, the animation and how quickly it plays out, the environments and character models, whether it is beautiful or ugly or charming.
@@ -69,7 +73,7 @@ Community and players (community)
 
 Updates and developer support (updates)
   What the developers do after release. Patches, roadmaps, early access progress, communication with players, whether promises were kept, and whether the game is abandoned.
-  RULE: What the developers do to the game belongs here. What the publisher or the platform requires of the player belongs to policy.
+  RULE: What the developers do to the game belongs here, and so does praise or blame aimed at the studio itself, including thanking them and telling them to fix it. What the publisher or the platform requires of the player belongs to policy.
 
 Publisher and platform policy (policy)
   Decisions taken by the publisher or the platform rather than by the game. Needing a second account to play, region locks and delistings, DRM and kernel-level anti-cheat, launcher requirements, price rises, and terms that changed after people had bought it.
@@ -77,7 +81,7 @@ Publisher and platform policy (policy)
 
 Hardware and compatibility (compatibility)
   Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
-  RULE: Asking for a port to another platform belongs here. Asking for a sequel belongs to verdict, and anything about playing it in a headset belongs to VR.
+  RULE: Asking for a port to another platform belongs here, and so does a game that will not start at all when no reason is given. A game that starts and then crashes is bugs. Asking for a sequel belongs to verdict, and anything about playing it in a headset belongs to VR.
 
 Accessibility and options (accessibility)
   Settings and accommodations. Subtitles, colourblind modes, remappable controls, difficulty options, text size, and the settings players need in order to play at all.
