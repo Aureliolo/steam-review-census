@@ -148,6 +148,42 @@ examples categories are built from. A separate, randomly drawn subset is held ba
 entirely and is the only part any figure is ever quoted from, because a stratified sample
 deliberately over-represents whatever the classifier rarely picks.
 
+### How the reference sets are made
+
+They are a **silver standard**, not a gold one, and the distinction decides what every number
+downstream may be called. A gold standard is adjudicated by people. These labels are written by
+a language model reading one review at a time, which makes the set good enough to fit anchors
+from and to measure against, and never good enough to quote as truth. Every manifest records
+`human_verified: false`, and until that changes the tool reports **agreement** and refuses the
+word accuracy.
+
+The protocol is fixed so it can be repeated, and so a disagreement with it is about the method
+rather than about somebody's afternoon:
+
+- **The sample is drawn before anyone reads anything.** `census sample` takes a seed and draws
+  two subsets per game: a fixed number of reviews uniformly at random, and a stratified subset
+  filled category by category, pooled across every game in the run so that a category one game
+  never discusses is supplied by a game that does. The same seed against the same capture draws
+  the same reviews, so a set can be rebuilt without being stored.
+- **Labellers are shown the review text and nothing else.** Not the game, not whether the
+  reviewer recommended it, not what the classifier guessed. The prediction is withheld because
+  anyone shown a proposed answer agrees with it more than someone reading cold. The rating and
+  the game are withheld for a different reason: the classifier does not see them either, so a
+  label made from more than the tool can read would measure the gap in what the two were shown.
+- **The sheet every labeller works from is generated from the taxonomy**, so a boundary rule
+  exists in exactly one place and every labeller is given the same one.
+- **Labelling runs in parallel, one labeller per game**, each working batch by batch and writing
+  each batch out before opening the next.
+- **Every label carries five fields**: one primary category, any secondary categories the review
+  genuinely also covers, whether the text is ironic, how sure the labeller was, and whether the
+  call was genuinely contested. The last of those is the one read back, and agreement is
+  reported separately over the reviews marked with it.
+- **What comes back is checked rather than trusted.** `census ingest` refuses a set that does
+  not cover the drawn sample exactly: reviews nobody labelled, labels naming reviews nobody
+  drew, categories the taxonomy does not have, reviews labelled twice, and labels whose
+  judgements were never made. A judgement left out is dropped rather than defaulted, because a
+  `false` nobody wrote is a figure nobody stood behind.
+
 These rules keep those figures honest:
 
 - **Agreement is not accuracy.** Where the labels were written by a model, what gets measured
@@ -186,6 +222,21 @@ These rules keep those figures honest:
   not place the review either.
 
 ## Honest limits
+
+- **Every review in a reference set is labelled once, so the set cannot say how reliable it
+  is.** Reliability of an annotation set is normally shown by having two labellers do the same
+  reviews and reporting how often they agree. Nothing here does that, so the honest position is
+  that the silver standard's own error is unknown rather than small. The cheapest fix is also
+  the one that would let the word accuracy be used at all: a person labelling a subset
+  independently, with the size of that subset recorded in the manifest.
+
+- **A labeller is not told which game it is, but is given one game at a time.** Withholding the
+  game keeps the label answerable from the same text the classifier reads. Handing over a whole
+  game's batches undermines that where a corpus has a strong accent: thirty-five reviews about
+  tracking and room scale identify a headset game whatever the sheet says. The effect runs one
+  way, towards labels the classifier cannot reproduce, so it understates the classifier rather
+  than flattering it. Shuffling reviews from several games into each batch would remove it, at
+  the cost of routing the labels back per game before they can be ingested.
 
 - **"Every review" means every review Valve will serve, and the request parameters decide how
   many that is.** Two API defaults quietly remove a large and biased slice. `purchase_type`
