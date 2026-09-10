@@ -157,6 +157,12 @@ from and to measure against, and never good enough to quote as truth. Every mani
 `human_verified: false`, and until that changes the tool reports **agreement** and refuses the
 word accuracy.
 
+What the set spends its size on is games rather than depth. A hundred reviews of one title,
+labelled twice over, would say how consistent two labellers are and nothing about whether a
+category survives contact with a corpus it was not built from. So the set runs to thousands of
+labels spread across dozens of games of different genres and different overall sentiment, and
+the figure it exists to produce is the one measured on a game the anchors never saw.
+
 The protocol is fixed so it can be repeated, and so a disagreement with it is about the method
 rather than about somebody's afternoon:
 
