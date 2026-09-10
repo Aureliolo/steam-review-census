@@ -331,6 +331,196 @@ fn behind(app: AppHandle, app_id: u32, category: String, from: usize, count: usi
     })
 }
 
+/// One subject, as the window draws it after a corpus has been read.
+#[derive(Debug, Clone, Serialize)]
+struct Subject {
+    id: String,
+    label: String,
+    reviews: u64,
+    rate: Option<f64>,
+    praised: u64,
+    criticised: u64,
+    mixed: u64,
+    claims: u64,
+    top_rate: Option<f64>,
+    bias: Option<f64>,
+    positive: Option<f64>,
+}
+
+/// What reading a corpus found, ready for the window.
+#[derive(Debug, Clone, Serialize)]
+struct Reading {
+    app_id: u32,
+    name: String,
+    reviews: u64,
+    corpus_reviews: u64,
+    language: Option<String>,
+    claims: u64,
+    unclassified_claims: u64,
+    silent_reviews: u64,
+    top_of_the_pile: u64,
+    positive_baseline: Option<f64>,
+    model: String,
+    threshold: f32,
+    subjects: Vec<Subject>,
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "review counts are far below 2^53"
+)]
+fn share_of(part: u64, whole: u64) -> Option<f64> {
+    (whole > 0).then(|| part as f64 / whole as f64)
+}
+
+#[tauri::command]
+fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
+    let dir = library_dir(&app);
+    let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
+    let found: census_core::read::ReadReport =
+        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            "this game has not been read yet; run the reading pass first".to_owned()
+        })?)
+        .map_err(text)?;
+    let facts = report::crawl_facts(&dir, app_id).map_err(text)?;
+
+    let subjects = found
+        .subjects
+        .iter()
+        .map(|subject| {
+            let rate = share_of(subject.mention_reviews, found.reviews);
+            let top_rate = share_of(subject.top_mention_reviews, found.top_helpful);
+            Subject {
+                id: subject.id.clone(),
+                label: subject.label.clone(),
+                reviews: subject.mention_reviews,
+                rate,
+                praised: subject.praised,
+                criticised: subject.criticised,
+                mixed: subject.mixed,
+                claims: subject.claims,
+                top_rate,
+                bias: match (rate, top_rate) {
+                    (Some(overall), Some(top)) if overall > 0.0 => Some(top / overall),
+                    _ => None,
+                },
+                positive: share_of(subject.positive_mentions, subject.mention_reviews),
+            }
+        })
+        .collect();
+
+    Ok(Reading {
+        app_id,
+        name: facts.title(),
+        reviews: found.reviews,
+        corpus_reviews: found.corpus_reviews,
+        language: found.language.clone(),
+        claims: found.claims,
+        unclassified_claims: found.unclassified_claims,
+        silent_reviews: found.silent_reviews,
+        top_of_the_pile: found.top_helpful,
+        positive_baseline: share_of(found.positive, found.reviews),
+        model: found.model.clone(),
+        threshold: found.threshold,
+        subjects,
+    })
+}
+
+/// One claim shown as evidence, with the review it came from.
+#[derive(Debug, Clone, Serialize)]
+struct Evidence {
+    review_id: String,
+    claim: String,
+    polarity: String,
+    confidence: f32,
+    voted_up: bool,
+    votes_up: u32,
+    created: i64,
+    language: String,
+    url: Option<String>,
+    /// The rest of the review, so a claim can be read where it was written.
+    review: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ClaimsBehind {
+    subject: String,
+    total: u64,
+    from: usize,
+    claims: Vec<Evidence>,
+}
+
+/// Every claim filed under a subject, most helpful review first, a page at a time.
+#[tauri::command]
+fn claims_behind(
+    app: AppHandle,
+    app_id: u32,
+    subject: String,
+    from: usize,
+    count: usize,
+) -> Result<ClaimsBehind, String> {
+    let dir = library_dir(&app);
+    let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
+
+    let mut total: u64 = 0;
+    let mut wanted: Vec<(String, u16, String, f32)> = Vec::new();
+    census_core::read::for_each_reading(
+        &snapshot.join("readings.parquet"),
+        |id, index, found, confidence, polarity| {
+            if found != Some(subject.as_str()) {
+                return;
+            }
+            total += 1;
+            if total as usize > from && wanted.len() < count {
+                wanted.push((id.to_owned(), index, polarity.to_owned(), confidence));
+            }
+        },
+    )
+    .map_err(text)?;
+
+    let ids: std::collections::HashSet<String> =
+        wanted.iter().map(|(id, _, _, _)| id.clone()).collect();
+    let mut fetched = census_core::capture::reviews_for(&snapshot, &ids).map_err(text)?;
+
+    let claims = wanted
+        .into_iter()
+        .filter_map(|(id, index, polarity, confidence)| {
+            let review = fetched.get(&id)?;
+            let claim = census_core::claims::split(&review.text)
+                .into_iter()
+                .nth(index as usize)?
+                .into_owned();
+            let url = (!review.author_steamid.is_empty()).then(|| {
+                format!(
+                    "https://steamcommunity.com/profiles/{}/recommended/{app_id}/",
+                    review.author_steamid
+                )
+            });
+            Some(Evidence {
+                review_id: id,
+                claim,
+                polarity,
+                confidence,
+                voted_up: review.voted_up,
+                votes_up: review.votes_up,
+                created: review.created,
+                language: review.language.clone(),
+                url,
+                review: review.text.clone(),
+            })
+        })
+        .collect();
+
+    fetched.clear();
+
+    Ok(ClaimsBehind {
+        subject,
+        total,
+        from,
+        claims,
+    })
+}
+
 /// # Errors
 ///
 /// Fails if the webview cannot be created, which on Linux means the system webview is
@@ -339,7 +529,13 @@ pub fn run() -> anyhow::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            library, look_up, crawl, analysis, behind
+            library,
+            look_up,
+            crawl,
+            analysis,
+            behind,
+            reading,
+            claims_behind
         ])
         .run(tauri::generate_context!())?;
     Ok(())

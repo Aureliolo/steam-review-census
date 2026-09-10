@@ -32,7 +32,7 @@ use parquet::{
     basic::{Compression, ZstdLevel},
     file::properties::WriterProperties,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     Result,
@@ -85,10 +85,10 @@ struct Tally {
 }
 
 /// One subject, counted over a corpus.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubjectCount {
-    pub id: &'static str,
-    pub label: &'static str,
+    pub id: String,
+    pub label: String,
     /// Reviews raising this subject at least once. The headline denominator.
     pub mention_reviews: u64,
     /// Reviews whose main subject this is, which are exhaustive across subjects.
@@ -104,7 +104,7 @@ pub struct SubjectCount {
 }
 
 /// What reading a corpus found.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadReport {
     pub app_id: u32,
     /// Reviews counted, which is every review in the capture unless a language was named.
@@ -418,8 +418,8 @@ fn count_reviews(
             .iter()
             .zip(&tallies)
             .map(|(category, tally)| SubjectCount {
-                id: category.id,
-                label: category.label,
+                id: category.id.to_owned(),
+                label: category.label.to_owned(),
                 mention_reviews: tally.mention_reviews,
                 primary_reviews: tally.primary_reviews,
                 claims: tally.claims,
@@ -433,6 +433,71 @@ fn count_reviews(
         languages: ranked,
         elapsed: Duration::default(),
     })
+}
+
+/// Streams every stored reading, one claim at a time.
+///
+/// # Errors
+///
+/// Fails if the file is missing or was written by an older build.
+pub fn for_each_reading(
+    path: &Path,
+    mut visit: impl FnMut(&str, u16, Option<&str>, f32, &str),
+) -> Result<()> {
+    use arrow::array::{Array, Float32Array, StringArray, UInt16Array};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let file = std::fs::File::open(path).map_err(|_| crate::Error::NoClassifications {
+        path: path.to_path_buf(),
+    })?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+        .with_batch_size(8192)
+        .build()?;
+
+    for batch in reader {
+        let batch = batch?;
+        let column = |name: &'static str| -> Result<&dyn Array> {
+            batch
+                .column_by_name(name)
+                .map(AsRef::as_ref)
+                .ok_or(crate::Error::MalformedPayload { field: name })
+        };
+        let ids = column("recommendationid")?
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or(crate::Error::MalformedPayload {
+                field: "recommendationid",
+            })?;
+        let indexes = column("claim_index")?
+            .as_any()
+            .downcast_ref::<UInt16Array>()
+            .ok_or(crate::Error::MalformedPayload {
+                field: "claim_index",
+            })?;
+        let subjects = column("subject")?
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or(crate::Error::MalformedPayload { field: "subject" })?;
+        let confidences = column("confidence")?
+            .as_any()
+            .downcast_ref::<Float32Array>()
+            .ok_or(crate::Error::MalformedPayload { field: "confidence" })?;
+        let polarities = column("polarity")?
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or(crate::Error::MalformedPayload { field: "polarity" })?;
+
+        for row in 0..batch.num_rows() {
+            visit(
+                ids.value(row),
+                indexes.value(row),
+                (!subjects.is_null(row)).then(|| subjects.value(row)),
+                confidences.value(row),
+                polarities.value(row),
+            );
+        }
+    }
+    Ok(())
 }
 
 #[derive(Default)]
