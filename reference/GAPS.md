@@ -70,6 +70,18 @@ patch is `updates`; the decision behind it, where the claim names it, is `policy
 `policy` when the requirement is the complaint, and the labeller could not always tell which
 the reviewer meant. Related to the "will not start" gap below and settled by the same rule.
 
+### A publisher's decision reversed, celebrated in memes: one report, a tenth of that game
+
+Helldivers 2 (553850) after Sony withdrew the account requirement: "DEMOCRACY HAS
+PREVAILED", "we won", "For Democracy". The words say nothing about the game and the context
+says `policy`, praise; the labeller filed most `offtopic` at low confidence and marked them
+ambiguous, which is the honest reading of a sheet that has no line for it. The revision adds
+one to `policy`: a celebration or a protest of something the publisher or platform did is
+`policy`, praise or complaint by which it was, however it is phrased. The same set held
+anti-cheat complaints between `policy` (the kernel driver is the objection) and
+`multiplayer` (it blocks joining), settled by the existing line: what a decision is is
+`policy`, what it does when playing is where it does it.
+
 ### Luck that is sold: one report
 
 FC 25's pack luck (2669320) is `monetisation` (loot boxes) and `difficulty` (luck deciding the

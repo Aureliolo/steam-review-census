@@ -329,7 +329,7 @@ impl ReadReport {
             field: "splitter",
             expected: crate::claims::SPLITTER_VERSION.to_owned(),
             actual: if self.splitter.is_empty() {
-                "one before claims-4".to_owned()
+                "an earlier one that went unrecorded".to_owned()
             } else {
                 self.splitter.clone()
             },

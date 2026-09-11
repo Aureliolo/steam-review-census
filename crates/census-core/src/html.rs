@@ -1677,6 +1677,9 @@ fn trust(out: &mut String, app: &AppReport) {
 
     fact(out, "Read by", &built_from(app));
     fact(out, "Taxonomy", &app.reading.spine_version);
+    // Two readings cut by different splitters count different claims from the same reviews,
+    // so a page says which cut its claim counts are counts of.
+    fact(out, "Split by", &app.reading.splitter);
     // Shallow numbers are not deep numbers with less work in them. A review about six things
     // read as one point is about none of them clearly, and a page that did not say which way
     // it was read would invite comparing the two.
