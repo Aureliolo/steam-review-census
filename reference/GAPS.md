@@ -146,13 +146,26 @@ community has made, and whether the game is worth playing without them. A game t
 better modded than shipped is a statement about mods, not about content." With a RULE on
 `content` sending anything user-made here.
 
-### Playing with friends: two reports, and it dominated one game
+### Playing with friends: three reports, and it dominated two games
 
 "Better with friends", "fun with mates", "does not grab you alone". Not servers or matchmaking
 (`multiplayer`), not calling it a co-op game (`genre`), and not a bare verdict. It was the
-commonest qualified claim in DEVOUR's set, and BeamNG's labeller (228380) hit the same three
-ways of filing it. "The game is dead" is its cousin, between `multiplayer` (nobody online)
-and `updates` (nobody developing), and the same labeller marked it contested.
+commonest qualified claim in DEVOUR's set, BeamNG's labeller (228380) hit the same three
+ways of filing it, and Deep Rock Galactic's (548430) split it between `multiplayer` when the
+point is solo against co-op and `verdict` when the friends are incidental. "The game is dead"
+is its cousin, between `multiplayer` (nobody online) and `updates` (nobody developing), and
+the same labeller marked it contested.
+
+### A community's salute on its own: one report, forty claims
+
+"Rock and Stone!", about forty times in Deep Rock Galactic's set, sometimes as the whole
+review. It works as an endorsement and passes no judgement in its words, so the labeller
+filed it `offtopic`, neutral, and marked every one ambiguous. A reader who knows the game
+reads it as praise; the sheet says `offtopic` is for what a reader learns nothing from. The
+revision decides it in one line under `verdict`: a community's own catchphrase used as a
+salute is a verdict, and it is praise. Twenty games have one ("Praise the Sun", "For Rock and
+Stone", "Ave Nex Alea"), and `offtopic` is the wrong bucket for a reviewer declaring
+themselves a fan.
 
 ### Destruction and physics: one report, and it is what that game is
 
@@ -302,7 +315,19 @@ in it, on a line that has one before it, should join backward. Goes in `claims-4
 letter in it, and at least one that is not a letter, following a sentence end on the same
 line is run into that sentence's boundary, and a piece that is only such a token joins the
 piece before it. "xD" is the one two-letter emoticon named. A bare letter never counts,
-because "A" after a full stop is the next sentence starting.
+because "A" after a full stop is the next sentence starting. Not covered: an emoji that
+opens a line and is followed by words on it (548430 reported a pickaxe and a heart handed
+to the line after), because on the next line it is as often that line's bullet.
+
+### A bold heading before a list stood alone, reported on 548430
+
+"The Good:" and "Pro Tips:" came back as claims of their own with their items after them,
+though a heading ending in a colon has joined what it introduces since `claims-2`. The
+reviews wrote them as `[b][u]The Good[/u][/b]:` followed by `[list]` on a line of its own,
+and that bare `[list]` line was a piece: it weighed six characters of markup, took the held
+heading, and the two together weighed enough to stand. **Done in `claims-4`**: a run with no
+words in it is never a piece, markup weighs nothing, and a heading is read for its colon
+with the tags taken out.
 
 ### Two shapes that may not be fixable mechanically
 

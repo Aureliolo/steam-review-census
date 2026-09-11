@@ -127,7 +127,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
                 Markup::Heading { closing: true } => std::mem::take(&mut heading).then_some(after),
             };
             if let Some(cut) = cut
-                && !text[start..cut].trim().is_empty()
+                && !says_nothing(&text[start..cut])
             {
                 pieces.push((start, cut));
                 start = cut;
@@ -167,14 +167,16 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
             continue;
         }
 
+        // A run with no words in it, a blank line or a bare `[list]`, is not a piece; it
+        // stays in front of the next one, which is where its markup belongs.
         let end = run_out(text, &mut chars, at + ch.len_utf8());
-        if !text[start..end].trim().is_empty() {
+        if !says_nothing(&text[start..end]) {
             pieces.push((start, end));
+            start = end;
         }
-        start = end;
     }
 
-    if !text[start..].trim().is_empty() {
+    if !says_nothing(&text[start..]) {
         pieces.push((start, text.len()));
     }
 
@@ -344,6 +346,11 @@ fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
         Markup::Skip
     };
     Some((at + 1 + end + 1, kind))
+}
+
+/// Whether a piece holds no words at all once its markup is taken out.
+fn says_nothing(piece: &str) -> bool {
+    without_markup(piece).trim().is_empty()
 }
 
 /// Removes Steam's markup from a claim, leaving what was written.
@@ -576,8 +583,10 @@ fn join_the_fragments(text: &str, pieces: Vec<(usize, usize)>) -> Vec<(usize, us
         let piece = text[from..to].trim();
         // A piece ending in a colon introduces the next one rather than saying anything
         // itself. "Spoiler zur Spieldynamik:" on its own line is a heading, and on its own
-        // it is a claim about nothing.
-        let introduces = piece.ends_with(':') || piece.ends_with('\u{FF1A}');
+        // it is a claim about nothing. Read without its markup, since a reviewer who bolds
+        // a heading closes the tag after the colon.
+        let written = without_markup(piece);
+        let introduces = written.trim_end().ends_with([':', '\u{FF1A}']);
         if introduces || weight(piece) < MIN_CLAIM_WEIGHT {
             held = Some((from, to));
         } else {
@@ -943,6 +952,17 @@ mod tests {
         assert!(claims[0].contains("parrying"), "got {:?}", claims[0]);
         assert!(claims[1].contains("Muffled"), "got {:?}", claims[1]);
         assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
+    }
+
+    #[test]
+    fn a_bold_heading_before_a_list_belongs_to_its_first_item() {
+        let claims = split(
+            "[b][u]The Good[/u][/b]:\n[list]\n[*]Mission variety keeps every run fresh.\n[*]The sound design is superb.\n[/list]",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].starts_with("The Good:"), "got {:?}", claims[0]);
+        assert!(claims[0].contains("Mission variety"), "got {:?}", claims[0]);
+        assert!(claims[1].starts_with("The sound"), "got {:?}", claims[1]);
     }
 
     #[test]

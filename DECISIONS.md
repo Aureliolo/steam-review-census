@@ -210,7 +210,7 @@ moves it, and twelve games remain to be labelled.
 The chain is verified end to end against that last row. Training measures the frozen games in
 Python, on the full-precision weights, from the claim text as labelled. The tool measures them
 in Rust, on the half-precision ONNX graph, over a corpus it split itself and joined back to the
-labels by review id and claim position. The two agree on **221 claims answered and 0.620
+labels by review id and the span each label names. The two agree on **221 claims answered and 0.620
 agreement**, to the claim. That is the splitter, the export, the join and the reader all
 reproducing one number, which is the only way to know that none of them is quietly wrong.
 
