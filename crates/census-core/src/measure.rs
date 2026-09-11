@@ -467,6 +467,198 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
     Ok(found)
 }
 
+/// What a game was to the model that read it.
+///
+/// A figure pooled over games the model trained on is not a measurement, it is a recital, and
+/// nothing here may report one without saying which games it is over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Role {
+    /// Never seen: neither trained on nor consulted when the threshold was chosen.
+    Frozen,
+    /// Chose the threshold. Scoring on these flatters by however much the threshold overfits.
+    Validation,
+    /// Trained on. Its labels are in the weights.
+    Train,
+}
+
+impl Role {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Frozen => "frozen",
+            Self::Validation => "validation",
+            Self::Train => "train",
+        }
+    }
+}
+
+/// Share of games held back entirely, and share consulted only for the threshold. Both are
+/// thresholds on a hash rather than a ranking, so adding a game never moves another.
+const FROZEN_SHARE: f64 = 0.2;
+const VALIDATION_SHARE: f64 = 0.15;
+
+/// What a game is to the model, from its own id and the split seed alone.
+///
+/// The same placement `training/data.py` computes, so the tool and the trainer never disagree
+/// about which games the model has seen. A game's role must not depend on which other games
+/// happen to be labelled: shuffling a list would reassign every role each time a game was
+/// added, and "the games it never saw" would quietly be different games on every run.
+#[must_use]
+pub fn role(app_id: u32, seed: u64) -> Role {
+    use sha2::{Digest, Sha256};
+
+    let digest = Sha256::digest(format!("{seed}:{app_id}").as_bytes());
+    let head = u64::from_be_bytes(digest[..8].try_into().unwrap_or_default());
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "the top bits are what places a game; the low ones cannot move it a bucket"
+    )]
+    let at = head as f64 / 2.0_f64.powi(64);
+    if at < FROZEN_SHARE {
+        Role::Frozen
+    } else if at < FROZEN_SHARE + VALIDATION_SHARE {
+        Role::Validation
+    } else {
+        Role::Train
+    }
+}
+
+/// The seed the split was made with, which nothing has changed and nothing should.
+pub const SPLIT_SEED: u64 = 1;
+
+/// How well the model does against a label two labellers both arrived at, and how well the
+/// labellers do against each other on the same claims.
+///
+/// A model cannot be more right than its labels are, and its labels are one model's reading.
+/// 80% against one labeller sounds like a score out of a hundred and is not: the two
+/// labellers only reach 87% with each other, so what is left to win is the difference. This
+/// is the figure that says which.
+///
+/// Every count here is over one set of claims: those read twice, joined to a reading, and
+/// answered rather than declined. Comparing figures drawn from different slices is how a
+/// ceiling gets quoted that nothing was measured against.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Ceiling {
+    /// Claims read by both labellers, joined to a reading, and answered by the model.
+    pub compared: u64,
+    /// Claims the two labellers put in the same subject.
+    pub labellers_agreed: u64,
+    /// Of those, the ones the model also put there. The nearest thing to accuracy a silver
+    /// standard can produce: a label two independent readings reached is one worth scoring.
+    pub model_agreed_where_they_did: u64,
+    /// Claims the two labellers split on, where there is no single label to be right about.
+    pub labellers_split: u64,
+    /// Of those, the ones the model matched either labeller on.
+    pub model_matched_either: u64,
+    pub model_agreed_with_first: u64,
+    pub model_agreed_with_second: u64,
+}
+
+impl Ceiling {
+    /// How often two labellers reach the same subject, which is as high as a model trained on
+    /// one of them can honestly be asked to score.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn between_labellers(&self) -> Option<f64> {
+        (self.compared > 0).then(|| self.labellers_agreed as f64 / self.compared as f64)
+    }
+
+    /// How often the model agrees with a label both labellers reached.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn against_the_settled(&self) -> Option<f64> {
+        (self.labellers_agreed > 0)
+            .then(|| self.model_agreed_where_they_did as f64 / self.labellers_agreed as f64)
+    }
+
+    /// How often the model lands on one of the two answers where the labellers disagree.
+    /// Neither answer is wrong there, so this is a floor rather than a score.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn where_they_split(&self) -> Option<f64> {
+        (self.labellers_split > 0)
+            .then(|| self.model_matched_either as f64 / self.labellers_split as f64)
+    }
+
+    /// The range the settled figure is entitled to claim, given how few claims it rests on.
+    #[must_use]
+    pub fn interval(&self) -> Option<(f64, f64)> {
+        wilson(self.model_agreed_where_they_did, self.labellers_agreed)
+    }
+
+    /// Adds another game's claims to these, so several games are one figure.
+    pub fn extend(&mut self, other: &Self) {
+        self.compared += other.compared;
+        self.labellers_agreed += other.labellers_agreed;
+        self.model_agreed_where_they_did += other.model_agreed_where_they_did;
+        self.labellers_split += other.labellers_split;
+        self.model_matched_either += other.model_matched_either;
+        self.model_agreed_with_first += other.model_agreed_with_first;
+        self.model_agreed_with_second += other.model_agreed_with_second;
+    }
+}
+
+/// Reads one game's model against both its labellers, over the claims all three answered.
+///
+/// # Errors
+///
+/// Fails if either labelling, the readings, or the capture is missing or unreadable.
+pub fn ceiling(out_dir: &Path, app_id: u32, reference: &Path) -> Result<Ceiling> {
+    let read_labels = |path: std::path::PathBuf| -> Result<Vec<ClaimLabel>> {
+        let bytes = std::fs::read(&path)
+            .map_err(|_| crate::Error::NoReferenceSet { path: path.clone() })?;
+        Ok(serde_json::from_slice(&bytes)?)
+    };
+    let first = read_labels(reference.join("labels.json"))?;
+    let second = read_labels(reference.join("second").join("labels.json"))?;
+
+    let theirs: HashMap<(&str, u16), &ClaimLabel> = second
+        .iter()
+        .map(|label| ((label.review_id.as_str(), label.index), label))
+        .collect();
+
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let joined = join_by_span(&snapshot, &first)?;
+    let wanted: std::collections::HashSet<(&str, u16)> = first
+        .iter()
+        .filter(|label| theirs.contains_key(&(label.review_id.as_str(), label.index)))
+        .filter_map(|label| {
+            let now = joined.get(&(label.review_id.as_str(), label.index))?;
+            Some((label.review_id.as_str(), *now))
+        })
+        .collect();
+    let read = readings_at(&snapshot, &wanted)?;
+
+    let mut found = Ceiling::default();
+    for label in &first {
+        let key = (label.review_id.as_str(), label.index);
+        let Some(other) = theirs.get(&key) else {
+            continue;
+        };
+        let Some(&now) = joined.get(&key) else {
+            continue;
+        };
+        // Only what the model answered: a declined claim is not a wrong answer, and counting
+        // it as one would make abstention look like error, which is the whole point of it.
+        let Some((Some(said), _)) = read.get(&(label.review_id.clone(), now)) else {
+            continue;
+        };
+        found.compared += 1;
+        found.model_agreed_with_first += u64::from(said == &label.subject);
+        found.model_agreed_with_second += u64::from(said == &other.subject);
+
+        if label.subject == other.subject {
+            found.labellers_agreed += 1;
+            found.model_agreed_where_they_did += u64::from(said == &label.subject);
+        } else {
+            found.labellers_split += 1;
+            found.model_matched_either +=
+                u64::from(said == &label.subject || said == &other.subject);
+        }
+    }
+    Ok(found)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,6 +672,29 @@ mod tests {
             agreed,
             seen: labelled * 5,
             mistaken_for: None,
+        }
+    }
+
+    /// The eight games the trainer holds back and the four it validates on, as recorded in
+    /// DECISIONS.md. If this ever fails, the tool and the trainer disagree about which games
+    /// the model has seen, and every frozen figure either of them reports is over the wrong
+    /// games.
+    #[test]
+    fn the_tool_places_a_game_where_the_trainer_places_it() {
+        for app_id in [
+            214_490, 620_980, 774_361, 1_057_090, 1_274_570, 1_466_860, 1_809_540, 2_881_650,
+        ] {
+            assert_eq!(role(app_id, SPLIT_SEED), Role::Frozen, "{app_id} is frozen");
+        }
+        for app_id in [275_850, 1_295_660, 1_465_360, 1_601_580] {
+            assert_eq!(
+                role(app_id, SPLIT_SEED),
+                Role::Validation,
+                "{app_id} validates"
+            );
+        }
+        for app_id in [228_380, 245_170, 296_970, 1_062_090, 3_551_340] {
+            assert_eq!(role(app_id, SPLIT_SEED), Role::Train, "{app_id} trains");
         }
     }
 

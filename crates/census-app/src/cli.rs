@@ -320,6 +320,26 @@ enum Command {
         reference: PathBuf,
     },
 
+    /// Score the model against a label two labellers both reached, and say how often they
+    /// reached one at all.
+    ///
+    /// A model cannot be more right than its labels are. Against one labeller it scores
+    /// about eighty per cent, which reads like a score out of a hundred and is not: two
+    /// labellers agree with each other about eighty-seven per cent of the time, so that is
+    /// what there is to win. This prints both over one set of claims, and the claims the two
+    /// labellers split on separately, since there is no single right answer on those.
+    Ceiling {
+        /// Steam app IDs to score. Every set with a second opinion when none are named.
+        #[arg(num_args = 0..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their readings.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+    },
+
     /// Merge returned claim labels into a reference set.
     IngestClaims {
         /// Steam app ID whose labels are being merged.
@@ -491,6 +511,7 @@ pub async fn run() -> Result<()> {
         | Command::MeasureClaims { .. }
         | Command::SecondOpinion { .. }
         | Command::CompareLabels { .. }
+        | Command::Ceiling { .. }
         | Command::Distinct { .. }
         | Command::IngestInduced { .. }
         | Command::Brief { .. } => unreachable!("reference_work answers every reference command"),
@@ -527,6 +548,11 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             seed,
         } => run_second_opinion(app_ids, reference, *share, *batch_size, *seed),
         Command::CompareLabels { app_ids, reference } => run_compare_labels(app_ids, reference),
+        Command::Ceiling {
+            app_ids,
+            out,
+            reference,
+        } => run_ceiling(app_ids, out, reference),
         Command::Distinct {
             app_id,
             out,
@@ -961,8 +987,9 @@ fn run_distinct(
     Ok(())
 }
 
-fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()> {
-    let wanted = if app_ids.is_empty() {
+/// Every set named, or every set that has been labelled twice.
+fn read_twice(app_ids: &[u32], reference: &std::path::Path) -> Result<Vec<u32>> {
+    let wanted: Vec<u32> = if app_ids.is_empty() {
         labelled_sets(reference)?
             .into_iter()
             .filter(|app_id| {
@@ -982,6 +1009,122 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
             reference.display()
         );
     }
+    Ok(wanted)
+}
+
+/// Scores the model against what two labellers settled on, and against what they could not.
+fn run_ceiling(app_ids: &[u32], out: &std::path::Path, reference: &std::path::Path) -> Result<()> {
+    use census_core::measure::{Role, SPLIT_SEED, role};
+
+    let wanted = read_twice(app_ids, reference)?;
+    let pct =
+        |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+
+    // Pooled apart, because a figure over games the model trained on is not a measurement of
+    // anything and averaging it in would hide the one figure that is.
+    let mut pooled: Vec<(Role, census_core::measure::Ceiling, usize)> = vec![
+        (Role::Frozen, census_core::measure::Ceiling::default(), 0),
+        (
+            Role::Validation,
+            census_core::measure::Ceiling::default(),
+            0,
+        ),
+        (Role::Train, census_core::measure::Ceiling::default(), 0),
+    ];
+
+    println!(
+        "{:>9} {:<11} {:>7} {:>10} {:>8}  where they split",
+        "app", "was", "claims", "labellers", "model"
+    );
+    for app_id in wanted {
+        let found =
+            match census_core::measure::ceiling(out, app_id, &reference.join(app_id.to_string())) {
+                // A game read under an older splitter has readings whose indexes name other
+                // sentences, and a game never read has none at all. Both are skipped by name
+                // rather than stopping the run, so the games that can be scored are.
+                Err(
+                    census_core::Error::StaleAnchors { .. }
+                    | census_core::Error::NoClassifications { .. },
+                ) => {
+                    println!("{app_id:>9} not read by this build");
+                    continue;
+                }
+                other => other?,
+            };
+        let was = role(app_id, SPLIT_SEED);
+        if found.compared == 0 {
+            println!(
+                "{:>9} {:<11} nothing read twice that the model answered",
+                app_id,
+                was.as_str()
+            );
+            continue;
+        }
+        println!(
+            "{:>9} {:<11} {:>7} {:>10} {:>8}  {} of {}",
+            app_id,
+            was.as_str(),
+            found.compared,
+            pct(found.between_labellers()),
+            pct(found.against_the_settled()),
+            pct(found.where_they_split()),
+            found.labellers_split
+        );
+        if let Some(slot) = pooled.iter_mut().find(|(which, _, _)| *which == was) {
+            slot.1.extend(&found);
+            slot.2 += 1;
+        }
+    }
+
+    for (was, found, games) in &pooled {
+        if found.compared == 0 {
+            continue;
+        }
+        println!(
+            "\n{} games the model {}, {} claims read twice and answered",
+            games,
+            match was {
+                Role::Frozen => "never saw",
+                Role::Validation => "chose its threshold on",
+                Role::Train => "trained on",
+            },
+            found.compared
+        );
+        println!(
+            "  the two labellers reached the same subject on {} of them, {}",
+            found.labellers_agreed,
+            pct(found.between_labellers())
+        );
+        println!(
+            "  on those, the model agrees {}{}",
+            pct(found.against_the_settled()),
+            found.interval().map_or_else(String::new, |(low, high)| {
+                format!(", somewhere in [{low:.3}, {high:.3}]")
+            })
+        );
+        println!(
+            "  on the {} they split, it lands on one of their two answers {}",
+            found.labellers_split,
+            pct(found.where_they_split())
+        );
+    }
+
+    println!(
+        "\nOnly the frozen block is a measurement. The model trained on the others, so its
+answers there are partly recall, and the validation games chose its threshold.
+
+Within that block, the first figure is the ceiling: a model trained on one labeller's
+reading cannot be more right than two labellers manage with each other, so the second
+figure is what it scores out of the first and not out of a hundred. Where the two
+labellers disagree there is no single right answer, and the third figure is a floor
+rather than a score. Every figure is over the claims the model answered; it declines
+about half, and those are not counted as errors because it did not make one."
+    );
+    Ok(())
+}
+
+fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()> {
+    let wanted = read_twice(app_ids, reference)?;
 
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
