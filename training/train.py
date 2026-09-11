@@ -317,6 +317,12 @@ def git_sha() -> str:
 
 
 def run(args) -> dict:
+    # The classifier heads start from noise and the training order is shuffled, so two runs of
+    # identical settings land a point or two apart. Comparing configurations means separating
+    # that from the difference being measured, which means being able to repeat a run.
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     claims = claimdata.load(args.data)
     train, validation, test = claimdata.split_by_game(claims, seed=args.split_seed)
     subjects = claimdata.subjects_in(claims)
@@ -457,6 +463,7 @@ def run(args) -> dict:
         "learning_rate": args.learning_rate,
         "max_length": args.max_length,
         "context": args.context,
+        "seed": args.seed,
         "polarity_weight": args.polarity_weight,
         "split_seed": args.split_seed,
         "device": device,
@@ -496,6 +503,13 @@ def parse():
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--polarity-weight", type=float, default=0.5)
     parser.add_argument("--split-seed", type=int, default=1)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1,
+        help="seeds the head initialisation and the shuffle, so a run can be repeated. Not "
+        "the split seed: which games are held out is a separate decision and never moves.",
+    )
     parser.add_argument(
         "--min-accuracy",
         type=float,
