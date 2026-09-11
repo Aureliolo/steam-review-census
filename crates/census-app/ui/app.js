@@ -19,6 +19,8 @@ const day = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short'
 let games = [];
 let chosen = null;
 let busy = false;
+/* The language the shown reading counts, or null for every language. */
+let readLanguage = null;
 
 function show(which) {
   for (const [name, node] of Object.entries(views)) node.hidden = name !== which;
@@ -121,7 +123,7 @@ async function sweepGame() {
     const swept = await invoke('sweep', { appId });
     busy = false;
     await refresh();
-    if (swept.rows > 0 && !el('topics').hidden) await readGame();
+    if (swept.rows > 0 && !el('topics').hidden) await readGame(readLanguage);
     if (appId === chosen) {
       set(
         el('game-note'),
@@ -172,10 +174,15 @@ async function loadTopics(game) {
   }
 }
 
-async function readGame() {
+/* `language` is a Steam language name to count only, or null for every language. Left
+   unset, it is whatever the control beside the button says, which is how a first reading
+   chooses; a reading that exists already is re-read in the language it was made in, or in
+   the other one when the reader asks to switch. */
+async function readGame(language = undefined) {
   if (busy || chosen === null) return;
   busy = true;
   const appId = chosen;
+  const wanted = language === undefined ? el('read-language').value || null : language;
   el('game-actions').hidden = true;
   el('sweep-actions').hidden = true;
   el('work').hidden = false;
@@ -185,7 +192,7 @@ async function readGame() {
   set(el('game-note'), '');
 
   try {
-    await invoke('read_game', { appId, language: 'english' });
+    await invoke('read_game', { appId, language: wanted });
     await refresh();
   } catch (failure) {
     const note = el('game-note');
@@ -437,7 +444,15 @@ function drawTopics(counted) {
   if (counted.positive_baseline !== null) {
     parts.push(`${share.format(counted.positive_baseline)} recommending the game`);
   }
-  set(el('topics-lede'), `${parts.join(', ')}.`);
+  set(el('topics-counted'), `${parts.join(', ')}. `);
+
+  /* The other reading is one click away, and it is a re-read rather than a filter: the
+     model has to read the claims it skipped. */
+  readLanguage = counted.language;
+  set(
+    el('switch-language'),
+    counted.language ? 'Count every language instead' : 'Count only English reviews instead',
+  );
 
   /* The paragraph is assembled by the core from the same counts the table shows, so the
      window only decides whether there is one to show. */
@@ -881,8 +896,9 @@ el('lookup-form').addEventListener('submit', lookUp);
 el('start').addEventListener('click', start);
 el('cancel').addEventListener('click', () => (chosen === null ? show('welcome') : choose(chosen)));
 el('back').addEventListener('click', () => choose(chosen));
-el('do-read').addEventListener('click', readGame);
+el('do-read').addEventListener('click', () => readGame());
 el('do-sweep').addEventListener('click', sweepGame);
+el('switch-language').addEventListener('click', () => readGame(readLanguage ? null : 'english'));
 el('earlier').addEventListener('click', () => {
   if (reading) openClaims(reading.subject, Math.max(0, reading.from - PER_PAGE), reading.narrowed);
 });

@@ -95,7 +95,7 @@ removed.
 | **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | built, and the threshold is chosen by **the most coverage available at a promised accuracy**, never by maximising accuracy times coverage, which collapses to answering everything |
 | **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | done: a second head on the same trunk, and the report counts praise, complaint and mixed per subject |
 | **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
-| Model is **multilingual**, reports default to **English** with a working language switch | the model reads every language the labels cover; the language switch is **not built** |
+| Model is **multilingual**, reports default to **English** with a working language switch | done: the model reads every language the labels cover, the window reads English by default with "every language" a choice beside the button and a one-click switch to the other reading, the CLI takes `--language`. A switch is a re-read, because the model has to read the claims it skipped |
 | Labelling is **cluster-stratified in round one**, then **active learning** (uncertainty crossed with diversity) | round one is stratified and running; active learning waits on the first full pass |
 | **One game first**, about 2,000 claims, then decide whether to commit the rest | done, the Frostpunk 2 pilot below, and the rest was committed |
 | The 26 games already labelled at review level get **re-labelled at claim level**, so old and new are the same sample | in progress: they are among the 36 in the claim-level run |
@@ -231,10 +231,10 @@ In the order they matter:
 3. **Induced per-game categories**, so a game's own subjects appear rather than only the
    twenty-five every game shares. Run on one game; the other thirty-five each need one
    agent call of about 70k tokens, so they go one at a time behind the labellers.
-4. **A language switch** in the window and on the page, since a read is one language or all
-   of them and the choice is made on the command line today.
+4. **Second readings** for the games labelled since the tenth, so the reliability figure
+   keeps describing the set it is quoted for.
 
 Built since this list was first written: the report page on readings, the polarity split,
 corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
 words that stand out on each side of a subject, the paragraph, the bake-off, the timeline,
-languages and induced subjects in the window, the sweep.
+languages and induced subjects in the window, the sweep, the language switch.

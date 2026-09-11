@@ -338,6 +338,37 @@ button.quiet-button:hover {
   background: var(--card);
 }
 
+/* A control that reads as part of a sentence: the language choice beside the read button,
+   and the one-click switch to the other reading. */
+label.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-weight: 400;
+}
+
+label.choice select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+button.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .note {
   margin: 0.7rem 0 0;
   color: var(--ink-faint);

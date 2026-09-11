@@ -80,6 +80,13 @@
           <p class="note" id="game-note" role="status" aria-live="polite"></p>
           <div class="row" id="game-actions" hidden>
             <button type="button" class="primary" id="do-read">Read every review</button>
+            <label class="quiet choice">
+              in
+              <select id="read-language">
+                <option value="english" selected>English only</option>
+                <option value="">every language</option>
+              </select>
+            </label>
             <span class="quiet">Splits each review into the points it makes and counts them.</span>
           </div>
           <div class="row" id="sweep-actions" hidden>
@@ -89,7 +96,10 @@
 
           <div class="topics" id="topics" hidden>
             <h3>What people talk about</h3>
-            <p class="lede" id="topics-lede"></p>
+            <p class="lede" id="topics-lede">
+              <span id="topics-counted"></span>
+              <button type="button" class="link" id="switch-language"></button>
+            </p>
             <p class="in-short" id="in-short" hidden></p>
             <p class="caveat" id="swept-caveat" hidden></p>
             <p class="caveat" id="topics-caveat" hidden></p>
