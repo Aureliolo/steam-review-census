@@ -14,7 +14,7 @@ against `verdict` (4) and `atmosphere` against `verdict` (3). Every one of those
 
 ## Defects in the sheet, to fix in the next revision
 
-### `verdict` contradicts itself about money — found in the core-5 run
+### `verdict` contradicts itself about money: found in the core-5 run
 
 The `verdict` description offers "worth every penny" and "waste of money" as examples, and the
 `verdict` RULE says "super fun, worth every penny" is `price`. A labeller cannot follow both.
@@ -26,9 +26,15 @@ Not fixed mid-run, because changing the sheet while half a set is labelled leave
 half labelled against a different one. Labellers are marking these `ambiguous`, so the data
 records the uncertainty rather than hiding it.
 
+The revision, ready to apply in `taxonomy.rs` when the run ends: drop "worth every penny" and
+"waste of money" from the `verdict` examples; change the RULE's example to "super fun, and
+the story is great" belongs to `story`; and add "worth every penny", "waste of money" and
+"refunded it" to the `price` examples, which is where the second reading found labellers
+already putting them when they disagreed.
+
 ## Needs a rule, not a category
 
-### Comparison with the predecessor — three reports, two eras
+### Comparison with the predecessor: three reports, two eras
 
 "Not as good as the first game", "FP1 was a class", "completely different from the original",
 "best Anno yet". Reported by both claim labellers and by the review-level labellers before them.
@@ -40,20 +46,20 @@ A one-line RULE on `genre` would absorb most of it: a comparison with the game's
 predecessor is `genre` when the difference itself is the point, and `verdict` when it is only
 better or worse.
 
-### Praise or blame for the studio that is not about patches — three reports
+### Praise or blame for the studio that is not about patches: three reports
 
 "Applaud the devs for taking a risk", "hope Bandai sells the IP", "director replacement is
 urgent", "fix this 11 bit". `updates` is written around post-release patching and `policy`
 around the publisher and the platform, so a judgement of the studio itself lands in neither.
 
-### A game that will not start, with no reason given — two reports
+### A game that will not start, with no reason given: two reports
 
 "Bought it, installed it, cannot run it". Splits between `bugs` and `compatibility` with
 nothing to choose between them.
 
 ## Might need a category
 
-### Lost immersion, emotional distance — three reports, the commonest complaint in one set
+### Lost immersion, emotional distance: three reports, the commonest complaint in one set
 
 "They are just numbers now", "lost its soul", "you cannot feel the people any more", "death is
 a statistic". Sits between `story` and `gameplay` and the rules do not settle it. This was the
@@ -63,12 +69,12 @@ Related to the atmosphere and fear gap the review-level labellers reported six t
 two horror games. Both are about what a game makes a player feel rather than about any part
 that produces it. One category might take both.
 
-### Mods and user content — four reports, review era
+### Mods and user content: four reports, review era
 
 Reported for Blade and Sorcery, Beat Saber, Helldivers 2, Cyberpunk 2077 and SnowRunner. Falls
 between `content`, `updates` and `community` with no rule choosing.
 
-### Playing with friends — one report, but it dominated that game
+### Playing with friends: one report, but it dominated that game
 
 "Better with friends", "fun with mates", "does not grab you alone". Not servers or matchmaking
 (`multiplayer`), not calling it a co-op game (`genre`), and not a bare verdict. It was the
@@ -80,19 +86,19 @@ commonest qualified claim in DEVOUR's set.
 aspect-naming claims, nearly every "scary" and "I peed myself" among them. Before it existed
 those fell to `verdict` or were scattered across `graphics` and `audio`.
 
-### A verdict that names the genre as a noun — three reports
+### A verdict that names the genre as a noun: three reports
 
 "Excellent city builder", "among the best platformers", "great platformer in every way". The
 `verdict` rule says any named aspect wins and `genre` owns naming what kind of game it is, so
 these are forced to `genre` while reading as bare verdicts. Labellers flagged nearly all of
 them contested. The sheet should say whether a genre noun counts as naming an aspect.
 
-### Addictive, could not stop playing — one report, a dozen claims
+### Addictive, could not stop playing: one report, a dozen claims
 
 Filed under `atmosphere` by its "pulls you in, lose whole evenings" example, but it reads as a
 verdict to many. A single line would settle it either way.
 
-### Pure emotional reaction with nothing named — two reports
+### Pure emotional reaction with nothing named: two reports
 
 "Made me cry", "the feels", "I'm scared", "AHHH". Sits between `atmosphere` and `story`, and
 the polarity is about the reviewer rather than the game, which the sheet says polarity is not.
