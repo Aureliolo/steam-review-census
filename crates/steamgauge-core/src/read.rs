@@ -930,6 +930,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_claim_sits_where_the_reader_says_it_sits_in_the_rejoined_review() {
+        // The window is cut around a byte offset into the rejoined review, and the offset is
+        // arithmetic rather than a search. If it drifts, the model is handed the wrong
+        // sentences and every output still looks exactly as plausible as before.
+        let reviews = [
+            "Looks incredible. Runs like a slideshow. The story is the best in the series.",
+            "[h1]Verdict[/h1]\n- great art\n- terrible netcode\n- worth it on sale",
+            "10/10 would lose my save again. i.e. it crashes. But the combat! 神作。",
+            "   ",
+            "One point only",
+            "Multibyte: 教学纯靠自己领悟。战斗手感极好。",
+            "Mixed\ttabs\nand\r\nnewlines. Second point here.",
+        ];
+
+        for text in reviews {
+            let claims = Depth::Deep.claims_of(text);
+            let review = rejoined(&claims);
+            let mut at = 0;
+            for claim in &claims {
+                assert_eq!(
+                    &review[at..at + claim.len()],
+                    claim.as_ref(),
+                    "claim {claim:?} is not at {at} of {review:?}"
+                );
+                at += claim.len() + 1;
+            }
+            assert!(
+                claims.is_empty() || at == review.len() + 1,
+                "the walk must end exactly one separator past the end of {review:?}"
+            );
+        }
+    }
+
+    #[test]
     fn the_same_claim_is_one_question_alone_and_two_in_context() {
         let (a, b) = (
             key(false, "111", 0, "Great game."),
