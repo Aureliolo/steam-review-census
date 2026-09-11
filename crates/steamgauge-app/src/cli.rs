@@ -251,6 +251,34 @@ enum Command {
         to: PathBuf,
     },
 
+    /// Draw the claims the reader would not answer, for a labeller to teach it on.
+    ///
+    /// A random draw spends most of its budget on claims the model already reads correctly.
+    /// Once a reader exists, the claims it abstains on are worth several times a random claim
+    /// to label. What that buys is a better model and never a better measurement: the set is
+    /// marked `declined` so no prevalence figure ever counts it, and only games the model is
+    /// allowed to learn from may be drawn, because a frozen game taught from is not frozen.
+    Declined {
+        /// Steam app IDs to draw from. Each must be a game the model trains on.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their readings.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Claims to draw from each game.
+        #[arg(long, default_value_t = 300)]
+        claims: usize,
+        /// Reviews per batch file.
+        #[arg(long, default_value_t = 40)]
+        batch_size: usize,
+        /// Changing this draws a different sample. The same seed always draws the same one.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+    },
+
     /// Score stored readings against a claim reference set.
     MeasureClaims {
         /// Steam app IDs to score. Each is reported separately, because a model that reads
@@ -629,6 +657,7 @@ pub async fn run() -> Result<()> {
         // Every reference-set command was answered above; a fresh arm here is one that
         // reference_work does not know about.
         Command::SampleClaims { .. }
+        | Command::Declined { .. }
         | Command::IngestClaims { .. }
         | Command::Revisit { .. }
         | Command::IngestRevisit { .. }
@@ -660,6 +689,14 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             english,
             to,
         } => run_sample_claims(app_ids, out, *reviews, *batch_size, *seed, *english, to),
+        Command::Declined {
+            app_ids,
+            out,
+            claims,
+            batch_size,
+            seed,
+            reference,
+        } => run_declined(app_ids, out, *claims, *batch_size, *seed, reference),
         Command::IngestClaims {
             app_id,
             from,
@@ -893,6 +930,68 @@ fn run_sample_claims(
     Ok(())
 }
 
+fn run_declined(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    claims: usize,
+    batch_size: usize,
+    seed: u64,
+    reference: &std::path::Path,
+) -> Result<()> {
+    let held_back: Vec<u32> = app_ids
+        .iter()
+        .copied()
+        .filter(|&app_id| {
+            steamgauge_core::measure::role(app_id, steamgauge_core::measure::SPLIT_SEED)
+                != steamgauge_core::measure::Role::Train
+        })
+        .collect();
+    if !held_back.is_empty() {
+        anyhow::bail!(
+            "{} are held back from training, so teaching the model on them would end the only \
+             honest measurement this project has. Draw from a game the model already learns \
+             from.",
+            held_back
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    let (mut reviews, mut asked, mut batches) = (0, 0, 0);
+    for &app_id in app_ids {
+        let dir = reference.join(app_id.to_string());
+        let drawn = steamgauge_core::claimset::draw_declined(out, app_id, &dir, claims, seed)?;
+        if drawn.is_empty() {
+            println!("{app_id:<10} nothing declined that is not already labelled");
+            continue;
+        }
+        let report =
+            steamgauge_core::claimset::write_set(&dir.join("declined"), &drawn, batch_size)?;
+        println!(
+            "{:<10} {:>4} reviews {:>5} claims {:>3} batches",
+            app_id, report.reviews, report.claims, report.batches
+        );
+        reviews += report.reviews;
+        asked += report.claims;
+        batches += report.batches;
+    }
+
+    if asked == 0 {
+        anyhow::bail!("no declined claim to draw; read these games with a current reader first");
+    }
+    println!("\ndrawn      {reviews:>4} reviews {asked:>5} claims {batches:>3} batches");
+    println!(
+        "\nThese are claims the reader declined, so they are harder than a random claim and\n\
+         the labeller is told nothing about that. Ingest each with `steamgauge ingest-claims\n\
+         <app id> --from <dir> --by <model> --to {}/<app id>/declined`.\n\
+         Every row lands as subset `declined`, which trains the model and measures nothing.",
+        reference.display()
+    );
+    Ok(())
+}
+
 /// Fetches the published reader when the directory holds none.
 ///
 /// A directory that already holds a model is left alone whatever the pins say, because that
@@ -1075,12 +1174,14 @@ fn run_revisit(
     }
 
     let (mut reviews, mut claims, mut games) = (0, 0, 0);
+    let mut drew_for = Vec::new();
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
         let drawn = steamgauge_core::claimset::draw_revisit(&dir, words, subjects)?;
         if drawn.is_empty() {
             continue;
         }
+        drew_for.push(app_id);
         let report =
             steamgauge_core::claimset::write_set(&dir.join("revisit"), &drawn, batch_size)?;
         println!(
@@ -1095,7 +1196,27 @@ fn run_revisit(
     if games == 0 {
         anyhow::bail!("no labelled claim uses any of those words; nothing to revisit");
     }
+    // A draw over every set owns every set's handout, and a narrower word list than last time
+    // leaves whole games behind. Those files look exactly like work to hand out, and nothing
+    // about them says they answer a question nobody is asking any more.
+    let mut cleared = 0;
+    if app_ids.is_empty() {
+        for app_id in labelled_sets(reference)? {
+            if drew_for.contains(&app_id) {
+                continue;
+            }
+            let stale = reference.join(app_id.to_string()).join("revisit");
+            if stale.is_dir() {
+                std::fs::remove_dir_all(&stale)?;
+                cleared += 1;
+            }
+        }
+    }
+
     println!("\ndrawn      {reviews:>4} reviews {claims:>5} claims over {games} games");
+    if cleared > 0 {
+        println!("cleared    {cleared} games this draw no longer asks about");
+    }
     println!(
         "\nHand these to a labeller with the current sheet, exactly as a fresh set. Ingest\n\
          each with `steamgauge ingest-revisit <app id> --from <dir>`, which replaces only the\n\

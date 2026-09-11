@@ -38,6 +38,28 @@ pub struct DrawnReview {
     /// because the first question is what a corpus actually contains.
     pub subset: String,
     pub claims: Vec<DrawnClaim>,
+    /// Which claims the labeller is asked about, where that is not all of them. The rest are
+    /// still handed over, because they are the review: a claim reading "it doesn't" cannot be
+    /// labelled without the sentence before it, and a draw that asks about one claim in a
+    /// review must still show the review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asked: Option<Vec<u16>>,
+}
+
+impl DrawnReview {
+    /// Whether the labeller is asked about this claim, rather than shown it for context.
+    #[must_use]
+    pub fn asks(&self, index: u16) -> bool {
+        self.asked
+            .as_ref()
+            .is_none_or(|asked| asked.contains(&index))
+    }
+
+    /// How many claims of this review are being asked about.
+    #[must_use]
+    pub fn asked_count(&self) -> usize {
+        self.asked.as_ref().map_or(self.claims.len(), Vec::len)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -118,6 +140,7 @@ pub fn draw(
             language: language.to_owned(),
             subset: "random".to_owned(),
             claims,
+            asked: None,
         };
         let key = crate::bounded::rank(seed, "claims", id);
         if language == "english" {
@@ -194,6 +217,7 @@ pub fn write_set(
                     claims: review
                         .claims
                         .iter()
+                        .filter(|claim| review.asks(claim.index))
                         .map(|claim| HandoutClaim {
                             index: claim.index,
                             text: &claim.text,
@@ -211,7 +235,7 @@ pub fn write_set(
 
     Ok(DrawReport {
         reviews: drawn.len(),
-        claims: drawn.iter().map(|review| review.claims.len()).sum(),
+        claims: drawn.iter().map(DrawnReview::asked_count).sum(),
         batches: written,
     })
 }
@@ -423,7 +447,7 @@ pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result
             // claims in question are asked about: a claim shown without the rest of its
             // review is a claim nobody can label, and a claim nobody asked about is one
             // whose existing label stands.
-            let claims: Vec<DrawnClaim> = review
+            let asked: Vec<u16> = review
                 .claims
                 .iter()
                 .filter(|claim| labelled.contains(&(review.id.as_str(), claim.index)))
@@ -432,14 +456,131 @@ pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result
                         .iter()
                         .any(|word| crate::said::mentions(&claim.text, word))
                 })
-                .cloned()
+                .map(|claim| claim.index)
                 .collect();
-            (!claims.is_empty()).then(|| DrawnReview {
-                claims,
+            (!asked.is_empty()).then(|| DrawnReview {
+                asked: Some(asked),
                 ..review.clone()
             })
         })
         .collect())
+}
+
+/// Sets beside a game's random draw that add claims to train on rather than answers to
+/// compare. Every one of them is labelled as its own `subset`, and no prevalence figure
+/// counts a row from any of them.
+pub const TEACHING_SETS: &[&str] = &["declined"];
+
+/// Draws the claims the reader would not answer, as a set to teach it on.
+///
+/// Every set so far is a random draw, which is what makes prevalence measurable and is the
+/// right default: a set drawn for being hard cannot say what share of a corpus mentions
+/// price. But once a reader exists, the claims it abstains on are worth several times a random
+/// claim to label, because a random draw spends most of its budget confirming answers the
+/// model already gets right.
+///
+/// So this is a teaching draw and it is marked as one. Every review it produces carries
+/// `subset: "declined"`, which keeps it out of every prevalence figure and out of the
+/// validation and frozen games entirely: a model measured on the claims it was known to find
+/// hard would report an accuracy nobody can interpret.
+///
+/// Drawn uniformly from the declined claims rather than from the least confident of them. The
+/// bottom of a confidence ordering is mostly text with nothing in it, and a set of that
+/// teaches the model to say `offtopic` rather than to read anything.
+///
+/// A review already in the game's reference set is never drawn, so no review is labelled twice
+/// under two different draws.
+///
+/// # Errors
+///
+/// Fails if there is no capture, no reading, or the reading was cut by another splitter.
+pub fn draw_declined(
+    out_dir: &Path,
+    app_id: u32,
+    dir: &Path,
+    wanted: usize,
+    seed: u64,
+) -> Result<Vec<DrawnReview>> {
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let reading: crate::read::ReadReport =
+        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            crate::Error::NoClassifications {
+                path: snapshot.join("reading.json"),
+            }
+        })?)?;
+    reading.cut_as_this_build()?;
+
+    let drawn_already: Vec<DrawnReview> = std::fs::read(dir.join("sample.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let already: std::collections::HashSet<&str> = drawn_already
+        .iter()
+        .map(|review| review.id.as_str())
+        .collect();
+
+    let mut chosen: crate::bounded::Smallest<[u8; 32], (String, u16)> =
+        crate::bounded::Smallest::new(wanted);
+    crate::read::for_each_reading(
+        &snapshot.join("readings.parquet"),
+        |id, index, subject, _, _| {
+            if subject.is_some() || already.contains(id) {
+                return;
+            }
+            let key = crate::bounded::rank(seed, "declined", &format!("{id}\u{0}{index}"));
+            chosen.offer(key, (id.to_owned(), index));
+        },
+    )?;
+
+    let mut picks: std::collections::HashMap<String, Vec<u16>> = std::collections::HashMap::new();
+    for (id, index) in chosen.take() {
+        picks.entry(id).or_default().push(index);
+    }
+
+    let depth = reading.depth;
+    let mut drawn = Vec::new();
+    crate::capture::for_each_body(&snapshot, |id, language, text| {
+        let Some(asked) = picks.get(id) else {
+            return Ok(());
+        };
+        let spans = depth.spans_of(text);
+        let claims: Vec<DrawnClaim> = depth
+            .claims_of(text)
+            .into_iter()
+            .enumerate()
+            .zip(spans)
+            .map(|((index, claim), span)| DrawnClaim {
+                index: u16::try_from(index).unwrap_or(u16::MAX),
+                start: u32::try_from(span.start).unwrap_or(u32::MAX),
+                end: u32::try_from(span.end).unwrap_or(u32::MAX),
+                text: claim.into_owned(),
+            })
+            .collect();
+        // The corpus can have moved on since it was read: a review edited between the two is
+        // cut into different claims, and the index the reader declined then names a different
+        // sentence now.
+        let mut asked: Vec<u16> = asked
+            .iter()
+            .copied()
+            .filter(|index| usize::from(*index) < claims.len())
+            .collect();
+        asked.sort_unstable();
+        if asked.is_empty() {
+            return Ok(());
+        }
+        drawn.push(DrawnReview {
+            id: id.to_owned(),
+            app_id,
+            language: language.to_owned(),
+            subset: "declined".to_owned(),
+            claims,
+            asked: Some(asked),
+        });
+        Ok(())
+    })?;
+
+    drawn.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(drawn)
 }
 
 /// Replaces the labels of the revisited claims, leaving every other label alone.
@@ -543,10 +684,17 @@ pub fn ingest(dir: &Path, from: &Path, sheet: &Sheet) -> Result<(Vec<ClaimLabel>
             }
         })?)?;
 
+    // Only the claims the draw asks about. The rest of a review is in the handout because a
+    // claim cannot be read without it, and a label on one of those answers a question nobody
+    // put: it would land in the set as though it had been drawn.
     let mut wanted: std::collections::HashMap<(String, u16), (&DrawnReview, &DrawnClaim)> =
         std::collections::HashMap::new();
     for review in &drawn {
-        for claim in &review.claims {
+        for claim in review
+            .claims
+            .iter()
+            .filter(|claim| review.asks(claim.index))
+        {
             wanted.insert((review.id.clone(), claim.index), (review, claim));
         }
     }
@@ -642,12 +790,21 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
     let mut out = std::io::BufWriter::new(std::fs::File::create(to)?);
     let mut written = 0;
 
+    // A game's directory holds its random draw, and beside it the teaching draws named here.
+    // Named rather than "every subdirectory holding labels": `second/` holds a second
+    // labeller's answers to claims the set already has, and sweeping those in would train the
+    // model on the same claim twice, on both answers wherever the two labellers disagreed.
     let mut sets: Vec<std::path::PathBuf> = std::fs::read_dir(reference_root)
         .into_iter()
         .flatten()
         .filter_map(std::result::Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.join("labels.json").exists())
+        .flat_map(|game| {
+            let teaching: Vec<std::path::PathBuf> =
+                TEACHING_SETS.iter().map(|name| game.join(name)).collect();
+            std::iter::once(game).chain(teaching)
+        })
+        .filter(|path| path.join("labels.json").exists() && path.join("sample.json").exists())
         .collect();
     sets.sort();
 
@@ -725,6 +882,7 @@ mod tests {
                     text: (*text).to_owned(),
                 })
                 .collect(),
+            asked: None,
         }
     }
 
@@ -751,6 +909,65 @@ mod tests {
         assert!(
             !first.contains("app_id"),
             "a labeller told which game it is can infer what the model cannot"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_draw_that_asks_about_one_claim_still_hands_over_the_whole_review() {
+        let dir = std::env::temp_dir().join(format!("steamgauge-asked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut drawn = review("a", &["Bought it for the mod support.", "It doesn't."]);
+        drawn.asked = Some(vec![1]);
+        let report = write_set(&dir, &[drawn], 8).unwrap();
+
+        assert_eq!(report.claims, 1, "one claim was asked about, not two");
+        let batch = std::fs::read_to_string(dir.join("batches").join("batch-000.json")).unwrap();
+        assert!(
+            batch.contains("Bought it for the mod support. It doesn't."),
+            "the claim nobody is asked about is the only thing that makes the other readable"
+        );
+        let handed: serde_json::Value = serde_json::from_str(&batch).unwrap();
+        let claims = handed[0]["claims"].as_array().unwrap();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0]["index"], 1, "the index is the one in the review");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_label_on_a_claim_nobody_asked_about_does_not_join_the_set() {
+        let dir = std::env::temp_dir().join(format!("steamgauge-unasked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut drawn = review("a", &["Bought it for the mod support.", "It doesn't."]);
+        drawn.asked = Some(vec![1]);
+        write_set(&dir, &[drawn], 8).unwrap();
+
+        let returned = dir.join("returned");
+        std::fs::create_dir_all(&returned).unwrap();
+        std::fs::write(
+            returned.join("batch-000.json"),
+            serde_json::to_vec(&serde_json::json!([
+                {"review_id": "a", "index": 1, "subject": "mods", "polarity": "complaint",
+                 "ironic": false, "confidence": "high", "ambiguous": false, "split_wrong": false},
+                {"review_id": "a", "index": 0, "subject": "mods", "polarity": "praise",
+                 "ironic": false, "confidence": "high", "ambiguous": false, "split_wrong": false},
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let sheet = Sheet {
+            produced_by: "a test".to_owned(),
+            ..Default::default()
+        };
+        let (labels, report) = ingest(&dir, &returned, &sheet).unwrap();
+
+        assert_eq!(labels.len(), 1, "only the claim that was asked about");
+        assert_eq!(labels[0].index, 1);
+        assert_eq!(report.unknown, vec!["a#0".to_owned()]);
+        assert!(
+            report.missing.is_empty(),
+            "a claim shown for context is not a claim that came back unlabelled"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

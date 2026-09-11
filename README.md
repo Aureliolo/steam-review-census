@@ -277,6 +277,14 @@ rather than about somebody's afternoon:
 - **Every claim of a drawn review is labelled, never a subset of them.** A review labelled in
   part cannot say what share of a corpus names no aspect at all, which is the first thing worth
   knowing about one.
+- **A set drawn to teach the model is marked as one and measures nothing.** A random draw
+  spends most of its budget on claims the reader already gets right, so `steamgauge declined`
+  draws instead from the claims it abstained on, uniformly rather than from the least confident
+  of them, because the bottom of a confidence ordering is mostly text with nothing in it. Every
+  row lands with `subset: declined`, which keeps it out of every prevalence figure; only the
+  claims drawn are asked about, though the whole review is still handed over, because a claim
+  reading "it doesn't" cannot be labelled without the sentence before it; and only games the
+  model already trains on may be drawn, because a held-out game taught from is not held out.
 - **Labellers are shown the claim inside the review it came from, and nothing else.** Not the
   game, not whether the reviewer recommended it, not what the model guessed. The prediction is
   withheld because anyone shown a proposed answer agrees with it more than someone reading

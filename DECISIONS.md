@@ -604,11 +604,15 @@ Then, in order:
    One is labelled (546560, 675 claims, 16 of them `vr`, which is 40% more `vr` than the whole
    set held). The other fourteen are drawn and waiting: 14,036 claims against the 19,582 the
    set holds. What stopped it was the labelling quota, not the plan.
-5. **Draw the claims the reader cannot answer, not more claims at random.** Every set so far
-   is a random draw, which is what makes prevalence measurable and is the right default. But
-   once a reader exists, the claims it abstains on are worth several times a random claim to
-   train from, and the `subset` field already distinguishes a draw that measures prevalence
-   from one that only teaches. Not built, and it must never contaminate the random sets.
+5. **Draw the claims the reader cannot answer, not more claims at random. Built 2026-09-12.**
+   Every set so far is a random draw, which is what makes prevalence measurable and is the
+   right default. But once a reader exists, the claims it abstains on are worth several times a
+   random claim to train from. `steamgauge declined` draws them, uniformly rather than from the
+   least confident, because the bottom of a confidence ordering is mostly text with nothing in
+   it. Three things keep it from contaminating anything: every row carries `subset: declined`
+   and no prevalence figure counts one, the draw refuses any game the model does not already
+   train on, and a review already in that game's random set is never drawn twice. It waits on a
+   reading made by the current splitter, which the finalise pass produces.
 6. **Publishing**, which is the user's decision and not near.
 7. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.

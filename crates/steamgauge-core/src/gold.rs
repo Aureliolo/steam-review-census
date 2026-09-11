@@ -404,6 +404,7 @@ mod tests {
                     text: "Worth it.".to_owned(),
                 },
             ],
+            asked: None,
         };
         let rejoined = Rejoined::of(&review);
         for claim in &review.claims {
