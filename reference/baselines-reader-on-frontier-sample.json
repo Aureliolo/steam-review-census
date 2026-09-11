@@ -1,0 +1,14 @@
+{
+  "claims": 471,
+  "unanswered_rows": 0,
+  "coverage": 0.6072186836518046,
+  "accuracy_where_answered": 0.7482517482517482,
+  "accuracy_interval": [
+    0.694886219621204,
+    0.7950365519892204
+  ],
+  "polarity_where_subject_right": 0.8738317757009346,
+  "macro_f1": 0.525409770410787,
+  "off_sheet_subjects": {},
+  "model": "C:\\Users\\Aurelio\\steam-review-census\\models\\claim-reader"
+}

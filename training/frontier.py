@@ -100,12 +100,24 @@ Nothing else: no reasoning in the file, no extra fields, no claims left out.
 """
 
 
-def score(answers: Path, key: Path):
+def wilson(hits: int, total: int, z: float = 1.96):
+    """A proportion's interval, the same way every other figure in this project reports one."""
+    if total == 0:
+        return None
+    rate = hits / total
+    middle = rate + z * z / (2 * total)
+    spread = z * ((rate * (1 - rate) + z * z / (4 * total)) / total) ** 0.5
+    divisor = 1 + z * z / total
+    return ((middle - spread) / divisor, (middle + spread) / divisor)
+
+
+def score(answers: Path, key: Path, subjects: set[str] | None = None):
     given = {row["id"]: row for row in json.loads(answers.read_text(encoding="utf-8"))}
     wanted = json.loads(key.read_text(encoding="utf-8"))
 
     answered = subject_right = polarity_right = 0
     missing = 0
+    off_sheet = defaultdict(int)
     per_subject = defaultdict(lambda: {"found": 0, "wanted": 0, "hit": 0})
     for row in wanted:
         said = given.get(row["id"])
@@ -116,6 +128,10 @@ def score(answers: Path, key: Path):
         if said.get("subject") in (None, "", "unsure"):
             continue
         answered += 1
+        # A subject the sheet does not have is a wrong answer, but it is a different kind of
+        # wrong from picking the neighbouring category, and it is worth reporting apart.
+        if subjects is not None and said["subject"] not in subjects:
+            off_sheet[said["subject"]] += 1
         per_subject[said["subject"]]["found"] += 1
         if said["subject"] == row["subject"]:
             subject_right += 1
@@ -138,9 +154,103 @@ def score(answers: Path, key: Path):
         "unanswered_rows": missing,
         "coverage": answered / max(len(wanted), 1),
         "accuracy_where_answered": subject_right / max(answered, 1),
+        "accuracy_interval": wilson(subject_right, answered),
         "polarity_where_subject_right": polarity_right / max(subject_right, 1),
         "macro_f1": sum(scores) / max(len(scores), 1),
+        "off_sheet_subjects": dict(off_sheet),
     }
+
+
+def score_reader(model_dir: Path, key: Path, data: str):
+    """The shipped reader, over exactly the claims the frontier model was given.
+
+    Without this the comparison is a cheat. The reader's frozen figure is over every frozen
+    claim, which is a quarter `verdict`; the frontier handout is stratified, twenty a subject,
+    and the starved rows are the hard ones. Two numbers from two distributions are not a
+    comparison, however carefully each was measured.
+    """
+    import numpy as np
+    import onnxruntime
+    from tokenizers import Tokenizer
+
+    from train import Claims
+
+    provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
+    subjects = provenance["subjects"]
+    threshold = provenance["threshold"]
+    wanted = json.loads(key.read_text(encoding="utf-8"))
+
+    held = {(c.app_id, c.review_id, c.claim_index): c for c in claimdata.load(data)}
+    claims = [held[(row["app_id"], row["review_id"], row["claim_index"])] for row in wanted]
+
+    tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
+    tokenizer.no_padding()
+    tokenizer.no_truncation()
+    cut = Claims(
+        claims, None, subjects, provenance["max_tokens"], provenance.get("context", False)
+    )
+    cut.tokenizer = _HuggingFaceShim(tokenizer)
+    cut.windows = [cut.window(claim) for claim in claims] if cut.context else []
+
+    session = onnxruntime.InferenceSession(
+        str(model_dir / "model.onnx"), providers=["CPUExecutionProvider"]
+    )
+    outputs = [out.name for out in session.get_outputs()]
+
+    confidence, predicted, polarity = [], [], []
+    for at in range(0, len(claims), 64):
+        chunk = list(range(at, min(at + 64, len(claims))))
+        encoded = [
+            tokenizer.encode(claims[i].text, cut.windows[i])
+            if cut.context
+            else tokenizer.encode(claims[i].text)
+            for i in chunk
+        ]
+        longest = max(min(len(e.ids), provenance["max_tokens"]) for e in encoded)
+        ids = np.zeros((len(chunk), longest), dtype=np.int64)
+        mask = np.zeros((len(chunk), longest), dtype=np.int64)
+        for row, one in enumerate(encoded):
+            keep = one.ids[:longest]
+            ids[row, : len(keep)] = keep
+            mask[row, : len(keep)] = one.attention_mask[:longest]
+        found = session.run(outputs, {"input_ids": ids, "attention_mask": mask})
+        subject_logits, polarity_logits = found[0], found[1]
+        for row in range(len(chunk)):
+            exp = np.exp(subject_logits[row] - subject_logits[row].max())
+            probabilities = exp / exp.sum()
+            confidence.append(float(probabilities.max()))
+            predicted.append(subjects[int(probabilities.argmax())])
+            polarity.append(
+                claimdata.POLARITIES[int(np.argmax(polarity_logits[row]))]
+                if int(np.argmax(polarity_logits[row])) < len(claimdata.POLARITIES)
+                else "neutral"
+            )
+
+    answers = [
+        {
+            "id": row["id"],
+            "subject": predicted[at] if confidence[at] >= threshold else "unsure",
+            "polarity": polarity[at],
+        }
+        for at, row in enumerate(wanted)
+    ]
+    return answers
+
+
+class _HuggingFaceShim:
+    """Enough of the transformers tokenizer for `Claims.window` to run on the shipped one.
+
+    The window is cut with the tokenizer that will read the claim, and the model directory
+    ships `tokenizer.json` rather than a transformers directory. Duplicating the window in a
+    second place is how the tool and the trainer come to disagree about what the model saw.
+    """
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, text, *rest, **kwargs):
+        encoded = self.tokenizer.encode(text, *rest, add_special_tokens=False)
+        return {"offset_mapping": encoded.offsets, "input_ids": encoded.ids}
 
 
 def main():
@@ -159,6 +269,14 @@ def main():
     read.add_argument("--answers", required=True)
     read.add_argument("--key", default=None)
     read.add_argument("--out", default=None)
+    read.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+
+    mine = sub.add_parser("reader")
+    mine.add_argument("--model", default=str(HERE.parent / "models" / "claim-reader"))
+    mine.add_argument("--key", required=True)
+    mine.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+    mine.add_argument("--answers", default=None, help="where to write the reader's answers")
+    mine.add_argument("--out", default=None)
 
     args = parser.parse_args()
 
@@ -171,9 +289,22 @@ def main():
         print(f"drawn from {len({c.app_id for c in picked})} frozen games, labels held back")
         return
 
+    if args.mode == "reader":
+        key = Path(args.key)
+        model_dir = Path(args.model)
+        said = score_reader(model_dir, key, args.data)
+        written = Path(args.answers) if args.answers else key.parent / "reader-answers.json"
+        written.write_text(json.dumps(said, indent=2), encoding="utf-8")
+        found = score(written, key, {row["subject"] for row in json.loads(key.read_text("utf-8"))})
+        found["model"] = str(model_dir)
+        print(json.dumps(found, indent=2))
+        if args.out:
+            Path(args.out).write_text(json.dumps(found, indent=2), encoding="utf-8")
+        return
+
     answers = Path(args.answers)
     key = Path(args.key) if args.key else answers.parent / "key.json"
-    found = score(answers, key)
+    found = score(answers, key, {claim.subject for claim in claimdata.load(args.data)})
     print(json.dumps(found, indent=2))
     if args.out:
         Path(args.out).write_text(json.dumps(found, indent=2), encoding="utf-8")

@@ -576,8 +576,11 @@ pub fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usiz
     let front = |mut start: usize, end: usize| loop {
         let trimmed = text[start..end].trim_start().trim_start_matches(MARKERS);
         let mut next = end - trimmed.len();
+        // A tag that opens inside this piece and closes outside it belongs to the review
+        // rather than to the claim, and stepping past its end would walk off the piece.
         if trimmed.starts_with('[')
             && let Some((after, _)) = markup_at(text, next)
+            && after <= end
         {
             next = after;
         }
@@ -994,6 +997,26 @@ impl ClaimBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tag_that_opens_inside_a_span_and_closes_outside_it_does_not_walk_off_the_end() {
+        // Found by a Yu-Gi-Oh review, which crashed the sampler: the piece begins on a tag
+        // whose closing bracket is past the end of the piece, and stepping to the end of the
+        // tag put the start one byte beyond the end.
+        let text = "A point. [spoiler]the rest of the review]";
+        let opens = text.find('[').unwrap();
+        let cut = tidied(text, opens, opens + 3).unwrap();
+        assert!(
+            cut.start >= opens && cut.end <= opens + 3,
+            "a span must stay inside itself, got {cut:?}"
+        );
+
+        let whole = tidied(text, opens, text.len()).unwrap();
+        assert!(
+            whole.start > opens,
+            "a tag that closes inside the span is still stepped over"
+        );
+    }
 
     #[test]
     fn a_review_about_three_things_is_three_claims() {

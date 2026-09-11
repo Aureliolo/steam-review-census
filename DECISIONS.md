@@ -380,7 +380,39 @@ confidences carry almost no ordering: asked to be right three times in four, it 
 claim in twenty. The bag of words is the honest floor, it takes seconds to fit, and a
 278M-parameter encoder that could not clear it would not be earning its electricity.
 
-What is still missing from this table is a frontier model asked the same question directly.
+### The frontier model wins, and that is the finding
+
+Measured 2026-09-11. A frontier model was given the category sheet the labellers work from,
+471 frozen claims stratified twenty to a subject, each inside the review it came from, and the
+same right to abstain the reader has. The shipped reader was then run over **exactly those
+claims**, because the reader's usual frozen figure is over the natural distribution, which is
+a quarter `verdict`, and two numbers from two distributions are not a comparison:
+
+| on the same 471 claims | answers | accuracy where it answers | macro F1 | polarity |
+|---|---|---|---|---|
+| frontier model, zero-shot, given the sheet | **99.6%** | **87.0%** [83.6, 89.7] | **0.873** | 94.1% |
+| the shipped reader, claim alone | 60.7% | 74.8% [69.5, 79.5] | 0.525 | 87.4% |
+
+It is not close. The reader delivers 74.8% against a threshold that promised 75%, so its
+calibration is honest, but it answers three claims in five and the frontier model answers
+essentially all of them, more accurately.
+
+Two things to hold onto rather than explain away:
+
+- **The labels were made by a frontier model.** Two labellers agree with each other 93.2% of
+  the time on frozen claims, so 87% is close to that ceiling but below it. Some of this figure
+  is models of a kind agreeing with each other, and the user's hand-adjudicated gold set is
+  what will say how much.
+- **What the small model buys is not quality, it is scale.** The 471 claims cost 405,000
+  tokens. Cyberpunk alone holds 3.2M claims, which at that rate is about 2.7 billion tokens:
+  tens of thousands of dollars, for one game. The reader does the same corpus in about two and
+  a half hours on one desktop GPU, for the electricity, with no account and nothing leaving the
+  machine. That is the trade, and it should be stated plainly rather than buried.
+
+So the claim this project can honestly make is not that it beats a frontier model. It is that
+it gets most of the way there at four orders of magnitude less cost, offline, and that it can
+say how far short it falls, because it measured it. The gap, twelve points of accuracy and
+thirty-nine of coverage, is the number to close.
 
 ## Where this is going
 
