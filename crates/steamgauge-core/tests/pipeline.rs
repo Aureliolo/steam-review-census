@@ -465,10 +465,18 @@ fn corpus_with_declines(name: &str) -> (std::path::PathBuf, std::path::PathBuf) 
     std::fs::remove_dir_all(&root).ok();
     let snapshot = root.join("appid=1").join("snapshot=1700000000");
     std::fs::create_dir_all(&snapshot).unwrap();
+    write_two_reviews(&snapshot);
+    write_two_declines(&snapshot);
+    (root, snapshot)
+}
 
+fn write_two_reviews(snapshot: &Path) {
     let schema = steamgauge_core::capture::schema();
     let bodies = [
-        ("10", "The combat is superb. It runs badly. Worth the money."),
+        (
+            "10",
+            "The combat is superb. It runs badly. Worth the money.",
+        ),
         ("11", "Great game."),
     ];
     let mut ids = StringBuilder::new();
@@ -509,7 +517,9 @@ fn corpus_with_declines(name: &str) -> (std::path::PathBuf, std::path::PathBuf) 
     let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
     writer.write(&batch).unwrap();
     writer.close().unwrap();
+}
 
+fn write_two_declines(snapshot: &Path) {
     let reading_schema = Arc::new(Schema::new(vec![
         Field::new("recommendationid", DataType::Utf8, false),
         Field::new("claim_index", DataType::UInt16, false),
@@ -574,8 +584,6 @@ fn corpus_with_declines(name: &str) -> (std::path::PathBuf, std::path::PathBuf) 
         .unwrap(),
     )
     .unwrap();
-
-    (root, snapshot)
 }
 
 #[test]
@@ -588,7 +596,10 @@ fn a_teaching_draw_asks_only_about_what_the_reader_declined() {
     assert_eq!(drawn.len(), 1, "only the review holding a declined claim");
     let review = &drawn[0];
     assert_eq!(review.id, "10");
-    assert_eq!(review.subset, "declined", "no prevalence figure may count it");
+    assert_eq!(
+        review.subset, "declined",
+        "no prevalence figure may count it"
+    );
     assert_eq!(review.asked, Some(vec![1, 2]));
     assert_eq!(
         review.claims.len(),
