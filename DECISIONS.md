@@ -23,14 +23,15 @@ State means: **done** is built and in use; **partial** is built for one case and
 |---|---|
 | Headline figure is the **mention rate**, always labelled as such | done |
 | Every other percentage says which denominator it uses | done |
-| **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | **not built**, classification is whole-review |
-| Shallow is the opt-out, and neither depth drops a review | **not built** |
-| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done, induction **not built** |
-| Extras are discovered by an **LLM reading an embedding-diverse sample** | **not built** |
-| Categories are assigned across the full corpus by a **linear probe over embeddings** | drifted to a prototype/anchor classifier with shrinkage |
-| **Summarise, per category, what people praise and complain about** | **not built** |
+| **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-3` and the reading pass counts per claim |
+| Shallow is the opt-out, and neither depth drops a review | shallow **not built**; nothing drops a review |
+| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`), induction **not built** |
+| Extras are discovered by an **LLM reading an embedding-diverse sample** | **not built**; waits on quota |
+| Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
+| **Corrected prevalence**: the measured error corrects the rate rather than sitting beside it | done, per subject, where the model finds it better than chance |
+| **Summarise, per category, what people praise and complain about** | **not built**; praise, complaint and mixed are counted per subject, which is the input to it |
 | **Build an overall picture of the game from those summaries** | **not built** |
-| **Click through from any number to the reviews behind it** | **not built**; the page quotes a few examples per category |
+| **Click through from any number to the reviews behind it** | done in the app, every subject opens onto its claims a page at a time; the report quotes eight per subject |
 | Helpfulness bias ships as a column on every category | done |
 | Irony and ratings that disagree with the text are flagged, not filed away | flagged on labelled reviews only |
 
@@ -41,7 +42,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | A complete census with **zero setup and no API key**; hosted models are an upgrade, never a requirement | done |
 | Embeddings run locally, on ONNX Runtime | done |
 | `ort` with DirectML, CoreML and CPU | done |
-| Embeddings carry dedupe, taxonomy, search and classification, not just one of them | dedupe and classification done, search partial |
+| Embeddings carry dedupe, taxonomy, search and classification, not just one of them | dedupe done, search partial; classification moved off embeddings onto the trained reader, which is the right call because embeddings are dominated by sentiment and length rather than subject |
 | A hosted model does the reading when one is configured | **not built**, there is no API client in the tree |
 | The user chooses which model does the sorting, and how closely it reads | **not built** |
 
@@ -72,12 +73,12 @@ State means: **done** is built and in use; **partial** is built for one case and
 
 | Decided | State |
 |---|---|
-| Reviews labelled by Fable 5.1 agents reading batches in parallel, each shown the text alone | done |
-| **Opus spot-checks the labels** | **not done** |
-| Roughly 400 labels to start | grew to ~5,000 across 36 games |
-| 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games |
-| Stratified subset trains, random subset measures, and the two are never merged | done |
-| Measured error **corrects the reported prevalence** | measured, **never applied as a correction** |
+| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 12 of 36 games, one labeller at a time on the user's instruction |
+| **Opus spot-checks the labels** | done as a blind second reading of a tenth: 456 claims over ten games, subject kappa 0.85 |
+| Roughly 400 labels to start | 6,150 claims and counting, target 20,000 |
+| 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
+| Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out, two for validation and two frozen, and the frozen ones choose nothing |
+| Measured error **corrects the reported prevalence** | done, on the report page, per subject where the model finds it better than chance |
 | The sets are a silver standard, and the README says so rather than calling them gold | done |
 
 ## The classifier
@@ -165,14 +166,16 @@ refused by this build, which is the guard working rather than failing.
 
 In the order they matter:
 
-1. **Labels.** Eleven games of the thirty-six are labelled. At 20% coverage the model cannot
-   carry a report yet, and nothing else on this list changes that: it is the one input every
-   other number depends on.
-2. **The report page**, which still renders the deleted classifier's counts and has to be
-   rebuilt on readings.
-3. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
+1. **Labels.** Twelve games of the thirty-six are labelled. At an eighth of claims answered
+   the model cannot carry a report yet, and nothing else on this list changes that: it is the
+   one input every other number depends on.
+2. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
    players mention difficulty and telling a reader what they said about it.
-4. **Induced per-game categories**, so a game's own subjects appear rather than only the
-   twenty-five every game shares.
-5. **Publishing** the model and the ids-and-offsets dataset, and fetching the model by checksum
-   so a user who downloads the binary is not asked to train one.
+3. **Induced per-game categories**, so a game's own subjects appear rather than only the
+   twenty-five every game shares. Needs an LLM reading a sample, so it waits on quota.
+4. **Publishing.** The script and the pinned fetch path are built; the pin is empty until
+   `training/publish.py` is run against a model worth publishing, which is the one after the
+   labels.
+
+Built since this list was first written: the report page on readings, the polarity split,
+corrected prevalence, the second reading and its comparison, the fetch-by-checksum path.
