@@ -101,6 +101,40 @@ def family(run: dict) -> tuple:
     return tuple(str(setting(run, key)) for key in SETTINGS)
 
 
+def transfer(found: list[dict], against: dict | None) -> None:
+    """What each saved run does on the games nothing about it was chosen from.
+
+    The figure is coverage and accuracy **at the threshold the validation games chose**, not at
+    a threshold refitted on the frozen ones, because refitting is the measurement this project
+    exists to avoid. A model that promised 75% and delivers 62% has not been measured badly, it
+    has failed, and that has happened here before.
+    """
+    rows = [run for run in found if run.get("test", {}).get("at_validation_threshold")]
+    if not rows:
+        print("no run here was trained with the frozen games evaluated; train with --save")
+        return
+
+    width = max(len(run["id"]) for run in rows)
+    what = max((len(differences(run, against)) for run in rows), default=0) if against else 0
+    header = f"{'run':<{width}}  "
+    if against:
+        header += f"{'what it changed':<{what}}  "
+    print(header + "promised   answers  delivered   short by   macro F1   AURC")
+    for run in sorted(rows, key=lambda run: -run["test"]["at_validation_threshold"]["coverage"]):
+        frozen = run["test"]
+        at = frozen["at_validation_threshold"]
+        promised = run["validation"]["threshold_accuracy"]
+        line = f"{run['id']:<{width}}  "
+        if against:
+            line += f"{differences(run, against):<{what}}  "
+        line += (
+            f"{promised:7.1%}  {at['coverage']:7.1%}  {at['accuracy']:9.1%}  "
+            f"{at['accuracy'] - promised:+9.1%}  {frozen['macro_f1']:8.3f} {frozen['aurc']:6.3f}"
+        )
+        print(line)
+    print("\nshort by is what the promise cost on games nothing about the model was chosen from")
+
+
 def table(found: list[dict], against: dict | None) -> None:
     rows = []
     for run in found:
@@ -208,6 +242,11 @@ def main() -> None:
     )
     parser.add_argument("--subjects", help="print one run's per-subject scores instead")
     parser.add_argument(
+        "--frozen",
+        action="store_true",
+        help="print what the saved runs deliver on the frozen games, against what they promised",
+    )
+    parser.add_argument(
         "--fingerprint",
         help="which labels to report on. The set the most runs were trained on when omitted.",
     )
@@ -251,6 +290,10 @@ def main() -> None:
         if run is None:
             raise SystemExit(f"no run {arguments.subjects} on these labels")
         subjects(run, against)
+        return
+
+    if arguments.frozen:
+        transfer(found, against)
         return
 
     table(found, against)
