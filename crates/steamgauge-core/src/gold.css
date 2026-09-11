@@ -153,7 +153,8 @@ button.tone[data-tone="complaint"].chosen { color: var(--complaint); }
 .done { text-align: center; padding: 48px 16px; }
 .done h2 { font-size: 1.4rem; margin: 0 0 10px; }
 
-button.go {
+button.go,
+label.go {
   font: inherit;
   font-weight: 600;
   padding: 9px 18px;
@@ -163,7 +164,10 @@ button.go {
   color: #fff;
   cursor: pointer;
 }
-button.go.quiet { background: var(--panel); color: var(--ink); border-color: var(--line); }
+button.go.quiet,
+label.go.quiet { background: var(--panel); color: var(--ink); border-color: var(--line); }
+label.go { display: inline-block; }
+.note.loaded { margin: 10px 0 0; color: var(--ink); }
 
 details.sheet { margin-top: 22px; }
 details.sheet summary { cursor: pointer; color: var(--dim); font-size: 0.9rem; }

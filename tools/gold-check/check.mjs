@@ -232,6 +232,58 @@ const RELOADED = `(function () {
   return wrong;
 })()`;
 
+// A browser loses its storage for reasons nobody controls, and by then the reader has spent a
+// night on it. Emptying the store and reloading is that loss exactly: in-memory answers go with
+// the page. What the reader has left is the file they exported, so it has to load back, and a
+// file from another draw has to be refused rather than counted.
+const EMPTIED = `(function () {
+  var kept = Object.keys(localStorage).filter(function (k) { return k.indexOf('steamgauge-gold') === 0; });
+  if (kept.length !== 1) return null;
+  var name = kept[0];
+  var held = JSON.parse(localStorage.getItem(name) || '{}');
+  var rows = Object.keys(held).map(function (k) { return held[k]; })
+    .filter(function (row) { return row && row.subject; });
+  localStorage.removeItem(name);
+  return { name: name, rows: rows };
+})()`;
+
+const restoring = (saved) => `(function () {
+  var name = ${JSON.stringify(saved?.name ?? "")};
+  var rows = ${JSON.stringify(saved?.rows ?? [])};
+  if (!rows.length) { return Promise.resolve(['no answered claim to restore']); }
+  var input = document.getElementById('restore');
+  if (!input) { return Promise.resolve(['the page offers no way to load answers back']); }
+
+  var stranger = { app_id: 999999, review_id: 'not-in-this-draw', index: 0, subject: 'price',
+                   polarity: 'praise', ambiguous: false, split_wrong: false, unsure: false };
+  var transfer = new DataTransfer();
+  transfer.items.add(new File([JSON.stringify(rows.concat([stranger]))], 'gold-answers.json',
+                              { type: 'application/json' }));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+
+  return new Promise(function (done) {
+    setTimeout(function () {
+      var wrong = [];
+      var back = JSON.parse(localStorage.getItem(name) || '{}');
+      if (Object.keys(back).length !== rows.length) {
+        wrong.push('loading an exported file back restored ' + Object.keys(back).length +
+                   ' of ' + rows.length + ' answers');
+      }
+      if (back['999999#not-in-this-draw#0']) {
+        wrong.push('an answer from another draw was taken into this one');
+      }
+      var said = document.querySelector('.note.loaded');
+      if (!said) {
+        wrong.push('the page does not say what it loaded');
+      } else if (said.textContent.indexOf('ignored') === -1) {
+        wrong.push('the page does not say it ignored an answer from another draw');
+      }
+      done(wrong);
+    }, 400);
+  });
+})()`;
+
 const NARROW = `(function () {
   var wrong = [];
   if (document.documentElement.scrollWidth > window.innerWidth + 1) {
@@ -301,6 +353,19 @@ try {
   }
   const again = (await evaluate(RELOADED)).result?.result?.value ?? [];
 
+  const saved = (await evaluate(EMPTIED)).result?.result?.value ?? null;
+  await send("Page.reload", { ignoreCache: true });
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
+    if (ready.result?.result?.value === true) break;
+    await sleep(250);
+  }
+  const restored = saved
+    ? ((await evaluate(restoring(saved))).result?.result?.value ?? [
+        "loading answers back could not be driven",
+      ])
+    : ["nothing was stored to restore from"];
+
   await send("Emulation.setDeviceMetricsOverride", {
     width: 420,
     height: 900,
@@ -310,7 +375,7 @@ try {
   await sleep(250);
   const narrow = (await evaluate(NARROW)).result?.result?.value ?? [];
 
-  const all = [...wrong, ...again, ...narrow];
+  const all = [...wrong, ...again, ...restored, ...narrow];
   if (fetched.length) all.push(`the page fetched ${fetched.length}: ${fetched.join(", ")}`);
 
   if (all.length) {

@@ -12,6 +12,7 @@
 
   var answers = load();
   var at = firstUnanswered();
+  var notice = "";
 
   function load() {
     try {
@@ -135,7 +136,9 @@
     );
     html.push('<span class="spacer"></span>');
     html.push('<button class="go quiet" id="export">Export answers</button>');
+    html.push(restoreControl());
     html.push("</header>");
+    if (notice) html.push('<p class="note loaded">' + escape(notice) + "</p>");
     html.push(
       '<div class="progress"><i style="width:' +
         ((answered() / questions.length) * 100).toFixed(1) +
@@ -252,8 +255,12 @@
       " answered</h2>" +
       '<p class="note">Export the file and run <code>steamgauge ingest-gold</code> on it.</p>' +
       '<p><button class="go" id="export">Export answers</button> ' +
-      '<button class="go quiet" id="back">Back to the last one</button></p></div>';
+      restoreControl() +
+      ' <button class="go quiet" id="back">Back to the last one</button></p>' +
+      (notice ? '<p class="note loaded">' + escape(notice) + "</p>" : "") +
+      "</div>";
     document.getElementById("export").onclick = exportAnswers;
+    wireRestore();
     document.getElementById("back").onclick = function () {
       at = Math.max(0, questions.length - 1);
       render();
@@ -300,12 +307,72 @@
     if (unsure) unsure.onclick = function () { set(question, "unsure", !mine.unsure); };
     var out = document.getElementById("export");
     if (out) out.onclick = exportAnswers;
+    wireRestore();
     var sheet = app.querySelector("details.sheet");
     if (sheet) {
       sheet.ontoggle = function () {
         sheetOpen = sheet.open;
       };
     }
+  }
+
+  // The browser is the only copy of the work until the file is exported, and a browser loses
+  // its storage for reasons nobody controls: a cleared cache, a private window, another
+  // machine. Reading an exported file back turns the export into a save rather than a delivery.
+  function restoreControl() {
+    return (
+      '<label class="go quiet" for="restore">Load answers</label>' +
+      '<input type="file" id="restore" accept="application/json,.json" hidden>'
+    );
+  }
+
+  function wireRestore() {
+    var input = document.getElementById("restore");
+    if (!input) return;
+    input.onchange = function () {
+      var file = input.files && input.files[0];
+      if (file) restore(file);
+    };
+  }
+
+  function restore(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var rows;
+      try {
+        rows = JSON.parse(String(reader.result));
+      } catch (whatever) {
+        rows = null;
+      }
+      if (!rows || !rows.length) {
+        notice = "that file holds no answers";
+        return render();
+      }
+      var wanted = {};
+      questions.forEach(function (question) {
+        wanted[keyOf(question)] = true;
+      });
+      var taken = 0;
+      var strangers = 0;
+      rows.forEach(function (row) {
+        if (!row || !row.subject) return;
+        var key = row.app_id + "#" + row.review_id + "#" + row.index;
+        // A file from another draw would fill the store with answers to questions this page
+        // never asks, and the count in the corner would climb while nothing got adjudicated.
+        if (!wanted[key]) {
+          strangers += 1;
+          return;
+        }
+        answers[key] = row;
+        taken += 1;
+      });
+      save();
+      at = firstUnanswered();
+      notice =
+        taken + " answers loaded" + (strangers ? ", " + strangers + " from another draw ignored" : "");
+      render();
+    };
+    reader.readAsText(file);
   }
 
   function exportAnswers() {

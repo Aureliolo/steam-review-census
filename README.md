@@ -235,7 +235,9 @@ than a measurement.
 The page is a single file that fetches nothing and sends nothing, marks each claim inside the
 review it came from, and keeps answers in the browser as they are made. A letter picks a
 subject, a digit picks the polarity, and a claim with both moves on by itself; a thousand
-claims is not one sitting and a closed tab must not cost a night's work.
+claims is not one sitting and a closed tab must not cost a night's work. The exported file
+loads back into the page, so it is a save rather than a delivery: a browser loses its storage
+for reasons nobody controls, and answers from another draw are refused rather than counted.
 
 `steamgauge ingest-gold` reads the export back, files it beside the labels already there
 rather than over them, and prints the share that agrees. That share is the first number this
