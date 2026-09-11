@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="hash and pin without uploading, to see what would change",
+        help="hash and check without uploading or pinning, to see what would change",
     )
     args = parser.parse_args()
 
@@ -163,11 +163,13 @@ def main() -> None:
     record = json.loads((run / "run.json").read_text(encoding="utf-8"))
     card = dataset_card(len(rows), games, record["data_fingerprint"])
 
+    # The pin is a promise that these hashes can be fetched from that repository, so a dry
+    # run, which uploads nothing, must not write it: a tool built from a pin nobody published
+    # fetches from a repository that does not hold the files.
     if args.dry_run:
         print(f"\nwould upload {len(rows):,} rows from {games} games to {args.data_repo}")
         print(f"would upload {', '.join(MODEL_FILES)} to {args.model_repo}")
-        pin(args.model_repo, hashes)
-        print(f"pinned in {READER_RS.relative_to(REPO)}")
+        print(f"would pin {args.model_repo} in {READER_RS.relative_to(REPO)}")
         return
 
     from huggingface_hub import HfApi
