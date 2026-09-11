@@ -56,7 +56,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | `author_steamid` kept for every review, as public data | done |
 | Adaptive, date-sharded crawl with capped concurrency | done |
 | Watermark top-up so a re-crawl does not re-pull old reviews | done |
-| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | order exists, **not wired to a command** |
+| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | order exists, **not wired**, and wiring it is not the work: an edited review's creation date is anywhere, so the sweep cannot be date-sharded, and the capture is append-only with every reader visiting every row once, so a re-fetched review would count twice. It needs a walk in `updated` order that stops at the watermark, and a capture layout where the newest copy of a review id wins for every pass that reads one |
 | Valve's default filters overridden, because they hide 17.3% of negative reviews against 9.6% of positive | done |
 
 ## Distribution
