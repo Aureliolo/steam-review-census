@@ -189,7 +189,12 @@ which was the condition for being a candidate at all.
 Trained on its own on the same 5,988 training claims and measured on the same four frozen
 games (1,800 claims), `gte` answers **37% at 0.803** where `xlm-roberta` answers 28% at
 0.762; frozen accuracy 0.608 against 0.507, macro F1 0.512 against 0.405, AURC 0.236 against
-0.322. The wave that ships next is `gte`.
+0.322. It is the installed reader now, and the chain is verified against it as before: the
+tool answers **666 claims at 0.803** across the four frozen games, which is training's figure
+to the claim and to the decimal, on a different tokenizer and a different architecture from
+the last time this was checked. Per game it runs from 74.5% (1466860, the modding game) to
+84.2% (1809540), and over the whole corpora it declines between 54% and 71% against a usual
+63%.
 
 The chain is verified end to end against that last row. Training measures the frozen games in
 Python, on the full-precision weights, from the claim text as labelled. The tool measures them
