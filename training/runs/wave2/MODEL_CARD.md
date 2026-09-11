@@ -9,7 +9,7 @@ says nothing, and that is a supported answer rather than a failure.
 - Accuracy 0.318, macro F1 0.269
 - Polarity macro F1 0.638
 - Calibration error 0.066
-- Below 0.42 confidence it says nothing, which leaves it answering 13% of claims at 0.620 accuracy
+- Below 0.42 confidence it says nothing, which leaves it answering 13% of claims at 0.620 accuracy, somewhere in [0.554, 0.681] over 221 claims
 - Area under the risk-coverage curve 0.543 (lower is better; it says whether the model knows when it does not know)
 - Trained on 3047 claims, validated on 859, measured on 1668
 - Data fingerprint `49697fd4fb0f1502`, code `253aebc599c5`

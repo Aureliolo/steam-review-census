@@ -49,6 +49,27 @@ class InFullPrecisionOut(torch.nn.Module):
         return subject.float(), polarity.float(), pooled.float()
 
 
+def wilson_note(at_threshold: dict) -> str:
+    """The range an accuracy from a couple of hundred claims is entitled to claim.
+
+    A point estimate from 221 claims reads as three significant figures and has about one.
+    The same interval the Rust side prints beside every rate, so the card and the page cannot
+    disagree about how sure a number is.
+    """
+    answered = at_threshold.get("answered", 0)
+    accuracy = at_threshold.get("accuracy")
+    if not answered or accuracy is None:
+        return ""
+    z = 1.959963985
+    n = float(answered)
+    denominator = 1.0 + z * z / n
+    centre = accuracy + z * z / (2.0 * n)
+    spread = z * ((accuracy * (1.0 - accuracy) / n + z * z / (4.0 * n * n)) ** 0.5)
+    low = max(0.0, (centre - spread) / denominator)
+    high = min(1.0, (centre + spread) / denominator)
+    return f", somewhere in [{low:.3f}, {high:.3f}] over {answered} claims"
+
+
 def sample_claims(path: Path, count: int) -> list[str]:
     claims = claimdata.load(path)
     step = max(1, len(claims) // count)
@@ -243,7 +264,8 @@ def main():
                 f"- Calibration error {frozen.get('calibration_error', 0):.3f}",
                 f"- Below {threshold:.2f} confidence it says nothing, which leaves it answering "
                 f"{at_threshold.get('coverage', 0):.0%} of claims at "
-                f"{at_threshold.get('accuracy') or 0:.3f} accuracy",
+                f"{at_threshold.get('accuracy') or 0:.3f} accuracy"
+                + wilson_note(at_threshold),
                 f"- Area under the risk-coverage curve {frozen.get('aurc', 0):.3f} (lower is "
                 f"better; it says whether the model knows when it does not know)",
                 f"- Trained on {record['claims']['train']} claims, validated on "
