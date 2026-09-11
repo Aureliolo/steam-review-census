@@ -73,9 +73,10 @@ State means: **done** is built and in use; **partial** is built for one case and
 
 | Decided | State |
 |---|---|
-| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 25 of 36 games, one labeller at a time on the user's instruction |
+| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 33 of 36 games, one labeller at a time on the user's instruction |
 | **Opus spot-checks the labels** | done as a blind second reading of a tenth: 1,400 claims over thirty games, subject kappa 0.85 |
-| Roughly 400 labels to start | 12,991 claims and counting, target 20,000 |
+| Roughly 400 labels to start | 17,249 claims and counting, target 20,000 |
+| **The test set becomes gold: the user adjudicates it by hand**, a random sample of about a thousand claims labelled blind for a representative accuracy figure, then the roughly four hundred the two labellers disagreed on, to settle the boundaries | decided 2026-09-11. Not started: it waits on `core-6`, because adjudicating against a sheet about to change spends the one resource that cannot be spent twice. The tool for it is the app's own claim view with the labels hidden |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
 | Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
 | Measured error **corrects the reported prevalence** | done, on the report page, per subject where the model finds it better than chance |
@@ -291,24 +292,37 @@ game with its own predecessor, for praise or blame aimed at the studio, and for 
 will not start at all. Every earlier reference set and the shipped anchors are core-4 and are
 refused by this build, which is the guard working rather than failing.
 
-## What this leaves
+## Where this is going
 
-In the order they matter:
+Settled 2026-09-11: **the dataset is the thing, and the benchmark comes before the polish.**
+The aim is the reference people cite for what players say about games, which is a higher bar
+than a tool that works. Measured against that bar, four of the seven things such a dataset
+needs are already exceeded or met: it is reproducible without redistributing a word anybody
+wrote, every label names the splitter and taxonomy it was made under, two labellers read a
+tenth of it blind and agree at kappa 0.85, and the test games are fixed by hash and chose
+nothing. Two are missing, and no amount of further labelling closes either.
 
-1. **Labels.** Twenty-nine games of the thirty-six are labelled, 15,210 claims. At under half
-   of claims answered the model carries a report with a caveat over it rather than without
-   one, and nothing else on this list changes that: it is the one input every other number
-   depends on.
-2. **Publishing.** The script and the pinned fetch path are built and the sixth wave is a
-   model worth publishing; the pin stays empty until `training/publish.py` is run against a
-   Hugging Face account, which is the user's to name.
-3. **Induced per-game categories**, so a game's own subjects appear rather than only the
-   twenty-five every game shares. Run on two games; the other thirty-four each need one
-   agent call of about 70k tokens, so they go one at a time behind the labellers.
-4. **Second readings** for the games labelled since the tenth, so the reliability figure
-   keeps describing the set it is quoted for.
-5. **`core-6`**, once the run is labelled: `reference/GAPS.md` holds the wording for every
-   rule the labellers asked for, and the sets are redrawn against it and `claims-4` together.
+1. **Human-adjudicated labels.** Everything so far is a model agreeing with a model, which the
+   README says plainly and which no citation can rest on. The user adjudicates: a random
+   thousand from the frozen games, labelled blind, for an accuracy figure that means what it
+   says; then the four hundred the two labellers split on, shown both answers, to settle the
+   boundaries. After `core-6`, never before.
+2. **A comparison against the alternatives.** Nobody has shown this beats asking a frontier
+   model directly, or a trivial baseline. Both run over the same frozen claims, all three
+   figures reported together, whichever way it falls.
+
+Then, in order:
+
+3. **`core-6` and `claims-5` together, once.** `reference/GAPS.md` holds the wording for every
+   rule, each traced to a labeller who could not see the others. The contested rate of 29% and
+   the `difficulty` against `gameplay` confusion say the sheet is the ceiling now, not the
+   model. Measure the relabel cost on one game before paying it for thirty-six.
+4. **Games chosen for the rows that are starved**, not more games at random. `licensing` has
+   32 claims over four games, `vr` 40, `accessibility` 48, and all three score zero. A random
+   game costs the same as a chosen one and buys almost none of them.
+5. **Publishing**, which is the user's decision and not near.
+6. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
+   each, behind everything else.
 
 Built since this list was first written: the report page on readings, the polarity split,
 corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
