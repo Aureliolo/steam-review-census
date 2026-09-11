@@ -273,8 +273,9 @@ enum Command {
 
     /// Read every claim in a corpus with the trained model.
     Read {
-        /// Steam app ID whose most recent capture should be read.
-        app_id: u32,
+        /// Steam app IDs whose most recent captures should be read.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
         /// Directory holding the capture.
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
@@ -512,14 +513,14 @@ pub async fn run() -> Result<()> {
             reference,
         } => run_measure_claims(&app_ids, &out, &reference),
         Command::Read {
-            app_id,
+            app_ids,
             out,
             model,
             batch_size,
             language,
             top_helpful,
         } => run_read(
-            app_id,
+            &app_ids,
             &model.unwrap_or_else(census_core::reader::default_dir),
             &census_core::read::ReadOptions {
                 out_dir: out,
@@ -1851,20 +1852,33 @@ fn run_sample_claims(
 }
 
 fn run_read(
-    app_id: u32,
+    app_ids: &[u32],
     model_dir: &std::path::Path,
     options: &census_core::read::ReadOptions,
 ) -> Result<()> {
-    census_core::embed::latest_snapshot(&options.out_dir, app_id)?;
+    // Loaded once for the whole slate. Building the session takes longer than reading a
+    // small corpus, so doing it per game would be most of the time for a list of them.
     let mut model = census_core::reader::ClaimReader::load(model_dir)?;
     eprintln!("model        {} on {}", model_dir.display(), model.device());
     eprintln!("threshold    {:.2}", model.provenance().threshold);
+    for &app_id in app_ids {
+        read_one(&mut model, app_id, options)?;
+    }
+    Ok(())
+}
+
+fn read_one(
+    model: &mut census_core::reader::ClaimReader,
+    app_id: u32,
+    options: &census_core::read::ReadOptions,
+) -> Result<()> {
+    census_core::embed::latest_snapshot(&options.out_dir, app_id)?;
     eprintln!("reading app {app_id}");
 
     // Printed whether or not anyone is watching a terminal: this is the pass that takes
     // hours, and a log with nothing in it is indistinguishable from a hang.
     let mut announced = 0;
-    let report = census_core::read::read_corpus(&mut model, app_id, options, |progress| {
+    let report = census_core::read::read_corpus(model, app_id, options, |progress| {
         if progress.done / 25_000 <= announced {
             return;
         }
