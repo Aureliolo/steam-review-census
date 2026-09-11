@@ -323,12 +323,22 @@ These rules keep those figures honest:
   flattering it. Shuffling reviews from several games into each batch would remove it, at the
   cost of routing the labels back per game before they can be ingested.
 
-- **A claim is split mechanically, and the splitting is sometimes wrong.** Labellers report it
-  on 9% to 20% of claims depending on the game, and every rule in the splitter came from one of
-  those reports. The commonest remaining failure is a sentence that names three subjects at
-  once: "stunning visuals, calm music, epic story" is one claim carrying three, so two of them
-  go uncounted. The rate is measured rather than assumed, because it is the one error in this
-  pipeline that no amount of training fixes.
+- **A claim is split mechanically, and the splitting is sometimes wrong.** Across eleven
+  labelled games it is **16.2%** of claims, between 9.2% and 21.8% depending on the game, and
+  every rule in the splitter came from one of those reports. The commonest remaining failure is
+  a sentence that names three subjects at once: "stunning visuals, calm music, epic story" is
+  one claim carrying three, so two of them go uncounted. The rate is measured rather than
+  assumed, because it is the one error in this pipeline that no amount of training fixes.
+
+  Fixing it is deliberately held until the labelling run finishes. A label is joined to a claim
+  by review id and position, so a splitter that cuts differently renumbers every claim and
+  silently detaches every label already collected from the text it was written about.
+
+- **How often labellers find a claim genuinely contested varies more than the claims do.**
+  23.4% overall, but from 13.5% on one game to **52.1%** on another. Some of that is the games,
+  and some of it is labellers reading "two subjects both fit" more or less strictly. It is the
+  clearest argument for the double-labelled tenth: contested is the one field with no way to
+  check itself.
 
 - **"Every review" means every review Valve will serve, and the request parameters decide how
   many that is.** Two API defaults quietly remove a large and biased slice. `purchase_type`
