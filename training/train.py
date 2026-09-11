@@ -285,6 +285,19 @@ def run(args) -> dict:
     train, validation, test = claimdata.split_by_game(claims, seed=args.split_seed)
     subjects = claimdata.subjects_in(claims)
     print(claimdata.summarise(claims))
+
+    # A learning curve asks what the next game buys, and the only way to read one is against a
+    # test set that does not move. Training games are dropped in a fixed hash order so that
+    # ten games is the same ten in every run, and the frozen and validation games are never
+    # touched: the point is to vary what the model learned from, not what it is asked about.
+    if args.train_games:
+        kept = sorted(
+            {claim.app_id for claim in train},
+            key=lambda app_id: claimdata.place(app_id, args.split_seed),
+        )[: args.train_games]
+        train = [claim for claim in train if claim.app_id in kept]
+        print(f"training on {len(kept)} of the training games, by hash order")
+
     print(f"train {len(train)}  validation {len(validation)}  test {len(test)} (frozen)")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -453,6 +466,14 @@ def parse():
         help="how often the model must be right on the claims it does answer. The abstention "
         "threshold is the one giving the most coverage at this accuracy; if none reaches it, "
         "that is recorded rather than lowered to whatever the model can manage.",
+    )
+    parser.add_argument(
+        "--train-games",
+        type=int,
+        default=0,
+        help="train on only this many of the training games, chosen in a fixed hash order so "
+        "that every run of a learning curve uses the same ones. The validation and frozen "
+        "games are untouched, so the curve is read against one unmoving test set.",
     )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--save", action="store_true")

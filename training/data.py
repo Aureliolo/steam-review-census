@@ -122,7 +122,7 @@ def split_by_game(
     # A ranking would still move the boundary as the count grew. The shares hold only in
     # expectation; a set this small can land short, and the floor below keeps it from landing
     # at nothing, which is the one outcome worse than an uneven split.
-    placed = {app_id: _place(app_id, seed) for app_id in games}
+    placed = {app_id: place(app_id, seed) for app_id in games}
     test_games = {app_id for app_id, at in placed.items() if at < test_share}
     validation_games = {
         app_id
@@ -150,7 +150,7 @@ def split_by_game(
     return train, validation, test
 
 
-def _place(app_id: int, seed: int) -> float:
+def place(app_id: int, seed: int) -> float:
     """Where a game sits in [0, 1), from its id and the seed alone.
 
     SHA-256 rather than Python's hash, which is salted per process for strings and would put a

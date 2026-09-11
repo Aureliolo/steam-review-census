@@ -351,6 +351,11 @@ enum Command {
         /// Words that put a claim back in question. A claim using any of them is drawn.
         #[arg(long, required = true, num_args = 1..)]
         words: Vec<String>,
+        /// Only claims currently filed under these subjects. A rule moves a boundary between
+        /// two rows, and a claim on neither side of it cannot cross. Every subject when none
+        /// are named.
+        #[arg(long, num_args = 1..)]
+        subjects: Vec<String>,
         /// Steam app IDs to draw from. Every labelled set when none are named.
         #[arg(num_args = 0..)]
         app_ids: Vec<u32>,
@@ -583,10 +588,11 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
         } => run_ingest_claims(*app_id, from, sheet.as_deref(), to.clone()),
         Command::Revisit {
             words,
+            subjects,
             app_ids,
             reference,
             batch_size,
-        } => run_revisit(words, app_ids, reference, *batch_size),
+        } => run_revisit(words, subjects, app_ids, reference, *batch_size),
         Command::IngestRevisit { app_id, from, to } => {
             run_ingest_revisit(*app_id, from, to.clone())
         }
@@ -955,6 +961,7 @@ fn labelled_sets(reference: &std::path::Path) -> Result<Vec<u32>> {
 /// Draws the claims a revision puts back in question, one set per game.
 fn run_revisit(
     words: &[String],
+    subjects: &[String],
     app_ids: &[u32],
     reference: &std::path::Path,
     batch_size: usize,
@@ -971,7 +978,7 @@ fn run_revisit(
     let (mut reviews, mut claims, mut games) = (0, 0, 0);
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
-        let drawn = census_core::claimset::draw_revisit(&dir, words)?;
+        let drawn = census_core::claimset::draw_revisit(&dir, words, subjects)?;
         if drawn.is_empty() {
             continue;
         }

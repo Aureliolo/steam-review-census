@@ -377,12 +377,17 @@ pub fn draw_second(dir: &Path, share: f64, seed: u64) -> Result<Vec<DrawnReview>
 /// and "mods" and not "modern", and a caller need not know how a word is bounded in a script
 /// that writes without spaces.
 ///
+/// Narrowed further by which subjects a claim is currently filed under, where the caller
+/// names any: a rule moves a boundary between two rows, and a claim on neither side of it
+/// cannot cross. "Worth" appears in claims about eleven subjects and the rule about what a
+/// thing is worth paying touches two of them.
+///
 /// Returns the claims that matched, as a set the labeller reads exactly like a fresh one.
 ///
 /// # Errors
 ///
 /// Fails if the set has no drawn sample or labels, or they cannot be read.
-pub fn draw_revisit(dir: &Path, words: &[String]) -> Result<Vec<DrawnReview>> {
+pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result<Vec<DrawnReview>> {
     let drawn: Vec<DrawnReview> =
         serde_json::from_slice(&std::fs::read(dir.join("sample.json")).map_err(|_| {
             crate::Error::NoReferenceSet {
@@ -397,6 +402,7 @@ pub fn draw_revisit(dir: &Path, words: &[String]) -> Result<Vec<DrawnReview>> {
         })?)?;
     let labelled: std::collections::HashSet<(&str, u16)> = labels
         .iter()
+        .filter(|label| subjects.is_empty() || subjects.contains(&label.subject))
         .map(|label| (label.review_id.as_str(), label.index))
         .collect();
 
