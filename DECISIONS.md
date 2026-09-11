@@ -11,9 +11,9 @@ State means: **done** is built and in use; **partial** is built for one case and
 
 | Decided | State |
 |---|---|
-| Rust core, **Tauri desktop shell**, and a CLI beside it | shell **not built** |
-| Compiled binary for Windows, Linux and macOS; the user downloads it, double-clicks it, and works entirely in the UI | **not built** |
-| The UI is first class, not a wrapper over the pipeline, and has to be good enough to look at | **not built** |
+| Rust core, **Tauri desktop shell**, and a CLI beside it | done: one binary, a window when opened with no arguments and the pipeline when given any |
+| Compiled binary for Windows, Linux and macOS; the user downloads it, double-clicks it, and works entirely in the UI | built for all three by the release workflow, DirectML on Windows and CoreML on Apple Silicon; the claim reader is fetched by checksum on first use once one is published |
+| The UI is first class, not a wrapper over the pipeline, and has to be good enough to look at | the window crawls, reads, shows the counts with their measured error, opens every row onto its claims and every word that stands out onto the claims that use it. Not yet: the report page's timeline, languages and induced subjects, and a language switch |
 | Results also export as one self-contained HTML page that fetches nothing | done |
 | Name: `steam-review-census` | done |
 
@@ -217,17 +217,19 @@ refused by this build, which is the guard working rather than failing.
 
 In the order they matter:
 
-1. **Labels.** Sixteen games of the thirty-six are labelled. At a quarter of claims answered
-   the model cannot carry a report yet, and nothing else on this list changes that: it is the
-   one input every other number depends on.
-2. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
-   players mention difficulty and telling a reader what they said about it.
+1. **Labels.** Nineteen games of the thirty-six are labelled. At 37% of claims answered the
+   model carries a report with a caveat over it rather than without one, and nothing else on
+   this list changes that: it is the one input every other number depends on.
+2. **Publishing.** The script and the pinned fetch path are built and the fourth wave is a
+   model worth publishing; the pin stays empty until `training/publish.py` is run against a
+   Hugging Face account, which is the user's to name.
 3. **Induced per-game categories**, so a game's own subjects appear rather than only the
    twenty-five every game shares. Run on one game; the other thirty-five each need one
    agent call of about 70k tokens, so they go one at a time behind the labellers.
-4. **Publishing.** The script and the pinned fetch path are built; the pin is empty until
-   `training/publish.py` is run against a model worth publishing, which is the one after the
-   labels.
+4. **The window behind the page.** The report page shows the timeline, the languages and the
+   induced subjects; the window does not yet.
+5. **The edit sweep**, above, which needs a capture layout before it needs a crawl order.
 
 Built since this list was first written: the report page on readings, the polarity split,
-corrected prevalence, the second reading and its comparison, the fetch-by-checksum path.
+corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
+words that stand out on each side of a subject, the paragraph, the bake-off.
