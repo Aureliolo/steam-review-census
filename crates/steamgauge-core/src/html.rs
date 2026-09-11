@@ -109,8 +109,8 @@ pub fn render(report: &Report) -> String {
 
 fn page_title(report: &Report) -> String {
     match report.apps.as_slice() {
-        [only] => format!("{} review census", only.crawl.title()),
-        _ => "Steam review census".to_owned(),
+        [only] => format!("{} reviews | SteamGauge", only.crawl.title()),
+        _ => "Steam reviews | SteamGauge".to_owned(),
     }
 }
 
@@ -1903,7 +1903,7 @@ fn page_footer(out: &mut String, report: &Report) {
     out.push_str("</ul>\n");
     let _ = writeln!(
         out,
-        "<p class=\"note\">Rendered on {} by steam-review-census, from captures taken on the \
+        "<p class=\"note\">Rendered on {} by SteamGauge, from captures taken on the \
          dates given above. Nothing on this page was sent anywhere to produce it.</p>",
         escape(&crate::time::day(report.generated_unix))
     );

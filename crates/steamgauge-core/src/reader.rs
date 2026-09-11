@@ -503,7 +503,7 @@ mod tests {
         if PUBLISHED.is_pinned() {
             return;
         }
-        let dir = std::env::temp_dir().join(format!("census-unpinned-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("steamgauge-unpinned-{}", std::process::id()));
         let refused = ensure(&dir, |_| {}).await;
         assert!(matches!(refused, Err(Error::NoAnchors { .. })));
         assert!(!dir.exists(), "a refused fetch must leave nothing behind");

@@ -13,7 +13,7 @@ not committed.
   claim was cut in the wrong place. Each label records the splitter that cut it and the
   taxonomy its subject comes from.
 - **`claims/<app id>/second/labels.json`** is a tenth of that set labelled again by a
-  different labeller working blind. `census compare-labels` reads the two together; a set
+  different labeller working blind. `steamgauge compare-labels` reads the two together; a set
   labelled once cannot say anything about its own reliability.
 - **`induced/<app id>.json`** holds the subjects a game's own players raise that the fixed
   taxonomy has no row for, each with the reviews that raise it. A subject with fewer than
@@ -22,7 +22,7 @@ not committed.
   subjects both fitted, where the splitter cut in the wrong place. Every rule in the current
   splitter and every line waiting for the next taxonomy revision came from an entry here.
 - **`claim-brief.txt`**, **`labelling-brief.txt`** and **`induction-brief.txt`** are generated
-  from `taxonomy.rs` by `census brief`. Edit the taxonomy, not the briefs.
+  from `taxonomy.rs` by `steamgauge brief`. Edit the taxonomy, not the briefs.
 
 ## Superseded, kept as a record
 

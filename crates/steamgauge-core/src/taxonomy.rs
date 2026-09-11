@@ -894,7 +894,7 @@ mod tests {
             assert_eq!(
                 committed.replace("\r\n", "\n"),
                 labelling_brief(unit),
-                "reference/{file} is stale; regenerate it with `census brief`"
+                "reference/{file} is stale; regenerate it with `steamgauge brief`"
             );
         }
     }

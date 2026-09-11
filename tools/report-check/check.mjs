@@ -10,7 +10,7 @@
 // with the machine asking for a dark screen, and again with the script cut out, which is what
 // a reader with scripting off is served. Everything checked is a promise the page makes.
 //
-//   cargo run -p census-core --example sample-report -- page.html
+//   cargo run -p steamgauge-core --example sample-report -- page.html
 //   node tools/report-check/check.mjs page.html
 //
 // Chrome is found through CHROME_PATH, or in the usual places on each platform.
@@ -595,7 +595,7 @@ const ON_PAPER = `(function () {
 
 const file = resolve(process.argv[2] ?? "sample-report.html");
 const page = pathToFileURL(file).href;
-const profile = await mkdtemp(join(tmpdir(), "census-report-check-"));
+const profile = await mkdtemp(join(tmpdir(), "steamgauge-report-check-"));
 
 // The same page with the script cut out, which is exactly what a reader with scripting off
 // is served. Driven as a page of its own rather than by turning scripting off in the

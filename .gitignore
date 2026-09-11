@@ -4,7 +4,7 @@
 data/
 
 # Drawn reference samples carry the review text itself, unlike the labels beside them,
-# which name reviews by id only. `census sample` regenerates these from the corpus and
+# which name reviews by id only. `steamgauge sample` regenerates these from the corpus and
 # the seed recorded in the manifest, so nothing is lost by keeping them out.
 reference/**/sample.json
 reference/**/batches/
@@ -14,7 +14,7 @@ corpus/
 raw/
 
 # Rendered reports quote review text, which is the same reason the captures are not here.
-census-report.html
+steamgauge-report.html
 *-report.html
 analysis/
 output/

@@ -393,7 +393,7 @@ mod tests {
         impl Dir {
             pub fn new() -> Self {
                 let unique = format!(
-                    "census-test-{}-{:?}",
+                    "steamgauge-test-{}-{:?}",
                     std::process::id(),
                     std::thread::current().id()
                 );

@@ -5,11 +5,11 @@ use std::{
 };
 
 use anyhow::Result;
-use census_core::{
+use clap::{Parser, Subcommand, ValueEnum};
+use steamgauge_core::{
     CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET, SteamClient, StopReason,
     crawl,
 };
-use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 enum Precision {
@@ -20,7 +20,7 @@ enum Precision {
     Fp32,
 }
 
-impl From<Precision> for census_core::model::Precision {
+impl From<Precision> for steamgauge_core::model::Precision {
     fn from(value: Precision) -> Self {
         match value {
             Precision::Fp16 => Self::Float16,
@@ -45,7 +45,7 @@ enum Model {
     GteBase,
 }
 
-impl From<Model> for census_core::Encoder {
+impl From<Model> for steamgauge_core::Encoder {
     fn from(value: Model) -> Self {
         match value {
             Model::E5Small => Self::E5Small,
@@ -67,7 +67,7 @@ enum Grain {
     Review,
 }
 
-impl From<Grain> for census_core::taxonomy::Unit {
+impl From<Grain> for steamgauge_core::taxonomy::Unit {
     fn from(value: Grain) -> Self {
         match value {
             Grain::Claim => Self::Claim,
@@ -86,7 +86,7 @@ enum Reading {
     Shallow,
 }
 
-impl From<Reading> for census_core::read::Depth {
+impl From<Reading> for steamgauge_core::read::Depth {
     fn from(value: Reading) -> Self {
         match value {
             Reading::Deep => Self::Deep,
@@ -100,7 +100,7 @@ const PROGRESS_EVERY_TEXTS: u64 = 5_000;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "census",
+    name = "steamgauge",
     version,
     about = "Count what Steam reviewers actually say, rather than what the loudest ones say.",
     after_help = "The first four commands are the pipeline, in order: crawl a game, embed it, \
@@ -422,13 +422,13 @@ enum Command {
         #[arg(long)]
         model: Option<PathBuf>,
         /// Claims per forward pass.
-        #[arg(long, default_value_t = census_core::read::DEFAULT_READ_BATCH)]
+        #[arg(long, default_value_t = steamgauge_core::read::DEFAULT_READ_BATCH)]
         batch_size: usize,
         /// Count only reviews written in this language. The capture stays whole either way.
         #[arg(long)]
         language: Option<String>,
         /// How many of the most-helpful reviews count as the top of the pile.
-        #[arg(long, default_value_t = census_core::capture::DEFAULT_TOP_HELPFUL)]
+        #[arg(long, default_value_t = steamgauge_core::capture::DEFAULT_TOP_HELPFUL)]
         top_helpful: usize,
         /// How closely to read. `deep` takes each review apart into the points it makes;
         /// `shallow` reads each review as one point, which is faster and understates anyone
@@ -446,10 +446,10 @@ enum Command {
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
         /// Where to write the page.
-        #[arg(long, default_value = "census-report.html")]
+        #[arg(long, default_value = "steamgauge-report.html")]
         to: PathBuf,
         /// Claims quoted per subject, as the evidence behind its rate.
-        #[arg(long, default_value_t = census_core::report::DEFAULT_EXAMPLES)]
+        #[arg(long, default_value_t = steamgauge_core::report::DEFAULT_EXAMPLES)]
         examples: usize,
         /// Changing this quotes different claims. The same seed always quotes the same ones.
         #[arg(long, default_value_t = 1)]
@@ -505,9 +505,9 @@ pub async fn run() -> Result<()> {
             top_helpful,
             depth,
         } => {
-            let model_dir = model.unwrap_or_else(census_core::reader::default_dir);
+            let model_dir = model.unwrap_or_else(steamgauge_core::reader::default_dir);
             fetch_reader(&model_dir).await?;
-            let options = census_core::read::ReadOptions {
+            let options = steamgauge_core::read::ReadOptions {
                 out_dir: out,
                 top_helpful,
                 batch_size,
@@ -517,7 +517,7 @@ pub async fn run() -> Result<()> {
             run_read(&app_ids, &model_dir, &options)
         }
         Command::ExportTraining { from, to } => {
-            let written = census_core::claimset::export_training(&from, &to)?;
+            let written = steamgauge_core::claimset::export_training(&from, &to)?;
             println!("{written} labelled claims -> {}", to.display());
             Ok(())
         }
@@ -645,17 +645,18 @@ fn run_ingest_induced(
             .join("distinct")
             .join(format!("{app_id}.json"))
     });
-    let drawn: Vec<census_core::diverse::Handout> =
+    let drawn: Vec<steamgauge_core::diverse::Handout> =
         serde_json::from_slice(&std::fs::read(&handout).map_err(|_| {
             anyhow::anyhow!(
-                "no handout at {}; run `census distinct {app_id}` first",
+                "no handout at {}; run `steamgauge distinct {app_id}` first",
                 handout.display()
             )
         })?)?;
     let ids: Vec<String> = drawn.into_iter().map(|review| review.review_id).collect();
 
-    let returned: census_core::induced::Returned = serde_json::from_slice(&std::fs::read(from)?)?;
-    let (kept, refused) = census_core::induced::check(&returned, &ids);
+    let returned: steamgauge_core::induced::Returned =
+        serde_json::from_slice(&std::fs::read(from)?)?;
+    let (kept, refused) = steamgauge_core::induced::check(&returned, &ids);
     println!("app          {app_id}");
     println!("induced by   {}", returned.induced_by);
     println!("handout      {} reviews", ids.len());
@@ -679,11 +680,11 @@ fn run_ingest_induced(
         }
     }
 
-    let path = to.unwrap_or_else(|| census_core::induced::default_path(app_id));
+    let path = to.unwrap_or_else(|| steamgauge_core::induced::default_path(app_id));
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let survived = census_core::induced::InducedSet {
+    let survived = steamgauge_core::induced::InducedSet {
         app_id,
         seed,
         handout_size: ids.len(),
@@ -705,15 +706,15 @@ fn run_report(
     // Every game before any of them: a page of six corpora that dies on the sixth has read
     // five of them and quoted a thousand reviews to say what one look would have said.
     for &app_id in app_ids {
-        census_core::embed::latest_snapshot(out, app_id)?;
+        steamgauge_core::embed::latest_snapshot(out, app_id)?;
     }
-    let options = census_core::report::ReportOptions {
+    let options = steamgauge_core::report::ReportOptions {
         out_dir: out.to_path_buf(),
         examples,
         seed,
     };
-    let report = census_core::report::build(app_ids, &options)?;
-    let page = census_core::html::render(&report);
+    let report = steamgauge_core::report::build(app_ids, &options)?;
+    let page = steamgauge_core::html::render(&report);
     std::fs::write(to, page.as_bytes())?;
 
     println!("report      {}", to.display());
@@ -759,8 +760,8 @@ fn run_sample_claims(
 
     for &app_id in app_ids {
         let dir = to.join(app_id.to_string());
-        let drawn = census_core::claimset::draw(out, app_id, reviews, english, seed)?;
-        let report = census_core::claimset::write_set(&dir, &drawn, batch_size)?;
+        let drawn = steamgauge_core::claimset::draw(out, app_id, reviews, english, seed)?;
+        let report = steamgauge_core::claimset::write_set(&dir, &drawn, batch_size)?;
         for review in &drawn {
             *languages.entry(review.language.clone()).or_default() += 1;
         }
@@ -804,7 +805,7 @@ async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
     if model_dir.join("model.onnx").is_file() {
         return Ok(());
     }
-    if !census_core::reader::PUBLISHED.is_pinned() {
+    if !steamgauge_core::reader::PUBLISHED.is_pinned() {
         anyhow::bail!(
             "no claim reader at {} and none has been published yet; train one with \
              training/train.py and export it there, or pass --model",
@@ -813,11 +814,11 @@ async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
     }
     eprintln!(
         "fetching the claim reader from {}",
-        census_core::reader::PUBLISHED.repository
+        steamgauge_core::reader::PUBLISHED.repository
     );
     // One line every ten megabytes rather than one per chunk, which would be thousands.
     let mut shown = (String::new(), 0_u64);
-    census_core::reader::ensure(model_dir, |progress| {
+    steamgauge_core::reader::ensure(model_dir, |progress| {
         let step = progress.downloaded / 10_000_000;
         if (progress.file, step) == (shown.0.as_str(), shown.1) {
             return;
@@ -846,14 +847,14 @@ async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
 fn run_read(
     app_ids: &[u32],
     model_dir: &std::path::Path,
-    options: &census_core::read::ReadOptions,
+    options: &steamgauge_core::read::ReadOptions,
 ) -> Result<()> {
     // Loaded once for the whole slate. Building the session takes longer than reading a
     // small corpus, so doing it per game would be most of the time for a list of them.
-    let mut model = census_core::reader::ClaimReader::load(model_dir)?;
+    let mut model = steamgauge_core::reader::ClaimReader::load(model_dir)?;
     eprintln!("model        {} on {}", model_dir.display(), model.device());
     eprintln!("threshold    {:.2}", model.provenance().threshold);
-    if options.depth != census_core::read::Depth::Deep {
+    if options.depth != steamgauge_core::read::Depth::Deep {
         eprintln!(
             "depth        {}: each review is one point, which understates anyone who wrote \
              more than a sentence",
@@ -867,17 +868,17 @@ fn run_read(
 }
 
 fn read_one(
-    model: &mut census_core::reader::ClaimReader,
+    model: &mut steamgauge_core::reader::ClaimReader,
     app_id: u32,
-    options: &census_core::read::ReadOptions,
+    options: &steamgauge_core::read::ReadOptions,
 ) -> Result<()> {
-    census_core::embed::latest_snapshot(&options.out_dir, app_id)?;
+    steamgauge_core::embed::latest_snapshot(&options.out_dir, app_id)?;
     eprintln!("reading app {app_id}");
 
     // Printed whether or not anyone is watching a terminal: this is the pass that takes
     // hours, and a log with nothing in it is indistinguishable from a hang.
     let mut announced = 0;
-    let report = census_core::read::read_corpus(model, app_id, options, |progress| {
+    let report = steamgauge_core::read::read_corpus(model, app_id, options, |progress| {
         if progress.done / 25_000 <= announced {
             return;
         }
@@ -889,7 +890,8 @@ fn read_one(
         };
         eprintln!("  {} {what}", thousands(progress.done));
     })?;
-    let path = census_core::embed::latest_snapshot(&options.out_dir, app_id)?.join("reading.json");
+    let path =
+        steamgauge_core::embed::latest_snapshot(&options.out_dir, app_id)?.join("reading.json");
     report.save(&path)?;
 
     println!("app          {}", report.app_id);
@@ -912,18 +914,18 @@ fn read_one(
         );
     }
     if let Some(ratio) = report.declined_against_usual()
-        && ratio >= census_core::read::UNUSUALLY_DECLINED
+        && ratio >= steamgauge_core::read::UNUSUALLY_DECLINED
     {
         println!(
             "             {ratio:.1}x what this model declines on a game it has not seen. This \
-             corpus is\n             about something the taxonomy has no row for; `census \
+             corpus is\n             about something the taxonomy has no row for; `steamgauge \
              distinct` will find it."
         );
     }
     println!("took         {}", elapsed(report.elapsed));
     println!("written to   {}\n", path.display());
 
-    let mut ranked: Vec<&census_core::read::SubjectCount> = report
+    let mut ranked: Vec<&steamgauge_core::read::SubjectCount> = report
         .subjects
         .iter()
         .filter(|subject| subject.mention_reviews > 0)
@@ -978,11 +980,12 @@ fn run_revisit(
     let (mut reviews, mut claims, mut games) = (0, 0, 0);
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
-        let drawn = census_core::claimset::draw_revisit(&dir, words, subjects)?;
+        let drawn = steamgauge_core::claimset::draw_revisit(&dir, words, subjects)?;
         if drawn.is_empty() {
             continue;
         }
-        let report = census_core::claimset::write_set(&dir.join("revisit"), &drawn, batch_size)?;
+        let report =
+            steamgauge_core::claimset::write_set(&dir.join("revisit"), &drawn, batch_size)?;
         println!(
             "{:<10} {:>4} reviews {:>5} claims {:>3} batches",
             app_id, report.reviews, report.claims, report.batches
@@ -998,7 +1001,7 @@ fn run_revisit(
     println!("\ndrawn      {reviews:>4} reviews {claims:>5} claims over {games} games");
     println!(
         "\nHand these to a labeller with the current sheet, exactly as a fresh set. Ingest\n\
-         each with `census ingest-revisit <app id> --from <dir>`, which replaces only the\n\
+         each with `steamgauge ingest-revisit <app id> --from <dir>`, which replaces only the\n\
          claims asked about and leaves every other label where it was."
     );
     Ok(())
@@ -1006,8 +1009,8 @@ fn run_revisit(
 
 /// Merges revisited labels back into a set.
 fn run_ingest_revisit(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -> Result<()> {
-    let dir = to.unwrap_or_else(|| census_core::claimset::default_reference_dir(app_id));
-    let report = census_core::claimset::ingest_revisit(&dir, from)?;
+    let dir = to.unwrap_or_else(|| steamgauge_core::claimset::default_reference_dir(app_id));
+    let report = steamgauge_core::claimset::ingest_revisit(&dir, from)?;
     println!("app        {app_id}");
     println!("revisited  {} claims", report.accepted);
     println!("moved      {} of them to another subject", report.moved);
@@ -1041,8 +1044,8 @@ fn run_second_opinion(
     let (mut reviews, mut claims, mut batches) = (0, 0, 0);
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
-        let drawn = census_core::claimset::draw_second(&dir, share, seed)?;
-        let report = census_core::claimset::write_set(&dir.join("second"), &drawn, batch_size)?;
+        let drawn = steamgauge_core::claimset::draw_second(&dir, share, seed)?;
+        let report = steamgauge_core::claimset::write_set(&dir.join("second"), &drawn, batch_size)?;
         reviews += report.reviews;
         claims += report.claims;
         batches += report.batches;
@@ -1056,7 +1059,7 @@ fn run_second_opinion(
     println!(
         "\nHand these to a different labeller from the one that did the first pass, and give \
          it\nthe same sheet and nothing else. A second opinion that can see the first is not a\n\
-         second opinion. Ingest with --to <set>/second, then `census compare-labels`."
+         second opinion. Ingest with --to <set>/second, then `steamgauge compare-labels`."
     );
     Ok(())
 }
@@ -1068,7 +1071,7 @@ fn run_distinct(
     seed: u64,
     to: Option<PathBuf>,
 ) -> Result<()> {
-    let drawn = census_core::diverse::handout(out, app_id, count, seed)?;
+    let drawn = steamgauge_core::diverse::handout(out, app_id, count, seed)?;
     let path = to.unwrap_or_else(|| {
         PathBuf::from("reference")
             .join("distinct")
@@ -1130,7 +1133,7 @@ fn read_twice(app_ids: &[u32], reference: &std::path::Path) -> Result<Vec<u32>> 
     };
     if wanted.is_empty() {
         anyhow::bail!(
-            "no set under {} has a second labelling yet; run `census second-opinion` first",
+            "no set under {} has a second labelling yet; run `steamgauge second-opinion` first",
             reference.display()
         );
     }
@@ -1139,7 +1142,7 @@ fn read_twice(app_ids: &[u32], reference: &std::path::Path) -> Result<Vec<u32>> 
 
 /// Scores the model against what two labellers settled on, and against what they could not.
 fn run_ceiling(app_ids: &[u32], out: &std::path::Path, reference: &std::path::Path) -> Result<()> {
-    use census_core::measure::{Role, SPLIT_SEED, role};
+    use steamgauge_core::measure::{Role, SPLIT_SEED, role};
 
     let wanted = read_twice(app_ids, reference)?;
     let pct =
@@ -1147,14 +1150,18 @@ fn run_ceiling(app_ids: &[u32], out: &std::path::Path, reference: &std::path::Pa
 
     // Pooled apart, because a figure over games the model trained on is not a measurement of
     // anything and averaging it in would hide the one figure that is.
-    let mut pooled: Vec<(Role, census_core::measure::Ceiling, usize)> = vec![
-        (Role::Frozen, census_core::measure::Ceiling::default(), 0),
+    let mut pooled: Vec<(Role, steamgauge_core::measure::Ceiling, usize)> = vec![
         (
-            Role::Validation,
-            census_core::measure::Ceiling::default(),
+            Role::Frozen,
+            steamgauge_core::measure::Ceiling::default(),
             0,
         ),
-        (Role::Train, census_core::measure::Ceiling::default(), 0),
+        (
+            Role::Validation,
+            steamgauge_core::measure::Ceiling::default(),
+            0,
+        ),
+        (Role::Train, steamgauge_core::measure::Ceiling::default(), 0),
     ];
 
     println!(
@@ -1162,20 +1169,23 @@ fn run_ceiling(app_ids: &[u32], out: &std::path::Path, reference: &std::path::Pa
         "app", "was", "claims", "labellers", "model"
     );
     for app_id in wanted {
-        let found =
-            match census_core::measure::ceiling(out, app_id, &reference.join(app_id.to_string())) {
-                // A game read under an older splitter has readings whose indexes name other
-                // sentences, and a game never read has none at all. Both are skipped by name
-                // rather than stopping the run, so the games that can be scored are.
-                Err(
-                    census_core::Error::StaleAnchors { .. }
-                    | census_core::Error::NoClassifications { .. },
-                ) => {
-                    println!("{app_id:>9} not read by this build");
-                    continue;
-                }
-                other => other?,
-            };
+        let found = match steamgauge_core::measure::ceiling(
+            out,
+            app_id,
+            &reference.join(app_id.to_string()),
+        ) {
+            // A game read under an older splitter has readings whose indexes name other
+            // sentences, and a game never read has none at all. Both are skipped by name
+            // rather than stopping the run, so the games that can be scored are.
+            Err(
+                steamgauge_core::Error::StaleAnchors { .. }
+                | steamgauge_core::Error::NoClassifications { .. },
+            ) => {
+                println!("{app_id:>9} not read by this build");
+                continue;
+            }
+            other => other?,
+        };
         let was = role(app_id, SPLIT_SEED);
         if found.compared == 0 {
             println!(
@@ -1202,36 +1212,7 @@ fn run_ceiling(app_ids: &[u32], out: &std::path::Path, reference: &std::path::Pa
     }
 
     for (was, found, games) in &pooled {
-        if found.compared == 0 {
-            continue;
-        }
-        println!(
-            "\n{} games the model {}, {} claims read twice and answered",
-            games,
-            match was {
-                Role::Frozen => "never saw",
-                Role::Validation => "chose its threshold on",
-                Role::Train => "trained on",
-            },
-            found.compared
-        );
-        println!(
-            "  the two labellers reached the same subject on {} of them, {}",
-            found.labellers_agreed,
-            pct(found.between_labellers())
-        );
-        println!(
-            "  on those, the model agrees {}{}",
-            pct(found.against_the_settled()),
-            found.interval().map_or_else(String::new, |(low, high)| {
-                format!(", somewhere in [{low:.3}, {high:.3}]")
-            })
-        );
-        println!(
-            "  on the {} they split, it lands on one of their two answers {}",
-            found.labellers_split,
-            pct(found.where_they_split())
-        );
+        print_ceiling_block(*was, found, *games);
     }
 
     println!(
@@ -1248,12 +1229,55 @@ about half, and those are not counted as errors because it did not make one."
     Ok(())
 }
 
+/// One role's pooled ceiling: what the labellers managed, and what the model managed of that.
+fn print_ceiling_block(
+    was: steamgauge_core::measure::Role,
+    found: &steamgauge_core::measure::Ceiling,
+    games: usize,
+) {
+    use steamgauge_core::measure::Role;
+
+    if found.compared == 0 {
+        return;
+    }
+    let pct =
+        |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+
+    println!(
+        "\n{} games the model {}, {} claims read twice and answered",
+        games,
+        match was {
+            Role::Frozen => "never saw",
+            Role::Validation => "chose its threshold on",
+            Role::Train => "trained on",
+        },
+        found.compared
+    );
+    println!(
+        "  the two labellers reached the same subject on {} of them, {}",
+        found.labellers_agreed,
+        pct(found.between_labellers())
+    );
+    println!(
+        "  on those, the model agrees {}{}",
+        pct(found.against_the_settled()),
+        found.interval().map_or_else(String::new, |(low, high)| {
+            format!(", somewhere in [{low:.3}, {high:.3}]")
+        })
+    );
+    println!(
+        "  on the {} they split, it lands on one of their two answers {}",
+        found.labellers_split,
+        pct(found.where_they_split())
+    );
+}
+
 fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()> {
     let wanted = read_twice(app_ids, reference)?;
 
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
-    let table = |found: &census_core::reliability::Reliability| {
+    let table = |found: &steamgauge_core::reliability::Reliability| {
         println!(
             "\n  {:<14} {:>9} {:>8}   commonest split",
             "field", "agreed", "kappa"
@@ -1275,15 +1299,15 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
         }
     };
 
-    let mut every = census_core::reliability::Paired::default();
+    let mut every = steamgauge_core::reliability::Paired::default();
     let several = wanted.len() > 1;
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
-        let pairs = census_core::reliability::paired(
+        let pairs = steamgauge_core::reliability::paired(
             &dir.join("labels.json"),
             &dir.join("second").join("labels.json"),
         )?;
-        let found = census_core::reliability::over(&pairs);
+        let found = steamgauge_core::reliability::over(&pairs);
 
         println!("\napp {app_id}");
         println!(
@@ -1295,7 +1319,7 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
         every.extend(pairs);
     }
 
-    let pooled = census_core::reliability::over(&every);
+    let pooled = steamgauge_core::reliability::over(&every);
     if several {
         println!(
             "\npooled over every set, {} claims read twice",
@@ -1347,26 +1371,28 @@ fn run_measure_claims(
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
 
     for &app_id in app_ids {
-        let found =
-            match census_core::measure::agreement(out, app_id, &reference.join(app_id.to_string()))
-            {
-                // The readings are fine as counts and useless as a score: their indexes name
-                // sentences this build cuts differently. Saying so per game lets the rest of
-                // the list be scored rather than the whole run stopping at the first stale one.
-                Err(census_core::Error::StaleAnchors {
-                    field: "splitter",
-                    actual,
-                    ..
-                }) => {
-                    println!(
-                        "\napp {app_id}\n  read under {actual}, and this build splits with {}; \
+        let found = match steamgauge_core::measure::agreement(
+            out,
+            app_id,
+            &reference.join(app_id.to_string()),
+        ) {
+            // The readings are fine as counts and useless as a score: their indexes name
+            // sentences this build cuts differently. Saying so per game lets the rest of
+            // the list be scored rather than the whole run stopping at the first stale one.
+            Err(steamgauge_core::Error::StaleAnchors {
+                field: "splitter",
+                actual,
+                ..
+            }) => {
+                println!(
+                    "\napp {app_id}\n  read under {actual}, and this build splits with {}; \
                      read it again before measuring",
-                        census_core::claims::SPLITTER_VERSION
-                    );
-                    continue;
-                }
-                other => other?,
-            };
+                    steamgauge_core::claims::SPLITTER_VERSION
+                );
+                continue;
+            }
+            other => other?,
+        };
 
         println!("\napp {app_id}");
         println!(
@@ -1406,7 +1432,7 @@ fn run_measure_claims(
             );
         }
 
-        let mut ranked: Vec<&census_core::measure::SubjectAgreement> = found
+        let mut ranked: Vec<&steamgauge_core::measure::SubjectAgreement> = found
             .subjects
             .iter()
             .filter(|subject| subject.labelled > 0)
@@ -1458,14 +1484,14 @@ fn run_ingest_claims(
             .join("claims")
             .join(app_id.to_string())
     });
-    let sheet = census_core::claimset::Sheet {
+    let sheet = steamgauge_core::claimset::Sheet {
         taxonomy: sheet.map_or_else(
-            || census_core::CORE_SPINE_VERSION.to_owned(),
+            || steamgauge_core::CORE_SPINE_VERSION.to_owned(),
             ToOwned::to_owned,
         ),
         ..Default::default()
     };
-    let (labels, report) = census_core::claimset::ingest(&dir, from, &sheet)?;
+    let (labels, report) = steamgauge_core::claimset::ingest(&dir, from, &sheet)?;
 
     let mut subjects: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     let mut polarity: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
@@ -1530,7 +1556,7 @@ fn run_ingest_claims(
 }
 
 fn run_brief(to: &std::path::Path) -> Result<()> {
-    use census_core::taxonomy::{Unit, labelling_brief};
+    use steamgauge_core::taxonomy::{Unit, labelling_brief};
 
     let sheets = [
         ("labelling-brief.txt", Unit::Review),
@@ -1551,7 +1577,7 @@ fn run_brief(to: &std::path::Path) -> Result<()> {
         println!("brief    {}", path.display());
     }
     let induction = to.join("induction-brief.txt");
-    std::fs::write(&induction, census_core::taxonomy::induction_brief())?;
+    std::fs::write(&induction, steamgauge_core::taxonomy::induction_brief())?;
     println!("brief    {}", induction.display());
     Ok(())
 }
@@ -1559,7 +1585,7 @@ fn run_brief(to: &std::path::Path) -> Result<()> {
 fn run_claims(app_id: u32, out: &std::path::Path) -> Result<()> {
     eprintln!("splitting app {app_id}");
     let mut announced = 0;
-    let report = census_core::claims::extract_corpus(out, app_id, |reviews, claims| {
+    let report = steamgauge_core::claims::extract_corpus(out, app_id, |reviews, claims| {
         if reviews / 100_000 > announced {
             announced = reviews / 100_000;
             eprintln!("  {reviews} reviews, {claims} claims");
@@ -1586,20 +1612,20 @@ async fn run_embed(
     out: &std::path::Path,
     batch_size: usize,
     model_dir: Option<PathBuf>,
-    encoder: census_core::Encoder,
-    precision: census_core::model::Precision,
-    unit: census_core::taxonomy::Unit,
+    encoder: steamgauge_core::Encoder,
+    precision: steamgauge_core::model::Precision,
+    unit: steamgauge_core::taxonomy::Unit,
 ) -> Result<()> {
     // Before the model, which on a first run is a download, and which a game that was never
     // crawled has no use for.
-    census_core::embed::latest_snapshot(out, app_id)?;
-    let cache = model_dir.unwrap_or_else(census_core::model::default_cache_dir);
+    steamgauge_core::embed::latest_snapshot(out, app_id)?;
+    let cache = model_dir.unwrap_or_else(steamgauge_core::model::default_cache_dir);
     let interactive = std::io::stderr().is_terminal();
 
     eprintln!("model:       {} {}", encoder.id(), precision.as_str());
     eprintln!("model cache: {}", cache.display());
     let mut announced = String::new();
-    census_core::model::ensure(&cache, encoder, precision, |progress| {
+    steamgauge_core::model::ensure(&cache, encoder, precision, |progress| {
         if announced != progress.file {
             progress.file.clone_into(&mut announced);
             eprintln!("  downloading {}", progress.file);
@@ -1622,11 +1648,11 @@ async fn run_embed(
         eprintln!();
     }
 
-    let mut embedder = census_core::Embedder::load(&cache, encoder, precision)?;
+    let mut embedder = steamgauge_core::Embedder::load(&cache, encoder, precision)?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
     let report =
-        census_core::embed_corpus(&mut embedder, out, app_id, batch_size, unit, |progress| {
+        steamgauge_core::embed_corpus(&mut embedder, out, app_id, batch_size, unit, |progress| {
             let line = format!(
                 "  {} of {} distinct texts",
                 thousands(progress.embedded),
@@ -1701,7 +1727,7 @@ async fn run_sweep(app_id: u32, out: &Path, pace: Duration) -> Result<()> {
     let interactive = std::io::stderr().is_terminal();
 
     eprintln!("bringing app {app_id} up to date");
-    let report = census_core::crawl::sweep(&client, app_id, out, |progress| {
+    let report = steamgauge_core::crawl::sweep(&client, app_id, out, |progress| {
         if interactive {
             let mut err = std::io::stderr();
             let _ = write!(
@@ -1721,7 +1747,7 @@ async fn run_sweep(app_id: u32, out: &Path, pace: Duration) -> Result<()> {
     println!("app {}", report.app_id);
     println!(
         "  since        {}",
-        census_core::time::day(report.watermark)
+        steamgauge_core::time::day(report.watermark)
     );
     println!("  pages        {}", report.pages);
     println!(
@@ -1736,7 +1762,7 @@ async fn run_sweep(app_id: u32, out: &Path, pace: Duration) -> Result<()> {
         thousands(report.valve_total),
         report.coverage().map_or_else(
             || "coverage not applicable".to_owned(),
-            census_core::report::coverage
+            steamgauge_core::report::coverage
         )
     );
     if report.stop != StopReason::Exhausted {
@@ -1777,7 +1803,7 @@ fn print_report(report: &CrawlReport) {
         "  coverage     {}",
         report.coverage().map_or_else(
             || "not applicable".to_owned(),
-            census_core::report::coverage
+            steamgauge_core::report::coverage
         )
     );
     println!("  elapsed      {}", elapsed(report.elapsed));
@@ -1858,15 +1884,18 @@ mod tests {
         // Two defaults that must agree: what `--model` falls back to, and what a corpus is
         // embedded with when nothing says otherwise. Drift between them would leave a corpus
         // holding vectors from an encoder nothing else expects, which is refused much later.
-        let parsed = Cli::parse_from(["census", "embed", "1"]);
+        let parsed = Cli::parse_from(["steamgauge", "embed", "1"]);
         let Command::Embed { model, .. } = parsed.command else {
             panic!("embed did not parse as embed");
         };
         assert_eq!(
-            census_core::Encoder::from(model),
-            census_core::Encoder::default()
+            steamgauge_core::Encoder::from(model),
+            steamgauge_core::Encoder::default()
         );
-        assert_eq!(census_core::Encoder::from(Model::default()), model.into());
+        assert_eq!(
+            steamgauge_core::Encoder::from(Model::default()),
+            model.into()
+        );
     }
 
     #[test]

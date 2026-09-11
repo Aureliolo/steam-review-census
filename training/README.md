@@ -6,7 +6,7 @@ produces an artefact that is, and every artefact records what produced it.
 
 ## What it does
 
-`census` labels claims, not reviews: the separate points a review makes. A model is trained to
+`steamgauge` labels claims, not reviews: the separate points a review makes. A model is trained to
 read one claim and say which of the core-spine subjects it is about, whether it is praise,
 complaint or neither, and how sure it is. Below a calibrated threshold it says nothing, which
 is the whole reason for replacing what came before: the previous classifier compared a review
@@ -27,7 +27,7 @@ Training wants a GPU. It will run on a CPU and you will not enjoy it.
 ## The order things happen in
 
 ```sh
-census export-training --to training/data/claims.jsonl   # labels plus their text, local only
+steamgauge export-training --to training/data/claims.jsonl   # labels plus their text, local only
 python bakeoff.py                                        # which backbone, decided by measurement
 python train.py --backbone Alibaba-NLP/gte-multilingual-base --epochs 5 --save
 python export.py --run runs/<id> --spine core-5 --fp16   # ONNX, with a parity assertion
@@ -38,10 +38,10 @@ python publish.py --run runs/<id> \
 
 `claims.jsonl` holds review text and is never committed. What gets published is the model and a
 label set of review ids, claim offsets and labels, built from `reference/claims/` rather than
-from the training export, which anyone can rehydrate with `census` itself. Reviews belong to
+from the training export, which anyone can rehydrate with `steamgauge` itself. Reviews belong to
 the people who wrote them, and `publish.py` refuses a row that carries text.
 
-Publishing pins the three model files by hash in `crates/census-core/src/reader.rs`, so the
+Publishing pins the three model files by hash in `crates/steamgauge-core/src/reader.rs`, so the
 tool fetches exactly what went up and refuses anything else. Rebuild and commit after it runs.
 Until something is published the pin is empty, and an empty pin refuses to fetch rather than
 fetching unverified.

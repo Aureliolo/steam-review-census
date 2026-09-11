@@ -1,6 +1,6 @@
 [package]
-name = "census-core"
-description = "Corpus ingestion, storage and analysis for steam-review-census."
+name = "steamgauge-core"
+description = "Corpus ingestion, storage and analysis for SteamGauge."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

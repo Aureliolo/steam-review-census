@@ -15,7 +15,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Compiled binary for Windows, Linux and macOS; the user downloads it, double-clicks it, and works entirely in the UI | built for all three by the release workflow, DirectML on Windows and CoreML on Apple Silicon; the claim reader is fetched by checksum on first use once one is published |
 | The UI is first class, not a wrapper over the pipeline, and has to be good enough to look at | the window crawls, reads, shows the counts with their measured error, opens every row onto its claims and every word that stands out onto the claims that use it. Not yet: the report page's timeline, languages and induced subjects, and a language switch |
 | Results also export as one self-contained HTML page that fetches nothing | done |
-| Name: `steam-review-census` | done |
+| Name: **SteamGauge**, binary `steamgauge` | done 2026-09-11, renamed from `steam-review-census`. A census counts heads; this reads opinions, and "to gauge opinion" is the phrase for it. `gauge` alone was left to ThoughtWorks' test framework and npm's progress bar |
 
 ## What the analysis does
 
@@ -25,7 +25,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Every other percentage says which denominator it uses | done |
 | **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-4` and the reading pass counts per claim |
 | Shallow is the opt-out, and neither depth drops a review | done; `--depth shallow`, recorded in the reading and named on the page as not comparable |
-| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain runs end to end: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it, and the report shows what survives under the table with its evidence and no invented rate. First run on 296970 (Renowned Explorers): nine subjects returned, nine kept, every one refining a spine row or naming something the spine cannot (mood combat, the explorer roster, the oddball enemies, save-scumming), each with four to fourteen reviews behind it |
+| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain runs end to end: `steamgauge distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `steamgauge ingest-induced` refuses any subject without three real reviews behind it, and the report shows what survives under the table with its evidence and no invented rate. First run on 296970 (Renowned Explorers): nine subjects returned, nine kept, every one refining a spine row or naming something the spine cannot (mood combat, the explorer roster, the oddball enemies, save-scumming), each with four to fourteen reviews behind it |
 | Extras are discovered by an **LLM reading an embedding-diverse sample** | the sample is farthest-point traversal over a hash-drawn pool of four thousand vectors, measured to put a mechanics review, a localisation joke, a crash report and a difficulty complaint in its first eight picks. The reading is one agent call per game, 70k tokens on Opus for a 120-review handout, run one at a time behind the labellers |
 | Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
 | **Corrected prevalence**: the measured error corrects the rate rather than sitting beside it | done, per subject, where the model finds it better than chance |
@@ -56,7 +56,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | `author_steamid` kept for every review, as public data | done |
 | Adaptive, date-sharded crawl with capped concurrency | done |
 | Watermark top-up so a re-crawl does not re-pull old reviews | superseded by the sweep below, which finds arrivals and edits in one walk. The top-up wrote a new snapshot holding only the new reviews, and every pass read the newest snapshot, so a topped-up game counted only what had arrived since |
-| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | done: `census sweep`, and "Bring it up to date" in the window. One walk in `updated` order, newest first, stopping a day past the watermark (the crawl, or the last sweep). Rows land in `sweep-<unix>.parquet` beside the crawl's shards, never over them, and `newest.json` records which copy of each swept id counts; every reader of the capture goes through one walker that skips the rest. The readings record when the capture last changed, and the page and the window say so when a sweep has landed since they were made |
+| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | done: `steamgauge sweep`, and "Bring it up to date" in the window. One walk in `updated` order, newest first, stopping a day past the watermark (the crawl, or the last sweep). Rows land in `sweep-<unix>.parquet` beside the crawl's shards, never over them, and `newest.json` records which copy of each swept id counts; every reader of the capture goes through one walker that skips the rest. The readings record when the capture last changed, and the page and the window say so when a sweep has landed since they were made |
 | Valve's default filters overridden, because they hide 17.3% of negative reviews against 9.6% of positive | done |
 
 ## Distribution
@@ -165,7 +165,7 @@ Then the set was read a second time, a tenth of it, by a different labeller work
 
 So a contested rate is a fact about a labeller as much as about a game, and the reports say so
 rather than comparing it across games as though it were the same measure. The per-field
-figures are what `census compare-labels` prints, and the contested check runs every time.
+figures are what `steamgauge compare-labels` prints, and the contested check runs every time.
 
 At thirty games read twice, **1,400 claims**, every figure held: subject 86.9% at kappa
 **0.85**, polarity 93.4% at 0.90, contested 74.1% at **0.48** with the first labeller flagging
@@ -231,7 +231,7 @@ threshold sits, improved from 0.217 to 0.210.
 
 ### Eighty per cent of what?
 
-`census ceiling` answers the question every agreement figure in this file begs. A model
+`steamgauge ceiling` answers the question every agreement figure in this file begs. A model
 trained on one labeller's reading cannot be more right than two labellers manage with each
 other, so 80% against one labeller is a score out of that ceiling and not out of a hundred.
 Over the claims read twice **and** answered by the model, split by what each game was to it:
@@ -259,7 +259,7 @@ second opinions would only move the ceiling, not the floor.
 
 `claims-4` shipped mid-run after all, which the plan above said not to do. What made it
 safe is that a label had been carrying the byte span of its claim since the reference sets
-were redrawn, so the join in `census measure-claims` could be moved from claim index to span:
+were redrawn, so the join in `steamgauge measure-claims` could be moved from claim index to span:
 a label whose span the new splitter still cuts as one claim finds its reading wherever that
 claim now sits, and a label whose span it no longer cuts is counted as **unjoined** and said,
 on the terminal and on the report page, rather than scored against whatever sentence now has

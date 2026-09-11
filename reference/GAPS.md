@@ -246,7 +246,7 @@ is three parts of weight 14, 10 and 10 and splits; "The combat, which took a whi
 superb" has a long middle and does not.
 
 **Done in `claims-4`**, mid-run after all, because a label now names a span of its review
-rather than an index, and `census measure-claims` joins by span: a labelled claim the new
+rather than an index, and `steamgauge measure-claims` joins by span: a labelled claim the new
 splitter cuts differently is counted as unjoined rather than silently scored against the
 wrong sentence. Three or more comma-separated parts, each of weight 6 to 18, split; the cut
 happens after the fragments are joined, or the short parts would be joined straight back.

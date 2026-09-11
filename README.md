@@ -1,4 +1,4 @@
-# Steam Review Census
+# SteamGauge
 
 > **Unreleased and in development.** There is no installer and no release yet. This file
 > describes what the tool is and how it is meant to be judged, not a running product. What
@@ -227,7 +227,7 @@ default to.
 The protocol is fixed so it can be repeated, and so a disagreement with it is about the method
 rather than about somebody's afternoon:
 
-- **The sample is drawn before anyone reads anything.** `census sample-claims` takes a seed and
+- **The sample is drawn before anyone reads anything.** `steamgauge sample-claims` takes a seed and
   draws reviews per game with a fixed share of English, then splits each into its claims. The
   same seed against the same capture draws the same reviews, so a set can be rebuilt without
   being stored.
@@ -251,14 +251,14 @@ rather than about somebody's afternoon:
   contested, and whether the claim was cut in the wrong place. The last two are read back:
   agreement is reported separately over the contested claims, and the mis-split rate is what
   drives the splitting rules. Three rounds of them came from labellers reporting it.
-- **A tenth is read again by a different labeller, blind.** `census second-opinion` draws the
-  same reviews as fresh batches with no labels in them, and `census compare-labels` reads the
+- **A tenth is read again by a different labeller, blind.** `steamgauge second-opinion` draws the
+  same reviews as fresh batches with no labels in them, and `steamgauge compare-labels` reads the
   two labellings together. It reports each field apart from the others, because they fail
   differently: subject is a judgement about the claim, and `ambiguous` is a judgement about the
   taxonomy. Beside every percentage is Cohen's kappa, which is what the percentage cannot tell
   you: a corpus is mostly `verdict` and `offtopic`, so two labellers who never read a claim
   would still agree most of the time by landing on the commonest subject.
-- **What comes back is checked rather than trusted.** `census ingest-claims` refuses a set that
+- **What comes back is checked rather than trusted.** `steamgauge ingest-claims` refuses a set that
   does not cover the drawn sample exactly: claims nobody labelled, labels naming claims nobody
   drew, subjects the taxonomy does not have, claims labelled twice, and labels whose judgements
   were never made. A judgement left out is dropped rather than defaulted, because a `false`
@@ -336,7 +336,7 @@ These rules keep those figures honest:
   the reviews: 1,071 answered at 80.8% in Python on the full-precision weights, 1,070 at 80.7%
   in Rust on the half-precision graph over five corpora it split and joined back itself. Since
   the splitter moved under the labels the two read different cuts, and the tool now answers
-  1,218 at 80.4% where training says 1,315 at 79.8%, a difference `census measure-claims`
+  1,218 at 80.4% where training says 1,315 at 79.8%, a difference `steamgauge measure-claims`
   reports claim by claim rather than smoothing.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of

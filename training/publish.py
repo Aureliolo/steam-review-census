@@ -25,7 +25,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-READER_RS = REPO / "crates" / "census-core" / "src" / "reader.rs"
+READER_RS = REPO / "crates" / "steamgauge-core" / "src" / "reader.rs"
 
 MODEL_FILES = ["model.onnx", "tokenizer.json", "reader.json"]
 
@@ -62,7 +62,7 @@ def dataset_card(labels: int, games: int, fingerprint: str) -> str:
             "The review text. Each row carries a Steam review id and the byte offsets of one",
             "claim within that review's text, and nothing else that a reviewer wrote. The text is",
             "Valve's and the reviewer's, and it stays where it is; anyone with the review id can",
-            "fetch it from Steam and cut the claim out at the offsets given. `steam-review-census`",
+            "fetch it from Steam and cut the claim out at the offsets given. `steamgauge`",
             "does exactly that, and so can you.",
             "",
             "## How the labels were made",
@@ -78,7 +78,7 @@ def dataset_card(labels: int, games: int, fingerprint: str) -> str:
             f"Data fingerprint `{fingerprint}`. Every row names the `splitter` that cut its",
             "claim and the `taxonomy` its subject comes from, both versioned in the repository.",
             "A row whose splitter is older than the one you cut with may name a span you do not",
-            "cut as one claim; `steam-review-census` counts those rather than scoring them",
+            "cut as one claim; `steamgauge` counts those rather than scoring them",
             "against whatever now sits there.",
             "",
             "## Licence",

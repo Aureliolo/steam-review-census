@@ -67,9 +67,9 @@ impl SteamClient {
     pub fn new(pace: Duration) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(concat!(
-                "steam-review-census/",
+                "steamgauge/",
                 env!("CARGO_PKG_VERSION"),
-                " (+https://github.com/Aureliolo/steam-review-census)"
+                " (+https://github.com/Aureliolo/steamgauge)"
             ))
             .timeout(Duration::from_secs(60))
             .build()?;

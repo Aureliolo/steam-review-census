@@ -1,4 +1,4 @@
-//! Core library for steam-review-census.
+//! Core library for `SteamGauge`.
 //!
 //! Nothing here is stable yet. See the repository README for what is being built.
 
@@ -70,16 +70,18 @@ pub enum Error {
         actual: String,
     },
 
-    #[error("no capture found at {path}; run `census crawl` first")]
+    #[error("no capture found at {path}; run `steamgauge crawl` first")]
     NoCapture { path: std::path::PathBuf },
 
-    #[error("no embeddings found at {path}; run `census embed` first")]
+    #[error("no embeddings found at {path}; run `steamgauge embed` first")]
     NoEmbeddings { path: std::path::PathBuf },
 
-    #[error("no readings found at {path}; run `census read` first")]
+    #[error("no readings found at {path}; run `steamgauge read` first")]
     NoClassifications { path: std::path::PathBuf },
 
-    #[error("no reference set at {path}; run `census sample-claims` then `census ingest-claims`")]
+    #[error(
+        "no reference set at {path}; run `steamgauge sample-claims` then `steamgauge ingest-claims`"
+    )]
     NoReferenceSet { path: std::path::PathBuf },
 
     #[error("no claim reader at {path}; train one or fetch the published model")]
@@ -88,7 +90,9 @@ pub enum Error {
     /// Written by a build that recorded less about a run than this one reads back. The
     /// readings inside predate whatever is missing, so they are refused rather than
     /// partially interpreted.
-    #[error("{path} was written by an older build and is missing {field}; re-run `census read`")]
+    #[error(
+        "{path} was written by an older build and is missing {field}; re-run `steamgauge read`"
+    )]
     StaleClassifications {
         path: std::path::PathBuf,
         field: &'static str,

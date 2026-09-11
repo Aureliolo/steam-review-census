@@ -243,7 +243,7 @@ pub struct DownloadProgress<'a> {
 /// Default location for the model cache, shared across corpora.
 #[must_use]
 pub fn default_cache_dir() -> PathBuf {
-    dirs_cache().join("steam-review-census").join("models")
+    dirs_cache().join("steamgauge").join("models")
 }
 
 fn dirs_cache() -> PathBuf {
@@ -323,7 +323,7 @@ pub(crate) async fn ensure_asset(
 
 pub(crate) fn client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
-        .user_agent(concat!("steam-review-census/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("steamgauge/", env!("CARGO_PKG_VERSION")))
         .build()?)
 }
 
@@ -526,7 +526,7 @@ mod tests {
     #[test]
     fn the_cache_directory_is_namespaced_to_this_tool() {
         let dir = default_cache_dir();
-        assert!(dir.to_string_lossy().contains("steam-review-census"));
+        assert!(dir.to_string_lossy().contains("steamgauge"));
         assert!(dir.ends_with("models"));
     }
 }

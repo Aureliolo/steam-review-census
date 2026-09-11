@@ -932,7 +932,7 @@ mod tests {
         // an interrupted restart leaves an empty directory stamped later than the corpus it
         // was replacing. Age alone would pick the empty one and every later command would
         // report a corpus that is not there.
-        let root = std::env::temp_dir().join("census-snapshot-precedence");
+        let root = std::env::temp_dir().join("steamgauge-snapshot-precedence");
         let app = root.join("appid=1");
         let complete = app.join("snapshot=100");
         let abandoned = app.join("snapshot=200");

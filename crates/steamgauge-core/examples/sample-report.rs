@@ -7,14 +7,14 @@
 //! unmeasured, because they render differently.
 //!
 //! ```text
-//! cargo run -p census-core --example sample-report -- page.html
-//! cargo run -p census-core --example sample-report -- page.html --one-game
-//! cargo run -p census-core --example sample-report -- page.html --games 36
+//! cargo run -p steamgauge-core --example sample-report -- page.html
+//! cargo run -p steamgauge-core --example sample-report -- page.html --one-game
+//! cargo run -p steamgauge-core --example sample-report -- page.html --games 36
 //! ```
 
 use std::path::PathBuf;
 
-use census_core::{
+use steamgauge_core::{
     capture::CapturedReview,
     induced::Induced,
     measure::{ClaimAgreement, SubjectAgreement},
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         generated_unix: 1_760_000_000,
         apps,
     };
-    std::fs::write(&path, census_core::html::render(&report))?;
+    std::fs::write(&path, steamgauge_core::html::render(&report))?;
     println!("{}", path.display());
     Ok(())
 }
@@ -98,7 +98,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             corpus_reviews: reviews + 200,
             language: None,
             depth: Depth::Deep,
-            splitter: census_core::claims::SPLITTER_VERSION.to_owned(),
+            splitter: steamgauge_core::claims::SPLITTER_VERSION.to_owned(),
             claims: reviews * 3,
             // Over half, as every real reading currently is, so the page renders the caveat
             // it puts above the table rather than the footnote it puts below.

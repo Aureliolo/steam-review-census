@@ -784,40 +784,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "census-app"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "census-core",
- "clap",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tokio",
-]
-
-[[package]]
-name = "census-core"
-version = "0.0.0"
-dependencies = [
- "arrow",
- "ndarray",
- "ort",
- "parquet",
- "percent-encoding",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.20",
- "tokenizers",
- "tokio",
-]
-
-[[package]]
 name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4871,6 +4837,40 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steamgauge-app"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+ "steamgauge-core",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tokio",
+]
+
+[[package]]
+name = "steamgauge-core"
+version = "0.0.0"
+dependencies = [
+ "arrow",
+ "ndarray",
+ "ort",
+ "parquet",
+ "percent-encoding",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokenizers",
+ "tokio",
+]
 
 [[package]]
 name = "string_cache"

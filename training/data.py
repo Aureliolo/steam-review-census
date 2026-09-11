@@ -68,7 +68,7 @@ def _offset_in(review: str, claim: str, exported: int | None) -> int:
 
 
 def load(path: str | Path) -> list[Claim]:
-    """Reads the JSONL that `census export-training` writes."""
+    """Reads the JSONL that `steamgauge export-training` writes."""
     claims = []
     with open(path, encoding="utf-8") as handle:
         for line in handle:
@@ -96,7 +96,7 @@ def load(path: str | Path) -> list[Claim]:
                 )
             )
     if not claims:
-        raise SystemExit(f"{path} holds no labels; run `census export-training` first")
+        raise SystemExit(f"{path} holds no labels; run `steamgauge export-training` first")
     return claims
 
 

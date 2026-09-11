@@ -15,8 +15,8 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-use census_core::taxonomy::{CORE_SPINE, CORE_SPINE_VERSION};
 use parquet::arrow::ArrowWriter;
+use steamgauge_core::taxonomy::{CORE_SPINE, CORE_SPINE_VERSION};
 
 /// One axis per category, so a review's nearest anchor is the one this test names and not
 /// whichever of several tied categories the iterator happened to end on.
@@ -96,7 +96,7 @@ fn vector(category: usize) -> Vec<f32> {
 }
 
 fn write_capture(snapshot: &Path) {
-    let schema = census_core::capture::schema();
+    let schema = steamgauge_core::capture::schema();
     let mut ids = StringBuilder::new();
     let mut appids = UInt32Builder::new();
     let mut authors = StringBuilder::new();
@@ -334,7 +334,7 @@ fn write_readings(snapshot: &Path) {
             "top_helpful": 2,
             "model": MODEL,
             "spine_version": CORE_SPINE_VERSION,
-            "splitter": census_core::claims::SPLITTER_VERSION,
+            "splitter": steamgauge_core::claims::SPLITTER_VERSION,
             "threshold": 0.5,
             "device": "cpu",
             "subjects": subjects,
@@ -348,7 +348,7 @@ fn write_readings(snapshot: &Path) {
 
 /// A capture, its embeddings and an anchor set, all on disk and all real files.
 fn build_corpus(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-    let root = std::env::temp_dir().join(format!("census-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("steamgauge-{name}-{}", std::process::id()));
     std::fs::remove_dir_all(&root).ok();
     let snapshot = root.join("appid=1").join("snapshot=1700000000");
     std::fs::create_dir_all(&snapshot).unwrap();
@@ -375,8 +375,8 @@ fn build_corpus(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     (root, snapshot)
 }
 
-fn reporting(root: &Path) -> census_core::report::ReportOptions {
-    census_core::report::ReportOptions {
+fn reporting(root: &Path) -> steamgauge_core::report::ReportOptions {
+    steamgauge_core::report::ReportOptions {
         out_dir: root.to_path_buf(),
         examples: 4,
         seed: 1,
@@ -387,7 +387,7 @@ fn reporting(root: &Path) -> census_core::report::ReportOptions {
 fn a_capture_becomes_a_page_without_a_model_or_a_network() {
     let (root, _snapshot) = build_corpus("pipeline");
 
-    let rendered = census_core::report::build(&[1], &reporting(&root)).unwrap();
+    let rendered = steamgauge_core::report::build(&[1], &reporting(&root)).unwrap();
     let app = &rendered.apps[0];
 
     // Six reviews in the capture. The blank one is in no rate at all, not even the
@@ -421,7 +421,7 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
     let quoted: usize = app.examples.iter().map(|(_, shown)| shown.len()).sum();
     assert!(quoted > 0, "no claim reached the page as evidence");
 
-    let page = census_core::html::render(&rendered);
+    let page = steamgauge_core::html::render(&rendered);
     assert!(page.contains("Test Game"), "the game's name is missing");
     assert!(
         page.contains("crashes on launch"),
@@ -448,7 +448,7 @@ fn counts_the_corpus_no_longer_supports_are_refused_rather_than_drawn() {
     stored["spine_version"] = serde_json::Value::String("core-1".to_owned());
     std::fs::write(&sidecar, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
 
-    let message = census_core::report::build(&[1], &reporting(&root))
+    let message = steamgauge_core::report::build(&[1], &reporting(&root))
         .expect_err("a reading against another taxonomy must not render")
         .to_string();
     assert!(

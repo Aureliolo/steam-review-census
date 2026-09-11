@@ -7,10 +7,10 @@
 
 use std::path::{Path, PathBuf};
 
-use census_core::{
+use serde::Serialize;
+use steamgauge_core::{
     CrawlOptions, DEFAULT_PACE, DEFAULT_SHARD_TARGET, ReviewQuery, SteamClient, embed, report,
 };
-use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Shards fetched at once. Pacing is global, so this reorders work rather than leaning
@@ -23,7 +23,7 @@ const SHARDS_AT_ONCE: usize = 4;
 /// terminal and wrong for an icon: an application opened from a menu has no working
 /// directory worth writing gigabytes into.
 fn library_dir(app: &AppHandle) -> PathBuf {
-    if let Some(chosen) = std::env::var_os("CENSUS_DATA") {
+    if let Some(chosen) = std::env::var_os("STEAMGAUGE_DATA") {
         return PathBuf::from(chosen);
     }
     app.path()
@@ -170,7 +170,7 @@ async fn crawl(app: AppHandle, app_id: u32) -> Result<Shelf, String> {
     };
     let client = SteamClient::new(DEFAULT_PACE).map_err(text)?;
     let window = app.clone();
-    census_core::crawl(&client, app_id, &options, move |progress| {
+    steamgauge_core::crawl(&client, app_id, &options, move |progress| {
         let _ = window.emit(
             "crawl",
             Step {
@@ -211,7 +211,7 @@ async fn sweep(app: AppHandle, app_id: u32) -> Result<Swept, String> {
     let out_dir = library_dir(&app);
     let client = SteamClient::new(DEFAULT_PACE).map_err(text)?;
     let window = app.clone();
-    let report = census_core::crawl::sweep(&client, app_id, &out_dir, move |progress| {
+    let report = steamgauge_core::crawl::sweep(&client, app_id, &out_dir, move |progress| {
         let _ = window.emit(
             "sweep",
             SweepStep {
@@ -255,23 +255,23 @@ struct Fetch {
 #[tauri::command]
 async fn read_game(app: AppHandle, app_id: u32, language: Option<String>) -> Result<(), String> {
     let out_dir = library_dir(&app);
-    let options = census_core::read::ReadOptions {
+    let options = steamgauge_core::read::ReadOptions {
         out_dir: out_dir.clone(),
         language,
-        ..census_core::read::ReadOptions::default()
+        ..steamgauge_core::read::ReadOptions::default()
     };
     let window = app.clone();
 
     // A standard user has the binary and nothing else. The model is fetched by checksum the
     // first time it is needed, and the window is told how far the download has got, because
     // half a gigabyte with no progress shown is indistinguishable from a hang.
-    let model_dir = census_core::reader::default_dir();
+    let model_dir = steamgauge_core::reader::default_dir();
     if !model_dir.join("model.onnx").is_file() {
-        if !census_core::reader::PUBLISHED.is_pinned() {
+        if !steamgauge_core::reader::PUBLISHED.is_pinned() {
             return Err("no claim reader is installed and none has been published yet".to_owned());
         }
         let fetching = app.clone();
-        census_core::reader::ensure(&model_dir, |progress| {
+        steamgauge_core::reader::ensure(&model_dir, |progress| {
             let _ = fetching.emit(
                 "fetch",
                 Fetch {
@@ -286,8 +286,8 @@ async fn read_game(app: AppHandle, app_id: u32, language: Option<String>) -> Res
     }
 
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let mut model = census_core::reader::ClaimReader::load(&model_dir).map_err(text)?;
-        let report = census_core::read::read_corpus(&mut model, app_id, &options, |progress| {
+        let mut model = steamgauge_core::reader::ClaimReader::load(&model_dir).map_err(text)?;
+        let report = steamgauge_core::read::read_corpus(&mut model, app_id, &options, |progress| {
             let _ = window.emit(
                 "read",
                 ReadStep {
@@ -327,8 +327,8 @@ struct Subject {
     found: Option<f64>,
     /// The words the praise uses and the complaints do not, and the reverse, each with the
     /// reviewers behind it. Empty where nothing stands out, which is what a thin side shows.
-    praised_terms: Vec<census_core::said::Term>,
-    criticised_terms: Vec<census_core::said::Term>,
+    praised_terms: Vec<steamgauge_core::said::Term>,
+    criticised_terms: Vec<steamgauge_core::said::Term>,
 }
 
 /// How often the model is measured to be wrong on this game, where it has been measured.
@@ -405,9 +405,9 @@ fn share_of(part: u64, whole: u64) -> Option<f64> {
 
 /// One subject's row, with its measured error where the game has labels for it.
 fn subject_row(
-    found: &census_core::read::ReadReport,
-    subject: &census_core::read::SubjectCount,
-    agreement: Option<&census_core::ClaimAgreement>,
+    found: &steamgauge_core::read::ReadReport,
+    subject: &steamgauge_core::read::SubjectCount,
+    agreement: Option<&steamgauge_core::ClaimAgreement>,
 ) -> Subject {
     let rate = share_of(subject.mention_reviews, found.reviews);
     let top_rate = share_of(subject.top_mention_reviews, found.top_helpful);
@@ -433,14 +433,14 @@ fn subject_row(
         corrected: measured.and_then(|s| {
             share_of(subject.claims, found.claims).and_then(|observed| s.corrected(observed))
         }),
-        found: measured.and_then(census_core::measure::SubjectAgreement::recall),
+        found: measured.and_then(steamgauge_core::measure::SubjectAgreement::recall),
         praised_terms: said.map(|said| said.praised.clone()).unwrap_or_default(),
         criticised_terms: said.map(|said| said.criticised.clone()).unwrap_or_default(),
     }
 }
 
 /// What the reading pass wrote beside a snapshot's readings.
-fn read_report(snapshot: &std::path::Path) -> Result<census_core::read::ReadReport, String> {
+fn read_report(snapshot: &std::path::Path) -> Result<steamgauge_core::read::ReadReport, String> {
     serde_json::from_slice(
         &std::fs::read(snapshot.join("reading.json")).map_err(|_| {
             "this game has not been read yet; run the reading pass first".to_owned()
@@ -462,11 +462,11 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
 
     // The measurement, where this game has labelled claims. A game without them still
     // renders; it just cannot say how often it is wrong, and the window says that instead.
-    let reference = census_core::claimset::default_reference_dir(app_id);
+    let reference = steamgauge_core::claimset::default_reference_dir(app_id);
     let agreement = reference
         .join("labels.json")
         .is_file()
-        .then(|| census_core::measure::agreement(&dir, app_id, &reference).ok())
+        .then(|| steamgauge_core::measure::agreement(&dir, app_id, &reference).ok())
         .flatten();
     let subjects = found
         .subjects
@@ -499,7 +499,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         positive_baseline: share_of(found.positive, found.reviews),
         model: found.model.clone(),
         threshold: found.threshold,
-        in_short: census_core::picture::in_short(&found),
+        in_short: steamgauge_core::picture::in_short(&found),
         swept_since: facts
             .swept_unix
             .filter(|swept| found.captured_unix < *swept),
@@ -511,7 +511,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
             .iter()
             .map(|month| MonthOut {
                 label: month.label.clone(),
-                name: census_core::time::month_name(&month.label),
+                name: steamgauge_core::time::month_name(&month.label),
                 reviews: month.reviews,
                 positive: month.positive_share_if_enough(),
             })
@@ -570,7 +570,7 @@ fn induced(app: AppHandle, app_id: u32) -> Result<Vec<InducedOut>, String> {
         .into_iter()
         .map(|evidence| InducedOut {
             refines: evidence.subject.refines.as_deref().and_then(|id| {
-                census_core::CORE_SPINE
+                steamgauge_core::CORE_SPINE
                     .iter()
                     .find(|category| category.id == id)
                     .map(|category| category.label.to_owned())
@@ -678,7 +678,7 @@ fn claims_behind(
 
     let ids: std::collections::HashSet<String> =
         wanted.iter().map(|(id, _, _, _)| id.clone()).collect();
-    let mut fetched = census_core::capture::reviews_for(&snapshot, &ids).map_err(text)?;
+    let mut fetched = steamgauge_core::capture::reviews_for(&snapshot, &ids).map_err(text)?;
 
     let claims = wanted
         .into_iter()
@@ -727,10 +727,10 @@ fn claims_under(
     side: Option<&str>,
     from: usize,
     count: usize,
-) -> census_core::Result<(u64, Vec<Wanted>)> {
+) -> steamgauge_core::Result<(u64, Vec<Wanted>)> {
     let mut total: u64 = 0;
     let mut wanted: Vec<Wanted> = Vec::new();
-    census_core::read::for_each_reading(
+    steamgauge_core::read::for_each_reading(
         &snapshot.join("readings.parquet"),
         |id, index, found, confidence, polarity| {
             if found != Some(subject) || side.is_some_and(|side| side != polarity) {
@@ -754,16 +754,16 @@ fn claims_under(
 /// wait on a corpus of a million reviews.
 fn claims_using(
     snapshot: &std::path::Path,
-    depth: census_core::read::Depth,
+    depth: steamgauge_core::read::Depth,
     subject: &str,
     side: Option<&str>,
     term: &str,
     from: usize,
     count: usize,
-) -> census_core::Result<(u64, Vec<Wanted>)> {
+) -> steamgauge_core::Result<(u64, Vec<Wanted>)> {
     let mut filed: std::collections::HashMap<String, Vec<(u16, String, f32)>> =
         std::collections::HashMap::new();
-    census_core::read::for_each_reading(
+    steamgauge_core::read::for_each_reading(
         &snapshot.join("readings.parquet"),
         |id, index, found, confidence, polarity| {
             if found != Some(subject) || side.is_some_and(|side| side != polarity) {
@@ -778,7 +778,7 @@ fn claims_using(
 
     let mut total: u64 = 0;
     let mut wanted: Vec<Wanted> = Vec::new();
-    census_core::capture::for_each_row(snapshot, |row, text| {
+    steamgauge_core::capture::for_each_row(snapshot, |row, text| {
         let Some(claims) = filed.get(&row.recommendationid) else {
             return Ok(());
         };
@@ -786,7 +786,7 @@ fn claims_using(
         for (index, polarity, confidence) in claims {
             let uses = split
                 .get(usize::from(*index))
-                .is_some_and(|claim| census_core::said::mentions(claim, term));
+                .is_some_and(|claim| steamgauge_core::said::mentions(claim, term));
             if !uses {
                 continue;
             }

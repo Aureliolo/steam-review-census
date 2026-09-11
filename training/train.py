@@ -45,6 +45,9 @@ class Claims(Dataset):
         # "it doesn't" and "same here" are unanswerable alone, and every one of them in the
         # training set is a label the model is asked to reach from text that cannot reach it.
         self.context = context
+        # The window depends on the claim and the budget, neither of which moves, so it is cut
+        # once rather than once per epoch. It costs a tokenisation of the whole review.
+        self.windows = [self.window(claim) for claim in claims] if context else []
 
     def __len__(self):
         return len(self.claims)
@@ -81,7 +84,7 @@ class Claims(Dataset):
         claim = self.claims[at]
         encoded = self.tokenizer(
             claim.text,
-            *([self.window(claim)] if self.context else []),
+            *([self.windows[at]] if self.context else []),
             truncation=True,
             max_length=self.max_length,
             padding="max_length",

@@ -4,7 +4,7 @@
   'use strict';
 
   var root = document.documentElement;
-  var STORED = 'census-theme';
+  var STORED = 'steamgauge-theme';
 
   function applyStored() {
     try {

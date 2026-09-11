@@ -788,7 +788,7 @@ mod tests {
     impl Scratch {
         fn new(name: &str) -> Self {
             let dir = std::env::temp_dir().join(format!(
-                "census-capture-{name}-{}-{}",
+                "steamgauge-capture-{name}-{}-{}",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)

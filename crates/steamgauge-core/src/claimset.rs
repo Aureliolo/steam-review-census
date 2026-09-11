@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn a_batch_holds_whole_reviews_so_a_claim_is_never_shown_alone() {
-        let dir = std::env::temp_dir().join(format!("census-claimset-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("steamgauge-claimset-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let drawn = vec![
             review("a", &["The combat is superb.", "It runs badly."]),
@@ -742,7 +742,7 @@ mod tests {
 
     #[test]
     fn a_drawn_sample_records_the_offsets_rather_than_only_the_text() {
-        let dir = std::env::temp_dir().join(format!("census-offsets-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("steamgauge-offsets-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut drawn = review("a", &["Great port.", "Runs at 4k60."]);
         drawn.claims[1].start = 12;
