@@ -25,8 +25,8 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Every other percentage says which denominator it uses | done |
 | **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-3` and the reading pass counts per claim |
 | Shallow is the opt-out, and neither depth drops a review | done; `--depth shallow`, recorded in the reading and named on the page as not comparable |
-| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`), induction **not built** |
-| Extras are discovered by an **LLM reading an embedding-diverse sample** | **not built**; waits on quota |
+| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain is built and unrun: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it. The reports do not yet show induced rows |
+| Extras are discovered by an **LLM reading an embedding-diverse sample** | the sample is farthest-point traversal over a hash-drawn pool of four thousand vectors, measured to put a mechanics review, a localisation joke, a crash report and a difficulty complaint in its first eight picks. The reading is one agent call of about 12k tokens per game, run one at a time behind the labellers |
 | Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
 | **Corrected prevalence**: the measured error corrects the rate rather than sitting beside it | done, per subject, where the model finds it better than chance |
 | **Summarise, per category, what people praise and complain about** | **not built**; praise, complaint and mixed are counted per subject, which is the input to it |
