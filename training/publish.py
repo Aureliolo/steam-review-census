@@ -75,9 +75,11 @@ def dataset_card(labels: int, games: int, fingerprint: str) -> str:
             "claim is contested (kappa 0.28), which is a fact about the labellers rather than",
             "the claims and is documented in the repository.",
             "",
-            f"Data fingerprint `{fingerprint}`. The splitter that produced the offsets and the",
-            "taxonomy the subjects come from are both versioned in the repository; a row names",
-            "which of each it was made under.",
+            f"Data fingerprint `{fingerprint}`. Every row names the `splitter` that cut its",
+            "claim and the `taxonomy` its subject comes from, both versioned in the repository.",
+            "A row whose splitter is older than the one you cut with may name a span you do not",
+            "cut as one claim; `steam-review-census` counts those rather than scoring them",
+            "against whatever now sits there.",
             "",
             "## Licence",
             "",
@@ -150,7 +152,7 @@ def main() -> None:
     leaking = sorted(forbidden & set().union(*(row.keys() for row in rows)))
     if leaking:
         raise SystemExit(f"the reference sets carry review text in {leaking}; not publishing that")
-    for name in ("review_id", "start", "end", "subject"):
+    for name in ("review_id", "start", "end", "subject", "splitter", "taxonomy"):
         if any(name not in row for row in rows):
             raise SystemExit(f"a row has no {name}; nothing can be joined back from it")
 
