@@ -147,6 +147,19 @@ reference sets no longer name the same text the reader produces, which silently 
 join that `census measure-claims` depends on. It goes in `claims-4`, after this set is
 labelled and measured, and the sets are redrawn together.
 
+### A question and its answer are one claim, reported on 1601580
+
+The worst-split game so far, 165 of 697. Two shapes the splitter has never seen. Rhetorical
+question-and-answer pairs: "Is this Frost Punk?" / "No. Is this a phenomenal game?" and "Want
+to see your objectives?" / "Top left of the screen." And the inline scorecard: "Visuals?
+fantastic!" / ", Atmosphere?" / "fantastic!, Story?" / "mid at best, Balance?", one review
+shredded into fragments that mean nothing apart.
+
+The rule: a question mark followed by a short answer, a few words ending in a full stop or an
+exclamation mark, is one claim with the question, not two. The scorecard is the comma list
+again with a question mark in it, and the same short-parts rule that fixes the comma list
+covers it once "?" is allowed to end a part.
+
 ### Abbreviations the list does not have, reported on 1466860
 
 "Since I've been playing the Def. Editions for a while" cut at "Def.", and "The biggest
