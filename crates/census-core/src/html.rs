@@ -1643,11 +1643,25 @@ fn trust(out: &mut String, app: &AppReport) {
     // answering a fifth of the claims is not describing the corpus, it is describing the
     // fifth it was sure about, and no rate below can be read without knowing that.
     if let Some(share) = app.reading.unclassified_share() {
+        // Against what the model usually declines, because a share on its own cannot say
+        // whether this corpus is hard or the taxonomy is short a row. Twice the usual rate
+        // is the second, and it is a finding about the game.
+        let against = match app.reading.declined_against_usual() {
+            Some(ratio) if ratio >= crate::read::UNUSUALLY_DECLINED => format!(
+                ". That is {ratio:.1} times what it declines on a game it has never seen: this \
+                 game's players talk about something the taxonomy has no row for"
+            ),
+            Some(ratio) => format!(
+                ", about {:.0}% of what it usually declines on a game it has never seen",
+                ratio * 100.0
+            ),
+            None => String::new(),
+        };
         fact(
             out,
             "Claims it would not answer",
             &format!(
-                "{} ({}), counted as unclassified rather than filed under a best guess",
+                "{} ({}), counted as unclassified rather than filed under a best guess{against}",
                 thousands(app.reading.unclassified_claims),
                 percent(share)
             ),
@@ -2021,6 +2035,7 @@ mod tests {
                     spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                     model: "test-reader".to_owned(),
                     trained_on: "0123456789abcdef".to_owned(),
+                    usual_declined: Some(0.1),
                     threshold: 0.5,
                     device: "cpu".to_owned(),
                     subjects: vec![

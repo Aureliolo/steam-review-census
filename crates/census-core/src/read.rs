@@ -243,6 +243,10 @@ pub struct ReadReport {
     /// that recorded only the backbone could not say which it was.
     #[serde(default)]
     pub trained_on: String,
+    /// What this model usually declines, on games it never saw, so this corpus's share can be
+    /// read against something.
+    #[serde(default)]
+    pub usual_declined: Option<f32>,
     pub spine_version: String,
     pub threshold: f32,
     pub device: String,
@@ -264,6 +268,25 @@ impl ReadReport {
     pub fn unclassified_share(&self) -> Option<f64> {
         (self.claims > 0).then(|| self.unclassified_claims as f64 / self.claims as f64)
     }
+
+    /// How much more of this corpus the model declined than it usually does, as a ratio.
+    ///
+    /// Above about 1.2 the corpus is talking about something the model was not trained to
+    /// find, and that is a finding about the game and the taxonomy rather than a detail of
+    /// the run. `None` when the model carries no usual figure to compare against.
+    #[must_use]
+    pub fn declined_against_usual(&self) -> Option<f64> {
+        let usual = f64::from(self.usual_declined?);
+        let here = self.unclassified_share()?;
+        (usual > 0.0).then(|| here / usual)
+    }
+}
+
+/// Above this ratio to the usual decline rate, a corpus is about something the taxonomy
+/// lacks rather than merely hard to read.
+pub const UNUSUALLY_DECLINED: f64 = 1.2;
+
+impl ReadReport {
 
     /// Writes the counts beside the readings they were computed from.
     ///
@@ -310,6 +333,7 @@ pub fn read_corpus(
         threshold: model.provenance().threshold,
         model: model.provenance().trained_from.clone(),
         trained_on: model.provenance().data_fingerprint.clone(),
+        usual_declined: model.provenance().usual_declined,
         spine_version: model.provenance().spine_version.clone(),
         ..counted
     })
@@ -590,6 +614,7 @@ fn count_reviews(
         top_helpful: top_reviews.len() as u64,
         model: String::new(),
         trained_on: String::new(),
+        usual_declined: None,
         spine_version: String::new(),
         threshold: 0.0,
         device: String::new(),
@@ -772,6 +797,42 @@ mod tests {
         let found: ReadReport = serde_json::from_value(stored).expect("an older reading opens");
         assert_eq!(found.depth, Depth::Deep);
         assert!(found.trained_on.is_empty());
+    }
+
+    #[test]
+    fn a_corpus_declined_far_above_usual_is_a_corpus_about_something_missing() {
+        let mut found = ReadReport {
+            app_id: 1,
+            reviews: 100,
+            corpus_reviews: 100,
+            language: None,
+            depth: Depth::Deep,
+            claims: 1_000,
+            unclassified_claims: 900,
+            silent_reviews: 0,
+            positive: 50,
+            top_helpful: 10,
+            model: String::new(),
+            trained_on: String::new(),
+            usual_declined: Some(0.73),
+            spine_version: String::new(),
+            threshold: 0.5,
+            device: String::new(),
+            subjects: Vec::new(),
+            languages: Vec::new(),
+            months: Vec::new(),
+            elapsed: Duration::ZERO,
+        };
+        let ratio = found.declined_against_usual().expect("a usual figure is carried");
+        assert!(ratio >= UNUSUALLY_DECLINED, "90% against a usual 73% is {ratio}");
+
+        found.unclassified_claims = 700;
+        assert!(found.declined_against_usual().unwrap() < UNUSUALLY_DECLINED);
+
+        // A reader exported before the figure existed cannot make the comparison, and says
+        // nothing rather than comparing against zero.
+        found.usual_declined = None;
+        assert_eq!(found.declined_against_usual(), None);
     }
 
     #[test]

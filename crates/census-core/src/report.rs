@@ -728,6 +728,7 @@ mod tests {
                 top_helpful,
                 model: "test".to_owned(),
                 trained_on: String::new(),
+                usual_declined: None,
                 spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                 threshold: 0.5,
                 device: "cpu".to_owned(),

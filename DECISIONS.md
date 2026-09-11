@@ -141,11 +141,16 @@ is the direction, and that labels are what moved it.
 
 Verified in the tool as before: 315 claims answered at 0.746 against training's 316 at
 0.747, one claim apart, which is the half-precision export reordering a single tie. And the
-per-game spread says something the pooled figure hides: 1057090 declined 61% and agreed on
-76.5%; 1466860 declined **80%** and agreed on 70.2%. 1466860 is the game whose labeller
-called modding its dominant theme and had nowhere to file it. A corpus about something the
-spine lacks is a corpus the model declines more of, which is the abstention doing its job and
-the taxonomy gap showing through it.
+per-game spread says something the pooled figure hides: on the labelled claims, 1057090
+declined 61% and agreed on 76.5%; 1466860 declined **80%** and agreed on 70.2%. 1466860 is
+the game whose labeller called modding its dominant theme and had nowhere to file it.
+
+Over the whole corpora the picture is softer: 66.5%, 72.9% and 83.4% declined for 1057090,
+1466860 and 1601580, against a usual 73.2%. The labelled samples are stratified towards
+claims that name a subject, so they show a gap more sharply than the corpus does. The
+reader now carries its usual decline rate and the tool says when a corpus is declined at 1.2
+times that, which none of these three reach; 1601580 at 1.14 is the nearest, and its labeller
+reported a hard seam rather than a missing row.
 
 Then the set was read a second time, a tenth of it, by a different labeller working blind:
 

@@ -211,6 +211,13 @@ def main():
             f"subjects is what a coin lands on. This model does not abstain. Not shipping it."
         )
 
+    # What the model declined on games it never saw, so the tool can say when a corpus is
+    # declined far more than usual. That is the one number a reader of a new game's report
+    # has no other way to get, and a corpus declined at twice the usual rate is a corpus about
+    # something the taxonomy lacks.
+    frozen = record.get("test", {}).get("at_validation_threshold", {})
+    usual_declined = 1.0 - frozen["coverage"] if frozen.get("coverage") is not None else None
+
     (run / "reader.json").write_text(
         json.dumps(
             {
@@ -220,6 +227,7 @@ def main():
                 "max_tokens": record["max_length"],
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
+                "usual_declined": usual_declined,
             },
             indent=2,
         ),

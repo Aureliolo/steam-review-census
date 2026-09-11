@@ -30,5 +30,6 @@
   "threshold": 0.61,
   "max_tokens": 128,
   "trained_from": "xlm-roberta-base",
-  "data_fingerprint": "3b96f2b5bdce045e"
+  "data_fingerprint": "3b96f2b5bdce045e",
+  "usual_declined": 0.7315208156329651
 }

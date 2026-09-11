@@ -73,6 +73,11 @@ pub struct Provenance {
     pub trained_from: String,
     #[serde(default)]
     pub data_fingerprint: String,
+    /// The share of claims this model declined on games it never saw. A corpus declined at
+    /// far above this is a corpus about something the taxonomy lacks, and the only way a
+    /// reader of one game's report can know that is if the reader carries the comparison.
+    #[serde(default)]
+    pub usual_declined: Option<f32>,
 }
 
 /// Where the claim reader lives when nobody has said.

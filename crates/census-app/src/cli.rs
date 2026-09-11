@@ -795,6 +795,15 @@ fn read_one(
             thousands(report.silent_reviews)
         );
     }
+    if let Some(ratio) = report.declined_against_usual()
+        && ratio >= census_core::read::UNUSUALLY_DECLINED
+    {
+        println!(
+            "             {ratio:.1}x what this model declines on a game it has not seen. This \
+             corpus is\n             about something the taxonomy has no row for; `census \
+             distinct` will find it."
+        );
+    }
     println!("took         {}", elapsed(report.elapsed));
     println!("written to   {}\n", path.display());
 
