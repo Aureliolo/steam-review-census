@@ -103,6 +103,26 @@ const PROBE = `(function () {
   check('the page carries no category sheet', data.categories && data.categories.length > 20);
 
   check('nothing is rendered', document.querySelectorAll('button.pick').length > 0);
+
+  // Every category must be reachable from the keyboard, and by its own key. Two categories
+  // sharing one means the reader finds out at claim four hundred that half the sheet cannot
+  // be picked without the mouse.
+  var shortcuts = Array.prototype.map.call(
+    document.querySelectorAll('button.pick kbd'), function (k) { return k.textContent; }
+  );
+  check('a category has no keyboard shortcut', shortcuts.every(function (k) { return k.length === 1; }));
+  check('two categories share a keyboard shortcut',
+    new Set(shortcuts).size === shortcuts.length);
+  check('there are fewer shortcuts than categories', shortcuts.length === data.categories.length);
+
+  // And the key must pick the category it is printed on, not merely some category.
+  var buttons = document.querySelectorAll('button.pick');
+  var wanted = buttons[buttons.length - 1];
+  var wantedId = wanted.getAttribute('data-subject');
+  press(wanted.querySelector('kbd').textContent);
+  var chosen = document.querySelector('button.pick.chosen');
+  check('a shortcut picks a different category from the one it is printed on',
+    chosen && chosen.getAttribute('data-subject') === wantedId);
   check('the sheet is not on the page to consult',
     document.querySelectorAll('details.sheet dt').length === data.categories.length);
 

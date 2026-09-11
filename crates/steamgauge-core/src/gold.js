@@ -47,19 +47,51 @@
   }
 
   // Letters rather than numbers: twenty-six categories do not fit on the number row, and a
-  // letter that matches the category's own name is the one a reader remembers.
+  // letter out of the category's own name is the one a reader remembers. Each category takes
+  // the first letter of its name nobody has taken, then the first letter of its label, then
+  // any letter at all, because two categories sharing a key means one of them cannot be
+  // reached from the keyboard and the reader finds that out at claim four hundred.
+  var ALPHABET = "abcdefghijklmnopqrstuvwxyz";
   var keys = {};
   var taken = {};
-  categories.forEach(function (category) {
-    var want = category.id[0];
-    var i = 0;
-    while (taken[want] && i < category.id.length) {
-      i += 1;
-      want = category.id[i] || String.fromCharCode(97 + Object.keys(taken).length);
+
+  // Whichever category has fewest of its own letters left goes first, rather than whichever
+  // comes first in the taxonomy. Assigning in taxonomy order lets `accessibility` and
+  // `atmosphere` spend the letters `story` and `policy` needed, and those two then take
+  // whatever the alphabet has left, which is nothing anyone remembers.
+  var own = function (category) {
+    return (category.id + " " + (category.label || "")).toLowerCase();
+  };
+  var free = function (category) {
+    var count = 0;
+    var seen = {};
+    var letters = own(category);
+    for (var i = 0; i < letters.length; i += 1) {
+      var ch = letters[i];
+      if (ALPHABET.indexOf(ch) >= 0 && !taken[ch] && !seen[ch]) {
+        seen[ch] = true;
+        count += 1;
+      }
     }
-    taken[want] = true;
-    keys[category.id] = want;
-  });
+    return count;
+  };
+
+  var waiting = categories.slice();
+  while (waiting.length) {
+    waiting.sort(function (a, b) {
+      return free(a) - free(b);
+    });
+    var category = waiting.shift();
+    var tried = own(category) + " " + ALPHABET;
+    for (var i = 0; i < tried.length; i += 1) {
+      var ch = tried[i];
+      if (ALPHABET.indexOf(ch) >= 0 && !taken[ch]) {
+        taken[ch] = true;
+        keys[category.id] = ch;
+        break;
+      }
+    }
+  }
 
   function escape(text) {
     return String(text).replace(/[&<>"]/g, function (ch) {
@@ -144,7 +176,7 @@
           '" title="' +
           escape(category.description || "") +
           '"><kbd>' +
-          escape(keys[category.id]) +
+          escape(keys[category.id] || "") +
           '</kbd><span class="what">' +
           escape(category.label) +
           "</span></button>"
@@ -203,7 +235,7 @@
         "><summary>The category sheet</summary><dl>"
     );
     categories.forEach(function (category) {
-      html.push("<dt>" + escape(category.label) + " <kbd>" + escape(keys[category.id]) + "</kbd></dt>");
+      html.push("<dt>" + escape(category.label) + " <kbd>" + escape(keys[category.id] || "") + "</kbd></dt>");
       html.push("<dd>" + escape(category.description || "") + "</dd>");
       if (category.boundary) html.push("<dd><em>" + escape(category.boundary) + "</em></dd>");
     });
