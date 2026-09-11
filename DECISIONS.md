@@ -24,7 +24,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Headline figure is the **mention rate**, always labelled as such | done |
 | Every other percentage says which denominator it uses | done |
 | **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-3` and the reading pass counts per claim |
-| Shallow is the opt-out, and neither depth drops a review | shallow **not built**; nothing drops a review |
+| Shallow is the opt-out, and neither depth drops a review | done; `--depth shallow`, recorded in the reading and named on the page as not comparable |
 | Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`), induction **not built** |
 | Extras are discovered by an **LLM reading an embedding-diverse sample** | **not built**; waits on quota |
 | Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
