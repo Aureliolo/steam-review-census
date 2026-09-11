@@ -90,8 +90,18 @@ adding a fraction of a percent to a rate that was supposed to be a fact about pl
 The model is fine-tuned from a multilingual encoder and shipped as an ONNX graph, so it runs
 on the same local runtime as everything else. No API key, no network, no account. Which
 encoder it starts from is decided by measurement across candidates on identical labels and an
-identical split, judged on accuracy and throughput together, because a model that is two points
-better and three times slower is not better over thirteen million claims.
+identical split, judged on accuracy, throughput, and how well its confidence tracks whether it
+is right, because a model that cannot tell when it is guessing cannot be allowed to abstain.
+
+**The threshold is chosen by what it promises, not by how much it answers.** The obvious way
+to pick one, maximising accuracy times coverage, has a degenerate optimum on a model that is
+not yet good: coverage rises faster than accuracy falls all the way down, so the sweep settles
+at its own floor and the model is told to answer everything. Measured, it chose 0.05, which
+across twenty-five subjects is barely above the 0.04 a uniform guess scores, and a corpus of
+17,596 claims came back with nothing declined at all. That is the prototype's failure wearing
+a trained model's clothes. The threshold is now the one giving the most coverage at a promised
+accuracy, and when no threshold reaches that accuracy the model is recorded as not good enough
+rather than quietly lowered to whatever it can manage.
 
 Some categories are defined by what a claim does *not* say. A bare verdict and a claim that
 says nothing about the game are both statements that no aspect was named, and on a corpus of
@@ -279,6 +289,12 @@ These rules keep those figures honest:
   answer and an honest one, but it means a mention rate is a rate over the claims the model
   would commit to. The share it declined is printed beside it, and a large one is a finding
   about the corpus rather than a footnote.
+
+  **Right now that share is most of the corpus.** Trained on eleven games, the model answers
+  about a fifth of claims at the accuracy it promises, so four in five come back unclassified
+  and a mention rate is a floor rather than a count. Every report says so on its face. The only
+  cure is more labelled claims, which is what the reference sets are for; a threshold moved to
+  make the number look better would be the old classifier again.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool
