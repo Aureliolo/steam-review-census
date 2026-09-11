@@ -444,7 +444,8 @@ enum Command {
         /// Where the claim reference sets live.
         #[arg(long, default_value = "reference/claims")]
         reference: PathBuf,
-        /// Where to write the page. It holds review text, so never inside the repository.
+        /// Where to write the page. It holds review text, so it is never committed; the
+        /// default sits beside the repository's other ignored artefacts.
         #[arg(long, default_value = "gold.html")]
         to: PathBuf,
         /// How many claims to draw blind.
@@ -1133,8 +1134,7 @@ fn run_gold(
     println!("page       {}", to.display());
     println!(
         "\nOpen it, answer, export, then `steamgauge ingest-gold --from <the file>`.\nThe page \
-         holds review text: it fetches nothing, sends nothing, and belongs outside the \
-         repository."
+         holds review text: it fetches nothing, sends nothing, and is never committed."
     );
     Ok(())
 }
