@@ -6,16 +6,19 @@ says nothing, and that is a supported answer rather than a failure.
 
 ## Measured
 
-- Accuracy 0.392, macro F1 0.255
-- Polarity macro F1 0.588
-- Calibration error 0.107
-- Below 0.42 confidence it says nothing, which leaves it answering 20% of claims at 0.756 accuracy
-- Area under the risk-coverage curve 0.423 (lower is better; it says whether the model knows when it does not know)
-- Trained on 3047 claims, validated on 859, held out 1668
-- Data fingerprint `49697fd4fb0f1502`, code `2474be2bc806`
+- Accuracy 0.318, macro F1 0.269
+- Polarity macro F1 0.638
+- Calibration error 0.066
+- Below 0.42 confidence it says nothing, which leaves it answering 13% of claims at 0.620 accuracy
+- Area under the risk-coverage curve 0.543 (lower is better; it says whether the model knows when it does not know)
+- Trained on 3047 claims, validated on 859, measured on 1668
+- Data fingerprint `49697fd4fb0f1502`, code `253aebc599c5`
 
-Games are split whole, never claims, so these figures are about a game the model
-never saw. Weakest subjects here: `accessibility` 0.00, `community` 0.00, `compatibility` 0.00, `language` 0.00, `story` 0.05.
+**Every figure above is from the frozen games**, which the model never saw and
+which chose nothing about it, not even the threshold. At that same threshold the
+validation games report 0.756, which is
+what it scores on games used to build it rather than what a new game gets.
+Weakest subjects here: `atmosphere` 0.00, `community` 0.00, `licensing` 0.00, `policy` 0.05, `compatibility` 0.10.
 
 ## Honest limits
 

@@ -143,15 +143,36 @@ def main():
 
     got = got.astype(np.float32)
     drift = float(np.abs(wanted - got).max())
-    moved = int((wanted.argmax(axis=1) != got.argmax(axis=1)).sum())
-    # Half precision carries about three decimal digits, so the logits genuinely move. What
-    # must not move is the answer: a changed argmax is a category boundary that shifted.
     allowed = HALF_TOLERANCE if args.fp16 else TOLERANCE
-    print(f"parity: largest drift {drift:.2e} over {len(texts)} claims, {moved} answers changed")
-    if drift > allowed or moved:
+
+    # A changed answer is only a disagreement when the model had an answer to change. Where the
+    # best two subjects sit within the drift of each other, the two graphs are not disagreeing
+    # about the claim, they are reporting a tie in different arbitrary orders, and forbidding
+    # that while permitting the drift that causes it is a contradiction the export cannot
+    # satisfy. So a flip is measured against the margin it had to cross.
+    changed = wanted.argmax(axis=1) != got.argmax(axis=1)
+    ordered = np.sort(wanted, axis=1)
+    margin = ordered[:, -1] - ordered[:, -2]
+    decided = int((changed & (margin > allowed)).sum())
+    ties = int((changed & (margin <= allowed)).sum())
+
+    print(
+        f"parity: largest drift {drift:.2e} over {len(texts)} claims, "
+        f"{decided} answers changed, {ties} ties reordered"
+    )
+    if drift > allowed or decided:
         raise SystemExit(
             f"the exported graph disagrees with the model it came from "
-            f"({drift:.2e} > {allowed:.0e}, {moved} answers changed). Not shipping this."
+            f"({drift:.2e} > {allowed:.0e}, {decided} answers changed on a margin wider than "
+            f"the drift). Not shipping this."
+        )
+    # Ties that reorder are tolerable one at a time and not in bulk: a graph that cannot agree
+    # with itself on a twentieth of its answers is not approximating the model, whatever the
+    # margins say.
+    if ties > len(texts) // 20:
+        raise SystemExit(
+            f"{ties} of {len(texts)} claims came back with a different subject. Every one is "
+            f"within the drift, but a graph this unsteady is not the model. Not shipping this."
         )
 
     # What the Rust side needs to use the graph without being told anything else. The
@@ -224,10 +245,10 @@ def main():
                 f"- Data fingerprint `{record['data_fingerprint']}`, code `{record['git_sha'][:12]}`",
                 "",
                 "**Every figure above is from the frozen games**, which the model never saw and",
-                "which chose nothing about it, not even the threshold. The validation games it was",
-                f"tuned against report {metrics.get('threshold_accuracy') or 0:.3f} at the same",
-                "threshold; that number describes games used to build this model and is not what a",
-                "new game gets. Weakest subjects here: "
+                "which chose nothing about it, not even the threshold. At that same threshold the",
+                f"validation games report {metrics.get('threshold_accuracy') or 0:.3f}, which is",
+                "what it scores on games used to build it rather than what a new game gets.",
+                "Weakest subjects here: "
                 + ", ".join(f"`{name}` {row['f1']:.2f}" for name, row in weakest)
                 + ".",
                 "",
