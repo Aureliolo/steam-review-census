@@ -419,13 +419,26 @@ rare because the corpus rarely says it, and shouting its few examples louder add
 about it while costing the rows that had some.
 
 Two settings are genuinely better, and only one of them is small. **5e-5 answers 73.5%**, 4.7
-points clear of the best of the three baseline seeds, which is why it is trained again on two
-more seeds before anything ships on it. And **a backbone of twice the size answers 84.9%**,
-which is eleven points clear of that and four times the seed spread, on the same labels and the
-same schedule; at a learning rate of 1e-5 the same backbone still answers 76.9%, so it is not a
-happy accident of one rate. What that model costs to read a library with is the open question,
-and cost is the whole argument for this project over a frontier model, so it is measured on the
-card that does the reading before it is chosen.
+points clear of the best of the three baseline seeds. And **a backbone of twice the size
+answers 84.9%**, which is eleven points clear of that and four times the seed spread, on the
+same labels and the same schedule:
+
+| `multilingual-e5-large`, 560M | answers at 75% | macro F1 | AURC | ECE |
+|---|---|---|---|---|
+| five epochs, 2e-5 | 84.9% | **0.669** | 0.141 | 0.181 |
+| the same on another seed | 84.1% | 0.662 | 0.140 | 0.182 |
+| five epochs, 3e-5 | **86.5%** | 0.659 | **0.138** | 0.190 |
+| five epochs, 1e-5 | 76.9% | 0.646 | 0.156 | 0.164 |
+| three epochs, 2e-5 | 78.2% | 0.656 | 0.150 | **0.135** |
+| `gte-multilingual-base`, 278M, the same schedule | 68.1% | 0.637 | 0.183 | 0.133 |
+
+Two seeds land 0.9 points apart where the small model's land 4.3 apart, and every rate tried
+beats every configuration of the small model, so this is the backbone and not a lucky run. What
+it costs to read a library with is the open question, and cost is the whole argument for this
+project over a frontier model, so it is measured on the card that does the reading before it is
+chosen. Its calibration is the other: worse than the small model's at every rate, and
+calibration is what carries a threshold from the validation games to the frozen ones. Three
+epochs is the fallback that keeps the calibration and gives up six points of coverage.
 
 `training/sweep.py` prints that table and that spread from the run records, and it is the first
 thing to run before calling any configuration a winner.
