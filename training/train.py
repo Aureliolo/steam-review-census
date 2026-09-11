@@ -35,8 +35,19 @@ POLARITIES = claimdata.POLARITIES
 
 
 class Claims(Dataset):
-    def __init__(self, claims, tokenizer, subjects, max_length, context=False):
+    def __init__(
+        self,
+        claims,
+        tokenizer,
+        subjects,
+        max_length,
+        context=False,
+        ambiguous_weight=1.0,
+        split_wrong_weight=1.0,
+    ):
         self.claims = claims
+        self.ambiguous_weight = ambiguous_weight
+        self.split_wrong_weight = split_wrong_weight
         self.tokenizer = tokenizer
         self.subjects = {name: index for index, name in enumerate(subjects)}
         self.polarities = {name: index for index, name in enumerate(POLARITIES)}
@@ -95,8 +106,23 @@ class Claims(Dataset):
             "attention_mask": encoded["attention_mask"][0],
             "subject": torch.tensor(self.subjects[claim.subject]),
             "polarity": torch.tensor(self.polarities.get(claim.polarity, 2)),
-            "weight": torch.tensor(claim.weight, dtype=torch.float),
+            "weight": torch.tensor(self.weight_of(claim), dtype=torch.float),
         }
+
+    def weight_of(self, claim):
+        """What this claim is worth in the loss.
+
+        Three things the labeller said about their own answer, rather than one. A claim they
+        called contested is one where the sheet does not settle the boundary, and a claim they
+        called mis-cut is half a point or two stuck together: training on either at full
+        weight teaches the model to reproduce a coin toss confidently.
+        """
+        weight = claim.weight
+        if claim.ambiguous:
+            weight *= self.ambiguous_weight
+        if claim.split_wrong:
+            weight *= self.split_wrong_weight
+        return weight
 
 
 class ClaimReader(torch.nn.Module):
@@ -348,7 +374,17 @@ def run(args) -> dict:
 
     loaders = {
         name: DataLoader(
-            Claims(part, tokenizer, subjects, args.max_length, args.context),
+            Claims(
+                part,
+                tokenizer,
+                subjects,
+                args.max_length,
+                args.context,
+                # Only the training split is reweighted. Scoring a contested claim at less
+                # than a whole claim would be marking the model's own exam generously.
+                args.ambiguous_weight if name == "train" else 1.0,
+                args.split_wrong_weight if name == "train" else 1.0,
+            ),
             batch_size=args.batch_size,
             shuffle=name == "train",
             num_workers=0,
@@ -464,6 +500,8 @@ def run(args) -> dict:
         "max_length": args.max_length,
         "context": args.context,
         "seed": args.seed,
+        "ambiguous_weight": args.ambiguous_weight,
+        "split_wrong_weight": args.split_wrong_weight,
         "polarity_weight": args.polarity_weight,
         "split_seed": args.split_seed,
         "device": device,
@@ -532,6 +570,21 @@ def parse():
         help="train on only this many of the training games, chosen in a fixed hash order so "
         "that every run of a learning curve uses the same ones. The validation and frozen "
         "games are untouched, so the curve is read against one unmoving test set.",
+    )
+    parser.add_argument(
+        "--ambiguous-weight",
+        type=float,
+        default=1.0,
+        help="what a claim the labeller called genuinely contested is worth in the loss. "
+        "Nearly a third of the set is flagged, and the sheet does not settle those "
+        "boundaries, so training on them at full weight teaches a confident coin toss.",
+    )
+    parser.add_argument(
+        "--split-wrong-weight",
+        type=float,
+        default=1.0,
+        help="what a claim the labeller called mis-cut is worth in the loss. A sixth of the "
+        "set is flagged: two points stuck together, or half of one.",
     )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--save", action="store_true")
