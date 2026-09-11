@@ -10,11 +10,19 @@ not committed.
 - **`claims/<app id>/labels.json`** is the reference set: every claim of every drawn review,
   labelled with the subject it is about, whether it is praise or a complaint, whether it is
   ironic, how sure the labeller was, whether the call was genuinely contested, and whether the
-  claim was cut in the wrong place. Each label records the splitter that cut it and the
-  taxonomy its subject comes from.
+  claim was cut in the wrong place. Each label records the splitter that cut it, the taxonomy
+  its subject comes from, and in `produced_by` the labeller who wrote it. Two labellers
+  disagree with each other about as often as either disagrees with the truth, so a set that
+  could not say which one wrote a label could not be split back apart.
 - **`claims/<app id>/second/labels.json`** is a tenth of that set labelled again by a
   different labeller working blind. `steamgauge compare-labels` reads the two together; a set
   labelled once cannot say anything about its own reliability.
+- **`claims/<app id>/gold/labels.json`** is what a person adjudicated, written by
+  `steamgauge ingest-gold` from the page `steamgauge gold` produces. It is the only labelling
+  in this repository not made by a model, and `steamgauge measure-claims --labels gold` is the
+  only measurement here that may be called accuracy rather than agreement. It sits beside the
+  set's own labels rather than over them: the point is to compare the two, and overwriting the
+  labeller's answer would destroy the comparison being made.
 - **`induced/<app id>.json`** holds the subjects a game's own players raise that the fixed
   taxonomy has no row for, each with the reviews that raise it. A subject with fewer than
   three reviews behind it is refused rather than kept with a note.
