@@ -461,6 +461,8 @@ fn read_distinct_claims(
     let context = model.provenance().context;
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
     let mut window: Vec<Queued> = Vec::with_capacity(LENGTH_WINDOW);
+    // One allocation for every review a model that reads claims alone will ever queue.
+    let nothing: Arc<str> = Arc::from("");
 
     crate::capture::for_each_body(snapshot, |review_id, language, text| {
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
@@ -476,7 +478,7 @@ fn read_distinct_claims(
         let review: Arc<str> = if context {
             Arc::from(rejoined(&claims))
         } else {
-            Arc::from("")
+            Arc::clone(&nothing)
         };
         let mut at = 0;
         for (index, claim) in claims.into_iter().enumerate() {
@@ -559,10 +561,9 @@ struct Verdict {
 }
 
 fn judge(
-    text: &str,
+    claims: &[std::borrow::Cow<'_, str>],
     review_id: &str,
     context: bool,
-    depth: Depth,
     answers: &HashMap<[u8; 32], Reading>,
 ) -> Verdict {
     let mut praise = vec![false; CORE_SPINE.len()];
@@ -570,12 +571,10 @@ fn judge(
     let mut seen = vec![false; CORE_SPINE.len()];
     let mut primary = None;
     let mut best = f32::NEG_INFINITY;
-    let mut claims = 0;
     let mut unclassified = 0;
 
-    for (index, claim) in depth.claims_of(text).into_iter().enumerate() {
-        claims += 1;
-        let Some(reading) = answers.get(&key(context, review_id, index, &claim)) else {
+    for (index, claim) in claims.iter().enumerate() {
+        let Some(reading) = answers.get(&key(context, review_id, index, claim)) else {
             unclassified += 1;
             continue;
         };
@@ -602,7 +601,7 @@ fn judge(
         primary,
         praise,
         complaint,
-        claims,
+        claims: claims.len(),
         unclassified,
     }
 }
@@ -661,7 +660,10 @@ fn count_reviews(
             positive += 1;
         }
 
-        let verdict = judge(text, &row.recommendationid, context, options.depth, answers);
+        // Split once. The verdict and the rows written beside it are two readings of the same
+        // pieces, and this pass has no forward passes to hide the cost behind.
+        let pieces = options.depth.claims_of(text);
+        let verdict = judge(&pieces, &row.recommendationid, context, answers);
         claims += verdict.claims as u64;
         unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
@@ -699,13 +701,13 @@ fn count_reviews(
                 (false, false) => {}
             }
         }
-        for (index, claim) in options.depth.claims_of(text).into_iter().enumerate() {
-            let reading = answers.get(&key(context, &row.recommendationid, index, &claim));
+        for (index, claim) in pieces.iter().enumerate() {
+            let reading = answers.get(&key(context, &row.recommendationid, index, claim));
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
             {
                 tallies[subject].claims += 1;
-                said.note(subject, reading.polarity, &claim);
+                said.note(subject, reading.polarity, claim);
             }
             rows.push(&row.recommendationid, index, reading);
         }
