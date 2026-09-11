@@ -316,6 +316,29 @@ struct Reading {
     in_short: String,
     subjects: Vec<Subject>,
     measured: Option<Measured>,
+    /// Oldest first. Fewer than two and there is no line to draw.
+    months: Vec<MonthOut>,
+    /// Commonest first, over the whole capture rather than the counted language.
+    languages: Vec<Language>,
+}
+
+/// One month of the corpus, as the window draws it.
+#[derive(Debug, Clone, Serialize)]
+struct MonthOut {
+    /// `2024-02`, which sorts.
+    label: String,
+    /// `February 2024`, which reads.
+    name: String,
+    reviews: u64,
+    /// Share recommending the game, or none for a month too small to carry a rate.
+    positive: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct Language {
+    name: String,
+    reviews: u64,
+    share: Option<f64>,
 }
 
 #[expect(
@@ -416,7 +439,99 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         in_short: census_core::picture::in_short(&found),
         subjects,
         measured,
+        months: found
+            .months
+            .iter()
+            .map(|month| MonthOut {
+                label: month.label.clone(),
+                name: census_core::time::month_name(&month.label),
+                reviews: month.reviews,
+                positive: month.positive_share_if_enough(),
+            })
+            .collect(),
+        languages: found
+            .languages
+            .iter()
+            .map(|(name, reviews)| Language {
+                name: name.clone(),
+                reviews: *reviews,
+                share: share_of(*reviews, found.corpus_reviews),
+            })
+            .collect(),
     })
+}
+
+/// A review quoted as it was written, with no reading attached, because the model that counts
+/// the table was never asked about it.
+#[derive(Debug, Clone, Serialize)]
+struct Quoted {
+    review_id: String,
+    voted_up: bool,
+    votes_up: u32,
+    created: i64,
+    language: String,
+    url: Option<String>,
+    review: String,
+}
+
+/// One subject found in this game's own reviews, with the reviews it rests on.
+#[derive(Debug, Clone, Serialize)]
+struct InducedOut {
+    id: String,
+    label: String,
+    description: String,
+    /// The label of the spine subject this is a form of, when it is one.
+    refines: Option<String>,
+    /// How many handout reviews it was found in, which is more than are quoted.
+    found_in: usize,
+    reviews: Vec<Quoted>,
+}
+
+/// What this game's players talk about that the fixed subjects do not name, where the
+/// induction has been run. Separate from the reading because it walks the capture for the
+/// quoted reviews, and a game is selected far more often than this section is read.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri hands a command its arguments by value"
+)]
+fn induced(app: AppHandle, app_id: u32) -> Result<Vec<InducedOut>, String> {
+    let dir = library_dir(&app);
+    let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
+    let found = report::induced_for(app_id, &snapshot, report::DEFAULT_EXAMPLES).map_err(text)?;
+    Ok(found
+        .into_iter()
+        .map(|evidence| InducedOut {
+            refines: evidence.subject.refines.as_deref().and_then(|id| {
+                census_core::CORE_SPINE
+                    .iter()
+                    .find(|category| category.id == id)
+                    .map(|category| category.label.to_owned())
+            }),
+            found_in: evidence.subject.evidence.len(),
+            id: evidence.subject.id,
+            label: evidence.subject.label,
+            description: evidence.subject.description,
+            reviews: evidence
+                .reviews
+                .into_iter()
+                .map(|review| Quoted {
+                    url: (!review.author_steamid.is_empty()).then(|| {
+                        format!(
+                            "https://steamcommunity.com/profiles/{}/recommended/{app_id}/",
+                            review.author_steamid
+                        )
+                    }),
+                    review_id: review.id,
+                    voted_up: review.voted_up,
+                    votes_up: review.votes_up,
+                    created: review.created,
+                    language: review.language,
+                    review: review.text,
+                })
+                .collect(),
+        })
+        .collect())
 }
 
 /// One claim shown as evidence, with the review it came from.
@@ -633,6 +748,7 @@ pub fn run() -> anyhow::Result<()> {
             crawl,
             reading,
             claims_behind,
+            induced,
             read_game
         ])
         .run(tauri::generate_context!())?;

@@ -512,7 +512,17 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
 ///
 /// A game nobody has induced subjects for renders without the section, and the page says so
 /// in one line rather than leaving an empty heading.
-fn induced_for(app_id: u32, snapshot: &Path, examples: usize) -> Result<Vec<InducedEvidence>> {
+/// The subjects induced for a game, each with the first few reviews it rests on fetched from
+/// the capture. Empty where the induction has not been run.
+///
+/// # Errors
+///
+/// Fails if the induced set is unreadable or the capture cannot be walked.
+pub fn induced_for(
+    app_id: u32,
+    snapshot: &Path,
+    examples: usize,
+) -> Result<Vec<InducedEvidence>> {
     let Some(set) = crate::induced::load(&crate::induced::default_path(app_id))? else {
         return Ok(Vec::new());
     };

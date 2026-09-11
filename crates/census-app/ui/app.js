@@ -105,9 +105,12 @@ async function loadTopics(game) {
     const counted = await invoke('reading', { appId: game.app_id });
     if (counted.app_id !== chosen) return;
     drawTopics(counted);
+    drawTimeline(counted.months);
+    drawLanguages(counted.languages, counted.corpus_reviews);
     panel.hidden = false;
     el('game-actions').hidden = true;
     set(el('game-note'), '');
+    loadInduced(game.app_id);
   } catch (failure) {
     panel.hidden = true;
     el('game-actions').hidden = busy;
@@ -180,6 +183,191 @@ function cell(text, className) {
   span.textContent = text;
   td.append(span);
   return td;
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+const CHART = { width: 1000, height: 160 };
+
+function shape(name, attributes) {
+  const node = document.createElementNS(SVG, name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  return node;
+}
+
+/* Reviews per month as bars against the busiest month, and the share recommending the game
+   as a line from none at the bottom to all at the top. The same two shapes the report page
+   draws, in the same coordinate space, so a reader moving between them sees one chart. A
+   rate is drawn only for a month big enough to carry one; the core decides which those are. */
+function drawTimeline(months) {
+  const figure = el('timeline');
+  figure.hidden = months.length < 2;
+  if (figure.hidden) return;
+
+  const peak = months.reduce((best, month) => (month.reviews > best.reviews ? month : best));
+  const tallest = Math.max(peak.reviews, 1);
+  const step = CHART.width / months.length;
+  const svg = el('timeline-svg');
+  svg.replaceChildren();
+  svg.setAttribute('aria-label', `Reviews per month from ${months[0].name} to ${months[months.length - 1].name}`);
+
+  months.forEach((month, index) => {
+    const tall = (month.reviews / tallest) * CHART.height;
+    svg.append(
+      shape('rect', {
+        class: 'bar',
+        x: (index * step).toFixed(2),
+        y: (CHART.height - tall).toFixed(2),
+        width: Math.max(step * 0.82, 0.5).toFixed(2),
+        height: tall.toFixed(2),
+      }),
+    );
+  });
+  svg.append(
+    shape('line', {
+      class: 'midline',
+      x1: 0,
+      y1: (CHART.height / 2).toFixed(2),
+      x2: CHART.width,
+      y2: (CHART.height / 2).toFixed(2),
+    }),
+  );
+  const points = months
+    .map((month, index) =>
+      month.positive === null
+        ? null
+        : `${(index * step + step / 2).toFixed(2)},${((1 - month.positive) * CHART.height).toFixed(2)}`,
+    )
+    .filter((point) => point !== null);
+  if (points.length > 1) svg.append(shape('polyline', { class: 'share', points: points.join(' ') }));
+
+  /* Full-height hit areas last, because a quiet month is a bar one pixel tall and nothing
+     to point at. The title is the only way a month is read. */
+  months.forEach((month, index) => {
+    const hit = shape('rect', {
+      class: 'hit',
+      x: (index * step).toFixed(2),
+      y: 0,
+      width: Math.max(step, 0.5).toFixed(2),
+      height: CHART.height,
+    });
+    const title = document.createElementNS(SVG, 'title');
+    title.textContent = `${month.name}: ${whole.format(month.reviews)} reviews, ${
+      month.positive === null ? 'too few to carry a rate' : `${share.format(month.positive)} recommended`
+    }`;
+    hit.append(title);
+    svg.append(hit);
+  });
+
+  set(
+    el('timeline-note'),
+    `Reviews per month, against a busiest month of ${whole.format(tallest)} in ${peak.name}. ` +
+      `The line is the share of each month that recommended the game; the dashed line is half. ` +
+      `Point at a month to read it.`,
+  );
+  set(el('timeline-first'), months[0].name);
+  set(el('timeline-last'), months[months.length - 1].name);
+}
+
+/* The languages of the whole capture, commonest first, so a reader knows what "reviews"
+   means before reading a rate over them. */
+function drawLanguages(languages, corpus) {
+  const line = el('languages');
+  line.hidden = languages.length === 0;
+  if (line.hidden) return;
+  const shown = languages.slice(0, 8);
+  const named = shown.map((language) =>
+    language.share === null
+      ? language.name
+      : `${language.name} ${share.format(language.share)}`,
+  );
+  const rest = languages.length - shown.length;
+  set(
+    line,
+    `Languages in the ${whole.format(corpus)} captured reviews: ${named.join(', ')}` +
+      (rest > 0 ? `, and ${whole.format(rest)} more.` : '.'),
+  );
+}
+
+/* Loaded after the table rather than with it: it walks the capture for the quoted reviews,
+   and most games have not had their own subjects induced yet, so most of the time there is
+   nothing to show and nothing to wait for. */
+async function loadInduced(appId) {
+  const section = el('induced');
+  section.hidden = true;
+  let found;
+  try {
+    found = await invoke('induced', { appId });
+  } catch {
+    return;
+  }
+  if (appId !== chosen || found.length === 0) return;
+
+  const list = el('induced-list');
+  list.replaceChildren();
+  for (const subject of found) {
+    const wrap = document.createElement('div');
+    wrap.className = 'found';
+    const dt = document.createElement('dt');
+    dt.textContent = subject.label;
+    if (subject.refines !== null) {
+      const form = document.createElement('span');
+      form.className = 'quiet';
+      form.textContent = ` a form of ${subject.refines}`;
+      dt.append(form);
+    }
+    const dd = document.createElement('dd');
+    const about = document.createElement('p');
+    about.textContent = subject.description;
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = `${whole.format(subject.reviews.length)} of the ${whole.format(
+      subject.found_in,
+    )} reviews it was found in`;
+    details.append(summary);
+    const quotes = document.createElement('ol');
+    quotes.className = 'quotes';
+    for (const review of subject.reviews) quotes.append(quoteItem(review));
+    details.append(quotes);
+    dd.append(about, details);
+    wrap.append(dt, dd);
+    list.append(wrap);
+  }
+  section.hidden = false;
+}
+
+/* A review shown whole, with the facts about it and the way back to Steam, and no reading:
+   the model that counts the table never read it, so a confidence here would be invented. */
+function quoteItem(review) {
+  const item = document.createElement('li');
+  const body = document.createElement('p');
+  body.lang = bcp47(review.language);
+  body.textContent = review.review;
+  const byline = document.createElement('div');
+  byline.className = 'byline';
+  const verdict = document.createElement('span');
+  verdict.className = review.voted_up ? 'verdict-up' : 'verdict-down';
+  verdict.textContent = review.voted_up ? 'Recommended the game' : 'Did not recommend it';
+  byline.append(verdict);
+  if (review.votes_up > 0) {
+    const votes = document.createElement('span');
+    votes.textContent = `${whole.format(review.votes_up)} found it helpful`;
+    byline.append(votes);
+  }
+  const when = document.createElement('span');
+  when.textContent = day.format(new Date(review.created * 1000));
+  byline.append(when);
+  if (review.url) {
+    const link = document.createElement('a');
+    link.href = '#';
+    link.textContent = 'On Steam';
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      openOutside(review.url);
+    });
+    byline.append(link);
+  }
+  item.append(body, byline);
+  return item;
 }
 
 function drawTopics(counted) {

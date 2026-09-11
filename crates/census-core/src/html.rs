@@ -30,10 +30,10 @@ const WIDTH: f64 = 1000.0;
 const HEIGHT: f64 = 160.0;
 const SPARK_HEIGHT: f64 = 40.0;
 
-/// Reviews a month needs before its rates are drawn. Below this a single review moves the
-/// figure by tens of points, and one such month would set the scale for every month that has
-/// something to say.
-const ENOUGH_FOR_A_RATE: u64 = 30;
+use crate::read::Month;
+
+/// Reviews a month needs before its rates are drawn.
+const ENOUGH_FOR_A_RATE: u64 = Month::ENOUGH_FOR_A_RATE;
 
 /// The numeric columns of a game's table, in order, each with what it counts.
 ///

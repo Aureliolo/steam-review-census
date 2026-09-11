@@ -484,6 +484,124 @@ button.quiet-button:hover {
   line-height: 1.55;
 }
 
+/* The same chart the report page draws, in the same two shapes: bars for the months and a
+   line for the share recommending, against a dashed half. */
+figure.timeline {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0.9rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+figure.timeline .quiet {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+}
+
+figure.timeline svg {
+  display: block;
+  width: 100%;
+  height: 140px;
+}
+
+figure.timeline .bar {
+  fill: var(--accent);
+  opacity: 0.55;
+}
+
+figure.timeline .share {
+  fill: none;
+  stroke: var(--over);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+figure.timeline .midline {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Invisible, and the only thing wide enough to point at in a chart of hundreds of months. */
+figure.timeline .hit {
+  fill: transparent;
+}
+
+figure.timeline .hit:hover {
+  fill: var(--ink);
+  fill-opacity: 0.06;
+}
+
+figure.timeline figcaption {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.35rem;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+.languages {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+}
+
+.induced {
+  max-width: 46rem;
+  margin-top: 2rem;
+}
+
+.induced h3 {
+  margin-bottom: 0.35rem;
+}
+
+.induced > .quiet {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.induced dl {
+  margin: 0;
+}
+
+.induced .found {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.induced dt {
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.induced dt .quiet {
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.induced dd {
+  margin: 0;
+}
+
+.induced dd > p {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+}
+
+.induced summary {
+  cursor: pointer;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.induced .quotes {
+  margin-top: 0.5rem;
+}
+
 /* The one thing a reader has to know before reading a rate. Set apart from the lede and
    above the table because a footnote is where things go to be skipped, and a model that
    declined most of the corpus is not a footnote. */

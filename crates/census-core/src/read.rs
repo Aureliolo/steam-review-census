@@ -194,6 +194,11 @@ pub struct Month {
 }
 
 impl Month {
+    /// Reviews a month needs before a rate of it is worth drawing. Below this a single review
+    /// moves the figure by tens of points, and one such month would set the scale for every
+    /// month that has something to say.
+    pub const ENOUGH_FOR_A_RATE: u64 = 30;
+
     /// Share of this month's reviews that recommended the game.
     #[must_use]
     #[expect(
@@ -202,6 +207,14 @@ impl Month {
     )]
     pub fn positive_share(&self) -> Option<f64> {
         (self.reviews > 0).then(|| self.positive as f64 / self.reviews as f64)
+    }
+
+    /// The positive share, only where the month is big enough to carry one.
+    #[must_use]
+    pub fn positive_share_if_enough(&self) -> Option<f64> {
+        (self.reviews >= Self::ENOUGH_FOR_A_RATE)
+            .then(|| self.positive_share())
+            .flatten()
     }
 
     /// Share of this month's reviews raising a subject, by its taxonomy position.
