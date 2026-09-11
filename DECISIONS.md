@@ -336,17 +336,30 @@ The middle row is the control, and it is the point: the same token budget spent 
 alone buys nothing, so the twelve points of coverage come from the context and not from the
 larger window. One training run, no labelling, no quota.
 
-What it costs was measured on a real capture rather than on a drawn sample, which was a
-mistake made first: a few hundred drawn claims are distinct by construction and say nothing
-about a corpus. Over Cyberpunk's 1.55M English claims, 87% are already textually distinct, so
-reading distinct claims was saving an eighth of the forward passes rather than most of them.
-The cost is the sequence length: a claim is 21 tokens and a claim with its review is 168.
-About **9x the work**, or a library read of twelve hours instead of ninety minutes, once per
-model version.
+The budget is spent **centred on the claim** rather than from the start of the review.
+Truncating a pair from the end gives a claim at the foot of a long review the opening
+paragraph and nothing it is near, at exactly the same price. Centred, 128 tokens beats
+head-truncated 256 on every figure, and 256 centred is no better than 128: once the window is
+around the claim, more budget buys nothing.
 
-The budget is therefore spent **centred on the claim** rather than from the start of the
-review. Truncating a pair from the end gives a claim at the foot of a long review the opening
-paragraph and nothing it is near, at exactly the same price.
+What it costs took three measurements to get right, and the first two were wrong in
+instructive ways.
+
+1. **On a drawn sample: "about 2x".** Wrong, and wrong in the way sampling is always wrong
+   about a corpus. A few hundred drawn claims are distinct by construction, so they said
+   deduplication was buying nothing. Over Cyberpunk's 1.55M English claims, 87% are distinct:
+   real, but only an eighth of the forward passes.
+2. **By token arithmetic, then on a CPU: "9x", then "7.8x".** A claim is 21 tokens and a claim
+   with its review is 168, so the work must be eight times greater. On a CPU it is: 51.7
+   claims a second against 6.6.
+3. **On the machine that does the reading: 2.35x.** The same corpus, the same graph, the same
+   pipeline, only the flag differing: 20.3 seconds against 47.8. A GPU running 21-token
+   batches is mostly idle, waiting on launches rather than arithmetic, so longer sequences
+   cost far less than their token count. A full library read goes from ninety minutes to about
+   three and a half hours, once per model version.
+
+The lesson is the one the project keeps relearning: measure the thing itself, on the hardware
+that will do it, not a proxy for it.
 
 ## What it has to beat
 
