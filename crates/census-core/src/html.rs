@@ -2968,6 +2968,39 @@ mod tests {
     }
 
     #[test]
+    fn a_capture_swept_since_the_reading_says_so_before_any_rate() {
+        let mut report = sample_report("ordinary text");
+        let app = &mut report.apps[0];
+        app.crawl.swept_unix = Some(1_700_500_000);
+        app.crawl.sweeps = 1;
+        app.crawl.rows_swept = 42;
+        app.reading.captured_unix = 1_700_000_000;
+
+        let page = render(&report);
+        assert!(
+            page.contains("Brought up to date"),
+            "the sweep is not a fact on the page"
+        );
+        assert!(page.contains("42 added or edited since the snapshot"));
+        let warning = page
+            .find("The capture was brought up to date on")
+            .expect("a warning");
+        let table = page
+            .find("<table class=\"categories\">")
+            .expect("the table");
+        assert!(
+            warning < table,
+            "the warning comes after the rates it is about"
+        );
+
+        // A reading made after the sweep has nothing to warn about.
+        report.apps[0].reading.captured_unix = 1_700_500_000;
+        let page = render(&report);
+        assert!(!page.contains("The capture was brought up to date on"));
+        assert!(page.contains("Brought up to date"));
+    }
+
+    #[test]
     fn the_words_a_side_uses_are_shown_with_the_reviewers_behind_them() {
         let page = render(&sample_report("ordinary text"));
 
