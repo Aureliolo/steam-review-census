@@ -399,59 +399,89 @@ fn quote_state(ch: char, quoted: bool) -> Option<bool> {
     }
 }
 
-/// Trims whitespace and the marks that hold a list together rather than say anything.
+/// The span of a claim's words: a piece with the whitespace, the list marks and the markup
+/// around its words taken off both ends.
 ///
 /// Reviews are written with bullets, and "- 教学纯靠自己领悟" is a point about the tutorial
 /// with a hyphen in front of it. Leaving the hyphen on gives the model a token that appears
-/// in every category and means nothing in any of them.
-fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> {
+/// in every category and means nothing in any of them. The markup goes for the same reason,
+/// and so that a span names words: a label that points at `[*]` is a label on a tag.
+///
+/// Public because a label made against an older cut may carry the tag, and the join brings
+/// it through here to meet the span this cut records.
+#[must_use]
+pub fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> {
     // A comma in front of a point is the end of the point before it, left behind by a cut.
     const MARKERS: [char; 11] = [
         '-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>', ',', '\u{FF0C}',
         '\u{3001}',
     ];
 
-    let mut piece = &text[from..to];
-    let mut start = from;
-
-    loop {
-        let trimmed = piece.trim_start();
-        start += piece.len() - trimmed.len();
-        let stripped = trimmed.trim_start_matches(MARKERS);
-        if stripped.len() == trimmed.len() {
-            piece = trimmed;
-            break;
-        }
-        start += trimmed.len() - stripped.len();
-        piece = stripped;
+    if !text.is_char_boundary(from) || !text.is_char_boundary(to) || from > to {
+        return None;
     }
 
+    let front = |mut start: usize, end: usize| loop {
+        let trimmed = text[start..end].trim_start().trim_start_matches(MARKERS);
+        let mut next = end - trimmed.len();
+        if trimmed.starts_with('[')
+            && let Some((after, _)) = markup_at(text, next)
+        {
+            next = after;
+        }
+        if next == start {
+            return start;
+        }
+        start = next;
+    };
+
+    let mut start = front(from, to);
+
     // "1." and "2)" in front of a point are numbering, not what somebody said.
+    let piece = &text[start..to];
     let digits = piece
         .char_indices()
         .take_while(|(_, ch)| ch.is_ascii_digit())
         .count();
     if digits > 0 && digits <= 3 {
         let after = &piece[digits..];
-        if after.starts_with(['.', ')', ':']) {
-            let rest = after[1..].trim_start();
-            if !rest.is_empty() {
-                start += piece.len() - rest.len();
-                piece = rest;
-            }
+        if after.starts_with(['.', ')', ':']) && !after[1..].trim_start().is_empty() {
+            start = front(start + digits + 1, to);
         }
     }
 
-    let trimmed = piece.trim_end();
-    let mut end = start + trimmed.len();
-    let stripped = trimmed.trim_end_matches(MARKERS).trim_end();
-    // Only where something is left: a claim that is nothing but dashes is a divider, and
-    // stripping it to nothing is the correct reading of one.
-    if !stripped.is_empty() {
-        end = start + stripped.len();
+    let mut end = to;
+    loop {
+        let trimmed = text[start..end].trim_end();
+        let stripped = trimmed.trim_end_matches(MARKERS).trim_end();
+        // Only where something is left: a claim that is nothing but dashes is a divider,
+        // and stripping it to nothing is the correct reading of one.
+        let mut next = start
+            + if stripped.is_empty() {
+                trimmed.len()
+            } else {
+                stripped.len()
+            };
+        if let Some(open) = markup_ending_at(text, start, next) {
+            next = open;
+        }
+        if next == end {
+            break;
+        }
+        end = next;
     }
 
     (start < end).then_some(start..end)
+}
+
+/// Where the tag ending exactly at `end` opens, if the text there ends on one.
+fn markup_ending_at(text: &str, from: usize, end: usize) -> Option<usize> {
+    if !text[..end].ends_with(']') {
+        return None;
+    }
+    let open = text[from..end].rfind('[')? + from;
+    let (after, _) = markup_at(text, open)?;
+    (after == end).then_some(open)
 }
 
 /// Whether everything before this full stop is just the number of a list item.
@@ -904,7 +934,7 @@ mod tests {
     #[test]
     fn trailing_dashes_used_as_a_divider_are_not_part_of_the_claim() {
         let claims = split("The translation is full of mistakes, --\nEverything else is fine.");
-        assert_eq!(claims[0], "The translation is full of mistakes,");
+        assert_eq!(claims[0], "The translation is full of mistakes");
     }
 
     #[test]
@@ -1075,6 +1105,20 @@ mod tests {
         assert_eq!(claims.len(), 2, "got {claims:?}");
         assert!(claims[0].contains("interface"));
         assert!(claims[1].contains("tutorial"));
+    }
+
+    #[test]
+    fn a_span_names_the_words_and_not_the_markup_around_them() {
+        let text = "[list][*]The interface is unusable[*]The tutorial explains nothing[/list]";
+        let spans: Vec<&str> = spans(text).into_iter().map(|at| &text[at]).collect();
+        assert_eq!(
+            spans,
+            vec!["The interface is unusable", "The tutorial explains nothing"]
+        );
+        // A span recorded before the tags were trimmed comes to the same words.
+        assert_eq!(tidied(text, 6, 34), Some(9..34));
+        assert_eq!(tidied(text, 34, text.len()), Some(37..66));
+        assert_eq!(tidied("[b]1. [i]Point[/i][/b]", 0, 22), Some(9..14));
     }
 
     #[test]

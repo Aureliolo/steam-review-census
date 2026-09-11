@@ -320,9 +320,14 @@ fn join_by_span<'a>(
     Ok(labels
         .iter()
         .filter_map(|label| {
-            let now = spans
-                .get(label.review_id.as_str())?
-                .get(&(label.start, label.end))?;
+            // A span from an older cut may still carry the tag or the bullet in front of
+            // its words; brought to the words alone, it meets the span this cut records.
+            let text = texts.get(label.review_id.as_str())?;
+            let words = crate::claims::tidied(text, label.start as usize, label.end as usize)?;
+            let now = spans.get(label.review_id.as_str())?.get(&(
+                u32::try_from(words.start).ok()?,
+                u32::try_from(words.end).ok()?,
+            ))?;
             Some(((label.review_id.as_str(), label.index), *now))
         })
         .collect())
