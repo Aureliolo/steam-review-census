@@ -12,7 +12,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "104560525",
@@ -27,7 +28,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "105592287",
@@ -42,7 +44,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "107025765",
@@ -57,7 +60,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "110582292",
@@ -72,7 +76,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "120268336",
@@ -87,7 +92,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "120268336",
@@ -102,7 +108,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "120268336",
@@ -117,7 +124,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "121319253",
@@ -132,7 +140,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "122948795",
@@ -147,7 +156,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "131760019",
@@ -162,7 +172,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "142026591",
@@ -177,7 +188,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "142171586",
@@ -192,7 +204,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "149476067",
@@ -207,7 +220,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "158176250",
@@ -222,7 +236,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -237,7 +252,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -252,7 +268,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -267,7 +284,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -282,7 +300,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -297,7 +316,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -312,7 +332,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -327,7 +348,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -342,7 +364,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -357,7 +380,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "229450259",
@@ -372,7 +396,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "93714083",
@@ -387,7 +412,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "93799778",
@@ -402,7 +428,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "96878966",
@@ -417,6 +444,7 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   }
 ]

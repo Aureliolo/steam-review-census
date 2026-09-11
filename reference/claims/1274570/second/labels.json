@@ -12,7 +12,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -27,7 +28,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -42,7 +44,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -57,7 +60,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -72,7 +76,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -87,7 +92,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -102,7 +108,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -117,7 +124,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -132,7 +140,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -147,7 +156,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -162,7 +172,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -177,7 +188,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -192,7 +204,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -207,7 +220,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -222,7 +236,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -237,7 +252,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -252,7 +268,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -267,7 +284,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -282,7 +300,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -297,7 +316,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -312,7 +332,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -327,7 +348,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -342,7 +364,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -357,7 +380,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -372,7 +396,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -387,7 +412,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -402,7 +428,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -417,7 +444,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -432,7 +460,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -447,7 +476,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -462,7 +492,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -477,7 +508,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -492,7 +524,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "102220438",
@@ -507,7 +540,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "108878229",
@@ -522,7 +556,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "112772042",
@@ -537,7 +572,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "112808678",
@@ -552,7 +588,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "112808678",
@@ -567,7 +604,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "139844574",
@@ -582,7 +620,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "140452256",
@@ -597,7 +636,8 @@
     "ironic": false,
     "confidence": "high",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "171983522",
@@ -612,7 +652,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "175454751",
@@ -627,7 +668,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "177565057",
@@ -642,7 +684,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "215863596",
@@ -657,7 +700,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": false,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "85750531",
@@ -672,7 +716,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "85750531",
@@ -687,7 +732,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "85925998",
@@ -702,7 +748,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "86302422",
@@ -717,7 +764,8 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": true,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "87001185",
@@ -732,7 +780,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "91239382",
@@ -747,7 +796,8 @@
     "ironic": false,
     "confidence": "medium",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   },
   {
     "review_id": "92323360",
@@ -762,6 +812,7 @@
     "ironic": false,
     "confidence": "low",
     "ambiguous": true,
-    "split_wrong": false
+    "split_wrong": false,
+    "produced_by": "claude-fable-5-1"
   }
 ]

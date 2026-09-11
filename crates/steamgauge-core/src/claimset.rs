@@ -240,6 +240,10 @@ fn rejoined(review: &DrawnReview) -> String {
 pub struct Sheet {
     pub splitter: String,
     pub taxonomy: String,
+    /// The labeller. Named rather than defaulted: the first set written by a second model is
+    /// the one where a default would be wrong, and it is also the one nobody would think to
+    /// check.
+    pub produced_by: String,
 }
 
 impl Default for Sheet {
@@ -249,6 +253,7 @@ impl Default for Sheet {
         Self {
             splitter: crate::claims::SPLITTER_VERSION.to_owned(),
             taxonomy: crate::CORE_SPINE_VERSION.to_owned(),
+            produced_by: String::new(),
         }
     }
 }
@@ -284,6 +289,11 @@ pub struct ClaimLabel {
     pub splitter: String,
     #[serde(default)]
     pub taxonomy: String,
+    /// Which labeller wrote it. A set labelled by two models is not one set: they disagree
+    /// with each other about as often as they disagree with the truth, and pooling them
+    /// without saying so turns a measurable difference into noise nobody can find again.
+    #[serde(default)]
+    pub produced_by: String,
     pub subject: String,
     pub polarity: String,
     pub ironic: bool,
@@ -442,7 +452,7 @@ pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result
 /// # Errors
 ///
 /// Fails if the set or the returned files cannot be read or written.
-pub fn ingest_revisit(dir: &Path, from: &Path) -> Result<ClaimIngest> {
+pub fn ingest_revisit(dir: &Path, from: &Path, by: &str) -> Result<ClaimIngest> {
     let mut labels: Vec<ClaimLabel> =
         serde_json::from_slice(&std::fs::read(dir.join("labels.json")).map_err(|_| {
             crate::Error::NoReferenceSet {
@@ -496,6 +506,9 @@ pub fn ingest_revisit(dir: &Path, from: &Path) -> Result<ClaimIngest> {
             label.ambiguous = answer.ambiguous;
             label.split_wrong = answer.split_wrong;
             crate::CORE_SPINE_VERSION.clone_into(&mut label.taxonomy);
+            // A revisited label is a new answer from whoever gave it, not a correction of the
+            // first labeller's, so it carries the second labeller's name.
+            by.clone_into(&mut label.produced_by);
             report.accepted += 1;
         }
     }
@@ -584,6 +597,7 @@ pub fn ingest(dir: &Path, from: &Path, sheet: &Sheet) -> Result<(Vec<ClaimLabel>
                 end: claim.end,
                 splitter: sheet.splitter.clone(),
                 taxonomy: sheet.taxonomy.clone(),
+                produced_by: sheet.produced_by.clone(),
                 subject: label.subject,
                 polarity: label.polarity,
                 ironic: label.ironic,
@@ -676,6 +690,7 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
                 "ambiguous": label.ambiguous,
                 "ironic": label.ironic,
                 "split_wrong": label.split_wrong,
+                "produced_by": label.produced_by,
                 "language": label.language,
                 "app_id": label.app_id,
                 "review_id": label.review_id,

@@ -374,6 +374,9 @@ enum Command {
         /// Directory holding the returned label files, one JSON array per batch.
         #[arg(long)]
         from: PathBuf,
+        /// Which labeller answered the revisit, as the model's own name.
+        #[arg(long)]
+        by: String,
         /// The reference set. Defaults to reference/claims/<app id>.
         #[arg(long)]
         to: Option<PathBuf>,
@@ -391,6 +394,11 @@ enum Command {
         /// a label answers the sheet its labeller read, and no other.
         #[arg(long)]
         sheet: Option<String>,
+        /// Which labeller wrote these labels, as the model's own name. Required, and not
+        /// defaulted: the first set written by a second model is the one where a default
+        /// would be wrong, and it is also the one nobody would think to check.
+        #[arg(long)]
+        by: String,
         /// The reference set. Defaults to reference/claims/<app id>.
         #[arg(long)]
         to: Option<PathBuf>,
@@ -584,8 +592,9 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             app_id,
             from,
             sheet,
+            by,
             to,
-        } => run_ingest_claims(*app_id, from, sheet.as_deref(), to.clone()),
+        } => run_ingest_claims(*app_id, from, sheet.as_deref(), by, to.clone()),
         Command::Revisit {
             words,
             subjects,
@@ -593,9 +602,12 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             reference,
             batch_size,
         } => run_revisit(words, subjects, app_ids, reference, *batch_size),
-        Command::IngestRevisit { app_id, from, to } => {
-            run_ingest_revisit(*app_id, from, to.clone())
-        }
+        Command::IngestRevisit {
+            app_id,
+            from,
+            by,
+            to,
+        } => run_ingest_revisit(*app_id, from, by, to.clone()),
         Command::MeasureClaims {
             app_ids,
             out,
@@ -1008,9 +1020,17 @@ fn run_revisit(
 }
 
 /// Merges revisited labels back into a set.
-fn run_ingest_revisit(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -> Result<()> {
+fn run_ingest_revisit(
+    app_id: u32,
+    from: &std::path::Path,
+    by: &str,
+    to: Option<PathBuf>,
+) -> Result<()> {
+    if by.trim().is_empty() {
+        anyhow::bail!("--by names the labeller who answered the revisit and cannot be empty");
+    }
     let dir = to.unwrap_or_else(|| steamgauge_core::claimset::default_reference_dir(app_id));
-    let report = steamgauge_core::claimset::ingest_revisit(&dir, from)?;
+    let report = steamgauge_core::claimset::ingest_revisit(&dir, from, by.trim())?;
     println!("app        {app_id}");
     println!("revisited  {} claims", report.accepted);
     println!("moved      {} of them to another subject", report.moved);
@@ -1477,8 +1497,16 @@ fn run_ingest_claims(
     app_id: u32,
     from: &std::path::Path,
     sheet: Option<&str>,
+    by: &str,
     to: Option<PathBuf>,
 ) -> Result<()> {
+    if by.trim().is_empty() {
+        anyhow::bail!(
+            "--by names the labeller and cannot be empty. An unattributed label is exactly \
+             what this field exists to prevent: two models disagree with each other about as \
+             often as either disagrees with the truth."
+        );
+    }
     let dir = to.unwrap_or_else(|| {
         PathBuf::from("reference")
             .join("claims")
@@ -1489,6 +1517,7 @@ fn run_ingest_claims(
             || steamgauge_core::CORE_SPINE_VERSION.to_owned(),
             ToOwned::to_owned,
         ),
+        produced_by: by.trim().to_owned(),
         ..Default::default()
     };
     let (labels, report) = steamgauge_core::claimset::ingest(&dir, from, &sheet)?;

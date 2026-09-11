@@ -292,6 +292,7 @@ mod tests {
             app_id: 1,
             language: "english".to_owned(),
             subset: "random".to_owned(),
+            produced_by: "a test".to_owned(),
             start: 0,
             end: 1,
             splitter: crate::claims::SPLITTER_VERSION.to_owned(),

@@ -76,7 +76,10 @@ def dataset_card(labels: int, games: int, fingerprint: str) -> str:
             "about the labellers rather than the claims and is documented in the repository.",
             "",
             f"Data fingerprint `{fingerprint}`. Every row names the `splitter` that cut its",
-            "claim and the `taxonomy` its subject comes from, both versioned in the repository.",
+            "claim, the `taxonomy` its subject comes from, and the model that wrote it in",
+            "`produced_by`, all three versioned in the repository. Two models disagree with",
+            "each other about as often as either disagrees with the truth, so a row that could",
+            "not say which one wrote it would be a row you could not split back apart.",
             "A row whose splitter is older than the one you cut with may name a span you do not",
             "cut as one claim; `steamgauge` counts those rather than scoring them",
             "against whatever now sits there.",
@@ -152,7 +155,7 @@ def main() -> None:
     leaking = sorted(forbidden & set().union(*(row.keys() for row in rows)))
     if leaking:
         raise SystemExit(f"the reference sets carry review text in {leaking}; not publishing that")
-    for name in ("review_id", "start", "end", "subject", "splitter", "taxonomy"):
+    for name in ("review_id", "start", "end", "subject", "splitter", "taxonomy", "produced_by"):
         if any(name not in row for row in rows):
             raise SystemExit(f"a row has no {name}; nothing can be joined back from it")
 
