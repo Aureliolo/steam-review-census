@@ -367,34 +367,38 @@ def run(args) -> dict:
 
     # The frozen games, read once, with the threshold the validation games chose. Nothing here
     # picks anything: the moment a number from this set changes a setting, the set stops being
-    # able to answer the only question it exists for.
+    # able to answer the only question it exists for. That is why it can be switched off, and
+    # why the bake-off switches it off: comparing four backbones on it and then reporting the
+    # winner's score from it would be reporting a number the winner was chosen by.
     #
-    # It is asked because the validation figure was not transferring. Measured on eleven games,
-    # a threshold promising 0.756 on the validation games delivered 0.571 on the frozen ones,
-    # and a model card quoting the first would have been advertising an accuracy the tool does
-    # not have on a game it has never seen.
-    held = evaluate(model, loaders["test"], device, subjects, test, args.min_accuracy)
-    kept = confidence_of(model, loaders["test"], device)
-    truth = [subjects.index(claim.subject) for claim in test]
-    at_threshold = selective(kept, truth, metrics["threshold"])
-    held["at_validation_threshold"] = at_threshold
-    print(
-        f"frozen games: {at_threshold['coverage']:.0%} of claims answered at "
-        f"{at_threshold['accuracy']:.3f}"
-        if at_threshold["coverage"] > 0
-        else "frozen games: nothing cleared the threshold"
-    )
-    if (
-        metrics["threshold_met"]
-        and at_threshold["accuracy"] is not None
-        and at_threshold["accuracy"] < args.min_accuracy
-    ):
+    # It is asked at all because the validation figure was not transferring. Measured on eleven
+    # games, a threshold promising 0.756 on the validation games delivered 0.620 on the frozen
+    # ones, and a model card quoting the first would advertise an accuracy the tool does not
+    # have on a game it has never seen.
+    held = None
+    if getattr(args, "frozen", True):
+        held = evaluate(model, loaders["test"], device, subjects, test, args.min_accuracy)
+        kept = confidence_of(model, loaders["test"], device)
+        truth = [subjects.index(claim.subject) for claim in test]
+        at_threshold = selective(kept, truth, metrics["threshold"])
+        held["at_validation_threshold"] = at_threshold
         print(
-            f"  WARNING: the threshold promised {args.min_accuracy:.2f} and delivers "
-            f"{at_threshold['accuracy']:.3f} on games it has never seen. The promise was "
-            f"chosen on {len({claim.app_id for claim in validation})} validation games and "
-            f"does not transfer; quote the frozen figure, not the validation one."
+            f"frozen games: {at_threshold['coverage']:.0%} of claims answered at "
+            f"{at_threshold['accuracy']:.3f}"
+            if at_threshold["coverage"] > 0
+            else "frozen games: nothing cleared the threshold"
         )
+        if (
+            metrics["threshold_met"]
+            and at_threshold["accuracy"] is not None
+            and at_threshold["accuracy"] < args.min_accuracy
+        ):
+            print(
+                f"  WARNING: the threshold promised {args.min_accuracy:.2f} and delivers "
+                f"{at_threshold['accuracy']:.3f} on games it has never seen. The promise was "
+                f"chosen on {len({claim.app_id for claim in validation})} validation games and "
+                f"does not transfer; quote the frozen figure, not the validation one."
+            )
 
     elapsed = time.time() - started
     record = {
@@ -417,8 +421,9 @@ def run(args) -> dict:
         "subjects": subjects,
         "seconds": round(elapsed),
         "validation": metrics,
-        "test": held,
     }
+    if held is not None:
+        record["test"] = held
 
     run_id = args.run_id or f"{args.backbone.replace('/', '-')}-{int(time.time())}"
     out = HERE / "runs" / run_id
@@ -451,6 +456,13 @@ def parse():
     )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--save", action="store_true")
+    parser.add_argument(
+        "--no-frozen",
+        dest="frozen",
+        action="store_false",
+        help="leave the frozen games unread. For runs that compare configurations against each "
+        "other: a set used to choose between models cannot also say how the chosen one does.",
+    )
     return parser.parse_args()
 
 

@@ -205,6 +205,38 @@ enum Command {
         reference: PathBuf,
     },
 
+    /// Draw the share of a labelled set that a second labeller should read.
+    ///
+    /// A set labelled once cannot say how reliable it is. This writes the same reviews again,
+    /// as fresh batches with no labels in them, for a different labeller to work from blind.
+    SecondOpinion {
+        /// Steam app IDs to draw a second opinion on. Every labelled set when none are named.
+        #[arg(num_args = 0..)]
+        app_ids: Vec<u32>,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+        /// Share of each set to read again.
+        #[arg(long, default_value_t = 0.1)]
+        share: f64,
+        /// Reviews per batch, as with the first draw.
+        #[arg(long, default_value_t = 35)]
+        batch_size: usize,
+        /// Changing this asks about different reviews. The same seed asks about the same ones.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+
+    /// Compare two labellings of the same claims, field by field.
+    CompareLabels {
+        /// Steam app IDs to compare. Every set with a second opinion when none are named.
+        #[arg(num_args = 0..)]
+        app_ids: Vec<u32>,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+    },
+
     /// Merge returned claim labels into a reference set.
     IngestClaims {
         /// Steam app ID whose labels are being merged.
@@ -320,6 +352,14 @@ pub async fn run() -> Result<()> {
             out,
             reference,
         } => run_measure_claims(&app_ids, &out, &reference),
+        Command::SecondOpinion {
+            app_ids,
+            reference,
+            share,
+            batch_size,
+            seed,
+        } => run_second_opinion(&app_ids, &reference, share, batch_size, seed),
+        Command::CompareLabels { app_ids, reference } => run_compare_labels(&app_ids, &reference),
         Command::Read {
             app_ids,
             out,
@@ -558,6 +598,120 @@ fn read_one(
             thousands(subject.mixed),
         );
     }
+    Ok(())
+}
+
+/// Every app id under a reference root that has been labelled, in order.
+fn labelled_sets(reference: &std::path::Path) -> Result<Vec<u32>> {
+    let mut found: Vec<u32> = std::fs::read_dir(reference)?
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| entry.path().join("labels.json").is_file())
+        .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+        .collect();
+    found.sort_unstable();
+    Ok(found)
+}
+
+fn run_second_opinion(
+    app_ids: &[u32],
+    reference: &std::path::Path,
+    share: f64,
+    batch_size: usize,
+    seed: u64,
+) -> Result<()> {
+    let wanted = if app_ids.is_empty() {
+        labelled_sets(reference)?
+    } else {
+        app_ids.to_vec()
+    };
+    if wanted.is_empty() {
+        anyhow::bail!("no labelled sets under {}", reference.display());
+    }
+
+    let (mut reviews, mut claims, mut batches) = (0, 0, 0);
+    for app_id in wanted {
+        let dir = reference.join(app_id.to_string());
+        let drawn = census_core::claimset::draw_second(&dir, share, seed)?;
+        let report =
+            census_core::claimset::write_set(&dir.join("second"), &drawn, batch_size)?;
+        reviews += report.reviews;
+        claims += report.claims;
+        batches += report.batches;
+        println!(
+            "{app_id:<9} {:>4} reviews  {:>5} claims  {:>3} batches",
+            report.reviews, report.claims, report.batches
+        );
+    }
+
+    println!("\ndrawn        {reviews} reviews, {claims} claims, {batches} batches");
+    println!(
+        "\nHand these to a different labeller from the one that did the first pass, and give \
+         it\nthe same sheet and nothing else. A second opinion that can see the first is not a\n\
+         second opinion. Ingest with --to <set>/second, then `census compare-labels`."
+    );
+    Ok(())
+}
+
+fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()> {
+    let wanted = if app_ids.is_empty() {
+        labelled_sets(reference)?
+            .into_iter()
+            .filter(|app_id| {
+                reference
+                    .join(app_id.to_string())
+                    .join("second")
+                    .join("labels.json")
+                    .is_file()
+            })
+            .collect()
+    } else {
+        app_ids.to_vec()
+    };
+    if wanted.is_empty() {
+        anyhow::bail!(
+            "no set under {} has a second labelling yet; run `census second-opinion` first",
+            reference.display()
+        );
+    }
+
+    let pct =
+        |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+    for app_id in wanted {
+        let dir = reference.join(app_id.to_string());
+        let found = census_core::reliability::compare(
+            &dir.join("labels.json"),
+            &dir.join("second").join("labels.json"),
+        )?;
+
+        println!("\napp {app_id}");
+        println!(
+            "  {} claims read twice, {} only once",
+            thousands(found.overlap),
+            thousands(found.only_first + found.only_second)
+        );
+        println!("\n  {:<14} {:>9} {:>8} {:>18}", "field", "agreed", "kappa", "commonest split");
+        for field in &found.fields {
+            let split = field.commonest_split.as_ref().map_or_else(
+                String::new,
+                |(a, b, count)| format!("{a} / {b} ({count})"),
+            );
+            println!(
+                "  {:<14} {:>9} {:>8} {split:>18}",
+                field.field,
+                pct(field.rate()),
+                field
+                    .kappa
+                    .map_or_else(|| "-".to_owned(), |k| format!("{k:.2}"))
+            );
+        }
+    }
+
+    println!(
+        "\nKappa is agreement beyond what these two labellers' own habits would produce by \
+         chance.\nA corpus is mostly `verdict` and `offtopic`, so two labellers who never read \
+         a claim\nwould still agree most of the time; the percentage alone cannot tell you that \
+         apart\nfrom reading. Below about 0.4 the two are not labelling the same thing."
+    );
     Ok(())
 }
 

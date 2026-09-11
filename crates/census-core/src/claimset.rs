@@ -282,6 +282,54 @@ impl ClaimIngest {
     }
 }
 
+/// Draws the share of an already-drawn set that a second labeller should read.
+///
+/// A set labelled once cannot say anything about its own reliability, so a tenth of it is
+/// labelled again by a different labeller and the two are compared. The same reviews, drawn by
+/// hash so that the choice depends on the review rather than on the order of the file: a set
+/// redrawn after more games are added asks for a second opinion on the same reviews it already
+/// has one for.
+///
+/// The purpose string differs from the one that drew the set, so this is not the front of the
+/// original draw. Taking the first tenth of an ordering the set was already built from would
+/// ask the second labeller about a systematically unrepresentative slice.
+///
+/// # Errors
+///
+/// Fails if the set has no drawn sample, or the sample cannot be read.
+pub fn draw_second(dir: &Path, share: f64, seed: u64) -> Result<Vec<DrawnReview>> {
+    let drawn: Vec<DrawnReview> =
+        serde_json::from_slice(&std::fs::read(dir.join("sample.json")).map_err(|_| {
+            crate::Error::NoReferenceSet {
+                path: dir.join("sample.json"),
+            }
+        })?)?;
+
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a reference set is a few hundred reviews"
+    )]
+    let wanted = ((drawn.len() as f64) * share.clamp(0.0, 1.0)).round() as usize;
+
+    let mut ranked: Vec<([u8; 32], DrawnReview)> = drawn
+        .into_iter()
+        .map(|review| {
+            (
+                crate::bounded::rank(seed, "second-opinion", &review.id),
+                review,
+            )
+        })
+        .collect();
+    ranked.sort_by_key(|(key, _)| *key);
+    Ok(ranked
+        .into_iter()
+        .take(wanted)
+        .map(|(_, review)| review)
+        .collect())
+}
+
 /// Where the claim reference sets live.
 #[must_use]
 pub fn reference_root() -> std::path::PathBuf {

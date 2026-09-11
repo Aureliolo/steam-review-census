@@ -64,6 +64,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--only", nargs="*", default=None)
+    parser.add_argument("--min-accuracy", type=float, default=0.75)
     args = parser.parse_args()
 
     candidates = args.only or CANDIDATES
@@ -82,8 +83,12 @@ def main():
                     max_length=128,
                     polarity_weight=0.5,
                     split_seed=1,
+                    min_accuracy=args.min_accuracy,
                     run_id=f"bakeoff-{backbone.replace('/', '-')}",
                     save=False,
+                    # The frozen games stay unread. Four candidates measured on them and then a
+                    # winner reported from them is a winner reported by the thing that chose it.
+                    frozen=False,
                 )
             )
         except Exception as failure:  # a candidate that cannot be loaded is a result too
@@ -97,17 +102,33 @@ def main():
     table.parent.mkdir(parents=True, exist_ok=True)
     table.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
-    print("\n" + "=" * 78)
-    print(f"{'backbone':<40} {'macro F1':>9} {'accuracy':>9} {'claims/s':>10}")
+    print("\n" + "=" * 96)
+    print(
+        f"{'backbone':<38} {'macro F1':>9} {'accuracy':>9} {'AURC':>7} "
+        f"{'answers':>8} {'at':>6} {'claims/s':>9}"
+    )
     for record in results:
         if "error" in record:
-            print(f"{record['backbone']:<40} {'failed':>9}")
+            print(f"{record['backbone']:<38} {'failed':>9}")
             continue
         metrics = record["validation"]
         print(
-            f"{record['backbone']:<40} {metrics['macro_f1']:>9.3f} "
-            f"{metrics['accuracy']:>9.3f} {record['claims_per_second']:>10.1f}"
+            f"{record['backbone']:<38} {metrics['macro_f1']:>9.3f} "
+            f"{metrics['accuracy']:>9.3f} {metrics.get('aurc', 0):>7.3f} "
+            f"{metrics.get('threshold_coverage', 0):>7.0%} "
+            f"{metrics.get('threshold_accuracy') or 0:>6.3f} "
+            f"{record['claims_per_second']:>9.1f}"
         )
+
+    print(
+        "\nAURC is the area under the risk-coverage curve, lower is better, and it is the "
+        "column\nto read after macro F1: it says whether a backbone knows when it does not "
+        "know, which\nis the whole of what lets it abstain. `answers` is the share of claims "
+        f"it will commit to\nat {args.min_accuracy:.0%} accuracy, and `at` is what it actually "
+        "scores on those.\n\nEvery figure is from the validation games, which is what they are "
+        "for. The frozen games\nwere not read: a set that chooses between models cannot also "
+        "say how the chosen one does.\nTrain the winner on its own to get that number."
+    )
     print(f"\nwritten to {table}")
 
 

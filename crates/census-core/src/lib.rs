@@ -15,6 +15,7 @@ pub mod model;
 pub mod query;
 pub mod read;
 pub mod reader;
+pub mod reliability;
 pub mod report;
 pub mod shard;
 pub mod state;
