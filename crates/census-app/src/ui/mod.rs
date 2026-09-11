@@ -647,7 +647,11 @@ fn claims_behind(
     // Taken apart the way the reading pass took it apart, so a claim index names the same
     // sentence here that it named when the model read it.
     let found = read_report(&snapshot)?;
-    found.cut_as_this_build().map_err(text)?;
+    found.cut_as_this_build().map_err(|_| {
+        "these counts were made with an older way of taking reviews apart, so the points \
+         behind them cannot be shown; read this game again"
+            .to_owned()
+    })?;
     let depth = found.depth;
 
     let (total, wanted) = match term
