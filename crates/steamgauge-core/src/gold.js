@@ -101,16 +101,14 @@
 
   function marked(question) {
     // The claim is highlighted where it sits, rather than repeated: a reader asked to find the
-    // sentence twice reads it once and guesses the second time.
-    var start = question.at || 0;
-    var end = start + (question.claim || "").length;
-    var review = question.review || "";
+    // sentence twice reads it once and guesses the second time. The review arrives already
+    // split around the claim, so there is no offset here to be in the wrong units.
     return (
-      escape(review.slice(0, start)) +
+      escape(question.before || "") +
       "<mark>" +
-      escape(review.slice(start, end)) +
+      escape(question.claim || "") +
       "</mark>" +
-      escape(review.slice(end))
+      escape(question.after || "")
     );
   }
 

@@ -34,10 +34,12 @@ pub struct Question {
     pub index: u16,
     /// The claim itself.
     pub claim: String,
-    /// The review it came from, as the labeller was shown it.
-    pub review: String,
-    /// Where the claim starts in `review`, so the page can mark it.
-    pub at: usize,
+    /// The review it came from, split around the claim rather than sent whole with an offset
+    /// into it. An offset would be in bytes here and in UTF-16 units in the page that reads
+    /// it, and on the third of this corpus that is not English those are different numbers:
+    /// the highlight would cover the whole review instead of one sentence of it.
+    pub before: String,
+    pub after: String,
     pub language: String,
     /// What the labellers said, shown only for a split: `None` on a blind question, because an
     /// answer on the page is an answer in the reader's head.
@@ -144,8 +146,8 @@ pub fn draw(
                 review_id: label.review_id.clone(),
                 index: label.index,
                 claim: text.to_owned(),
-                review: rejoined.text.clone(),
-                at,
+                before: rejoined.text[..at].to_owned(),
+                after: rejoined.text[at + text.len()..].to_owned(),
                 language: label.language.clone(),
                 shown: None,
             };
@@ -372,14 +374,63 @@ mod tests {
     }
 
     #[test]
+    fn the_three_pieces_of_a_question_are_the_review_it_came_from() {
+        // The page cannot check this: it is handed the pieces and has nothing to compare them
+        // with. If the split is wrong the reader is shown a review that was never written,
+        // with the wrong sentence highlighted in it, and nothing anywhere looks broken.
+        let review = DrawnReview {
+            id: "r1".to_owned(),
+            app_id: 1,
+            language: "schinese".to_owned(),
+            subset: "random".to_owned(),
+            claims: vec![
+                crate::claimset::DrawnClaim {
+                    index: 0,
+                    start: 0,
+                    end: 0,
+                    text: "\u{6559}\u{5b66}\u{7eaf}\u{9760}\u{81ea}\u{5df1}\u{9886}\u{609f}"
+                        .to_owned(),
+                },
+                crate::claimset::DrawnClaim {
+                    index: 1,
+                    start: 0,
+                    end: 0,
+                    text: "\u{6218}\u{6597}\u{624b}\u{611f}\u{6781}\u{597d}".to_owned(),
+                },
+                crate::claimset::DrawnClaim {
+                    index: 2,
+                    start: 0,
+                    end: 0,
+                    text: "Worth it.".to_owned(),
+                },
+            ],
+        };
+        let rejoined = Rejoined::of(&review);
+        for claim in &review.claims {
+            let (at, text) = rejoined
+                .find(claim.index)
+                .expect("the claim is in the review");
+            let before = &rejoined.text[..at];
+            let after = &rejoined.text[at + text.len()..];
+            assert_eq!(
+                format!("{before}{text}{after}"),
+                rejoined.text,
+                "claim {} does not put the review back together",
+                claim.index
+            );
+            assert_eq!(text, claim.text, "claim {} is not itself", claim.index);
+        }
+    }
+
+    #[test]
     fn a_page_carries_every_question_and_the_whole_sheet() {
         let questions = vec![Question {
             app_id: 1,
             review_id: "42".to_owned(),
             index: 0,
             claim: "Runs badly".to_owned(),
-            review: "Runs badly and I love it".to_owned(),
-            at: 0,
+            before: String::new(),
+            after: " and I love it".to_owned(),
             language: "english".to_owned(),
             shown: None,
         }];
@@ -401,8 +452,8 @@ mod tests {
             review_id: "42".to_owned(),
             index: 0,
             claim: "Runs badly".to_owned(),
-            review: "Runs badly".to_owned(),
-            at: 0,
+            before: String::new(),
+            after: String::new(),
             language: "english".to_owned(),
             shown: None,
         }];

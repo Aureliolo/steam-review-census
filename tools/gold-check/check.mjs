@@ -134,6 +134,7 @@ const PROBE = `(function () {
       mark.textContent.trim() === data.questions[0].claim.trim());
   }
 
+
   // A blind question must show no answer.
   if (!data.questions[0].shown) {
     check('a blind question shows an answer', document.querySelectorAll('.shown').length === 0);
@@ -188,6 +189,30 @@ const PROBE = `(function () {
   check('the category sheet shuts itself when a claim is answered',
     document.querySelector('details.sheet').open === true);
 
+  return wrong;
+})()`;
+
+// Every question in turn, on a page nobody has answered anything on. Marking by an offset
+// counted in bytes and spent in a browser highlights most of a Chinese review instead of one
+// sentence of it, and the first question in a fixture is usually English.
+const MARKS = `(function () {
+  var data = JSON.parse(document.getElementById('data').textContent);
+  var wrong = [];
+  // An HTML parser turns every carriage return in a text node into a newline, so a claim
+  // written on Windows can never come back out of the DOM byte for byte. Both sides are put
+  // in the same shape rather than the comparison being loosened to "close enough".
+  var same = function (text) { return String(text).replace(/\\r\\n?/g, '\\n'); };
+  for (var i = 0; i < data.questions.length; i += 1) {
+    var shown = document.querySelector('.review mark');
+    if (!shown) { wrong.push(i + ' has no mark at all'); break; }
+    if (same(shown.textContent) !== same(data.questions[i].claim)) {
+      wrong.push(i + ' marks ' + JSON.stringify(shown.textContent.slice(0, 30)) +
+                 ' where the claim is ' + JSON.stringify(data.questions[i].claim.slice(0, 30)));
+    }
+    if (i + 1 < data.questions.length) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    }
+  }
   return wrong;
 })()`;
 
@@ -249,8 +274,22 @@ try {
   }
 
   const fetched = asked.filter((url) => url !== page);
+
+  // Walked first, on a page nobody has answered anything on, because answering moves which
+  // question is on screen and the marks have to be checked against all of them.
+  const marks = (await evaluate(MARKS)).result?.result?.value ?? ["the marks could not be read"];
+  await send("Page.reload", { ignoreCache: true });
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
+    if (ready.result?.result?.value === true) break;
+    await sleep(250);
+  }
+
   const answer = await evaluate(PROBE);
-  const wrong = answer.result?.result?.value ?? ["the page could not be driven at all"];
+  const wrong = [
+    ...marks,
+    ...(answer.result?.result?.value ?? ["the page could not be driven at all"]),
+  ];
 
   // Reloading is what a reader does after closing the tab, and it is the whole reason the
   // answers are kept at all.

@@ -17,8 +17,8 @@ fn question(id: &str, claim: &str, review: &str, shown: Option<Vec<Answered>>) -
         review_id: id.to_owned(),
         index: 0,
         claim: claim.to_owned(),
-        review: review.to_owned(),
-        at,
+        before: review[..at].to_owned(),
+        after: review[at + claim.len()..].to_owned(),
         language: "english".to_owned(),
         shown,
     }
