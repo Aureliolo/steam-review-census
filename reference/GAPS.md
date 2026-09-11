@@ -348,6 +348,14 @@ heading, and the two together weighed enough to stand. **Done in `claims-4`**: a
 words in it is never a piece, markup weighs nothing, and a heading is read for its colon
 with the tags taken out.
 
+### Drawn art cut one line per claim, reported on 916440 and 629730
+
+A fifteen-line braille drawing, a nine-line ASCII hand, a zalgo block: one picture, cut into
+a claim per line, each of which is not words at all. Recognisable by what a line is made of
+rather than by what it says: a line with no letter or digit in it, in a run of such lines, is
+part of a picture. Three or more in a row are one claim, which the reader will decline and
+which is the right answer for a drawing. Goes in `claims-5` with the box template.
+
 ### Two shapes that may not be fixable mechanically
 
 - A crash log or a poem cut line by line into fragments that say nothing alone.
@@ -356,14 +364,15 @@ with the tags taken out.
   list; a sentence that names three things in ordinary grammar keeps one subject and the model
   learns the rest from context.
 
-### The ballot-box template, reported on 629730 and 690790
+### The ballot-box template, reported by four labellers in a row
 
 The copypasta review: `{ Graphics }` and then a column of options, one ticked and the rest
-left blank. One on 690790 came back as **58 claims**, one on 629730 as 22, and both labellers
-flagged nearly every fragment. Across every drawn set it is 8 reviews of 5,760, one in
-seven hundred, but those eight hold 443 claims, and 346 of them are a box line: **1.8% of
-every drawn claim** in the whole reference set is a tick box. It is also what pushed 629730
-to a 40.7% mis-split rate, the worst of any game.
+left blank. One on 690790 came back as **58 claims**, one on 774361 as 70, one on 916440 as
+65, one on 629730 as 22, and every labeller flagged nearly every fragment. Across every drawn
+set it is 8 reviews of 5,760, one in seven hundred, but those eight hold 443 claims, and 346
+of them are a box line: **1.8% of every drawn claim** in the whole reference set is a tick
+box. It is also what pushed 629730 to a 40.7% mis-split rate, the worst of any game, and
+916440 to 29%.
 
 It is mechanically recognisable, which the other noise shapes are not. A line whose first
 character is a ballot box (`☐` U+2610, `☑` U+2611, `☒` U+2612) is a template option, and the
