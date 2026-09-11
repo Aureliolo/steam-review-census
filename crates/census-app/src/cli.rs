@@ -676,12 +676,34 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
 
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+    let table = |found: &census_core::reliability::Reliability| {
+        println!("\n  {:<14} {:>9} {:>8}   commonest split", "field", "agreed", "kappa");
+        for field in &found.fields {
+            let split = field.commonest_split.as_ref().map_or_else(
+                String::new,
+                |(a, b, count)| format!("{a} / {b} ({count})"),
+            );
+            let row = format!(
+                "  {:<14} {:>9} {:>8}   {split}",
+                field.field,
+                pct(field.rate()),
+                field
+                    .kappa
+                    .map_or_else(|| "-".to_owned(), |k| format!("{k:.2}"))
+            );
+            println!("{}", row.trim_end());
+        }
+    };
+
+    let mut every = census_core::reliability::Paired::default();
+    let several = wanted.len() > 1;
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
-        let found = census_core::reliability::compare(
+        let pairs = census_core::reliability::paired(
             &dir.join("labels.json"),
             &dir.join("second").join("labels.json"),
         )?;
+        let found = census_core::reliability::over(&pairs);
 
         println!("\napp {app_id}");
         println!(
@@ -689,28 +711,46 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
             thousands(found.overlap),
             thousands(found.only_first + found.only_second)
         );
-        println!("\n  {:<14} {:>9} {:>8} {:>18}", "field", "agreed", "kappa", "commonest split");
-        for field in &found.fields {
-            let split = field.commonest_split.as_ref().map_or_else(
-                String::new,
-                |(a, b, count)| format!("{a} / {b} ({count})"),
-            );
-            println!(
-                "  {:<14} {:>9} {:>8} {split:>18}",
-                field.field,
-                pct(field.rate()),
-                field
-                    .kappa
-                    .map_or_else(|| "-".to_owned(), |k| format!("{k:.2}"))
-            );
-        }
+        table(&found);
+        every.extend(pairs);
     }
+
+    let pooled = census_core::reliability::over(&every);
+    if several {
+        println!("\npooled over every set, {} claims read twice", thousands(pooled.overlap));
+        table(&pooled);
+    }
+
+    // The contested flag is the one field with no way to check itself, and the one the reports
+    // lean on hardest. This is the check.
+    let contested = &pooled.contested;
+    println!(
+        "\n  contested: the first labeller flagged {}, the second {}",
+        pct(contested.first_share),
+        pct(contested.second_share)
+    );
+    println!(
+        "  on the {} claims neither flagged, they agree on the subject {} of the time",
+        thousands(contested.clear),
+        pct(contested.clear_rate())
+    );
+    println!(
+        "  on the {} claims either flagged, {}",
+        thousands(contested.flagged),
+        pct(contested.flagged_rate())
+    );
 
     println!(
         "\nKappa is agreement beyond what these two labellers' own habits would produce by \
          chance.\nA corpus is mostly `verdict` and `offtopic`, so two labellers who never read \
          a claim\nwould still agree most of the time; the percentage alone cannot tell you that \
-         apart\nfrom reading. Below about 0.4 the two are not labelling the same thing."
+         apart\nfrom reading. Below about 0.4 the two are not labelling the same thing.\n\n\
+         The contested lines are the sheet's definition of the flag being tested. It says a \
+         claim is\ncontested when two subjects fit and the rules do not settle which, so a \
+         claim neither\nlabeller flagged should be one they agree on. Where they do and the \
+         flag is still\nreached for at very different rates, the flag is recording how sure \
+         each labeller felt\nrather than anything about the claim, and the reports must not \
+         read it as the latter."
     );
     Ok(())
 }

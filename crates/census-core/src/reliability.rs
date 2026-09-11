@@ -56,6 +56,7 @@ pub struct Reliability {
     pub only_first: u64,
     pub only_second: u64,
     pub fields: Vec<FieldAgreement>,
+    pub contested: Contested,
 }
 
 impl Reliability {
@@ -66,12 +67,29 @@ impl Reliability {
     }
 }
 
-/// Compares two labellings of the same claims.
+/// Two labellings joined claim by claim, with how many claims each had that the other did not.
+#[derive(Debug, Clone, Default)]
+pub struct Paired {
+    pub both: Vec<(ClaimLabel, ClaimLabel)>,
+    pub only_first: u64,
+    pub only_second: u64,
+}
+
+impl Paired {
+    /// Adds another game's pairs to these, so several games can be read as one set.
+    pub fn extend(&mut self, other: Self) {
+        self.both.extend(other.both);
+        self.only_first += other.only_first;
+        self.only_second += other.only_second;
+    }
+}
+
+/// The claims two labellings share, joined by review id and claim position.
 ///
 /// # Errors
 ///
 /// Fails if either file is missing or is not a list of labels.
-pub fn compare(first: &std::path::Path, second: &std::path::Path) -> Result<Reliability> {
+pub fn paired(first: &std::path::Path, second: &std::path::Path) -> Result<Paired> {
     let read = |path: &std::path::Path| -> Result<Vec<ClaimLabel>> {
         let bytes = std::fs::read(path).map_err(|_| crate::Error::NoReferenceSet {
             path: path.to_path_buf(),
@@ -80,20 +98,40 @@ pub fn compare(first: &std::path::Path, second: &std::path::Path) -> Result<Reli
     };
 
     let (left, right) = (read(first)?, read(second)?);
-    let mine: HashMap<(String, u16), &ClaimLabel> = left
-        .iter()
-        .map(|label| ((label.review_id.clone(), label.index), label))
-        .collect();
-    let theirs: HashMap<(String, u16), &ClaimLabel> = right
-        .iter()
+    let mut theirs: HashMap<(String, u16), ClaimLabel> = right
+        .into_iter()
         .map(|label| ((label.review_id.clone(), label.index), label))
         .collect();
 
-    let both: Vec<(&ClaimLabel, &ClaimLabel)> = mine
-        .iter()
-        .filter_map(|(key, label)| theirs.get(key).map(|other| (*label, *other)))
-        .collect();
+    let mut found = Paired::default();
+    for label in left {
+        match theirs.remove(&(label.review_id.clone(), label.index)) {
+            Some(other) => found.both.push((label, other)),
+            None => found.only_first += 1,
+        }
+    }
+    found.only_second = theirs.len() as u64;
+    Ok(found)
+}
 
+/// Compares two labellings of the same claims.
+///
+/// # Errors
+///
+/// Fails if either file is missing or is not a list of labels.
+pub fn compare(first: &std::path::Path, second: &std::path::Path) -> Result<Reliability> {
+    Ok(over(&paired(first, second)?))
+}
+
+/// The same comparison over claims already paired, so several games can be pooled.
+///
+/// Pooled by adding the claims rather than averaging the games, for the same reason the
+/// model's agreement is: a game with twenty-five claims read twice should not weigh as much as
+/// one with eighty-seven.
+#[must_use]
+pub fn over(paired: &Paired) -> Reliability {
+    let pairs: Vec<(&ClaimLabel, &ClaimLabel)> =
+        paired.both.iter().map(|(a, b)| (a, b)).collect();
     let fields = [
         (
             "subject",
@@ -106,15 +144,77 @@ pub fn compare(first: &std::path::Path, second: &std::path::Path) -> Result<Reli
         ("confidence", |label| label.confidence.clone()),
     ];
 
-    Ok(Reliability {
-        overlap: both.len() as u64,
-        only_first: (mine.len() - both.len()) as u64,
-        only_second: (theirs.len() - both.len()) as u64,
+    Reliability {
+        overlap: pairs.len() as u64,
+        only_first: paired.only_first,
+        only_second: paired.only_second,
         fields: fields
             .iter()
-            .map(|(name, of)| score(name, &both, *of))
+            .map(|(name, of)| score(name, &pairs, *of))
             .collect(),
-    })
+        contested: Contested::over(&pairs),
+    }
+}
+
+/// Whether `ambiguous` means what the sheet says it means.
+///
+/// The sheet defines it as a property of the claim and the taxonomy: two subjects fit and the
+/// rules do not settle which. If that is what labellers are recording, then a claim neither of
+/// them called contested is one the rules do settle, and they should agree on its subject
+/// almost always. If they do not, the field is recording something else, most likely how the
+/// labeller felt, and it cannot be read the way the reports read it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Contested {
+    /// How often each labeller reached for the flag. Two labellers reading the same
+    /// definition should reach for it at roughly the same rate.
+    pub first_share: Option<f64>,
+    pub second_share: Option<f64>,
+    /// Claims neither labeller called contested, and how often they agreed on the subject.
+    pub clear: u64,
+    pub clear_agreed: u64,
+    /// Claims either labeller called contested, and the same.
+    pub flagged: u64,
+    pub flagged_agreed: u64,
+}
+
+impl Contested {
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    fn over(pairs: &[(&ClaimLabel, &ClaimLabel)]) -> Self {
+        let total = pairs.len() as f64;
+        let mut found = Self {
+            first_share: (!pairs.is_empty())
+                .then(|| pairs.iter().filter(|(a, _)| a.ambiguous).count() as f64 / total),
+            second_share: (!pairs.is_empty())
+                .then(|| pairs.iter().filter(|(_, b)| b.ambiguous).count() as f64 / total),
+            clear: 0,
+            clear_agreed: 0,
+            flagged: 0,
+            flagged_agreed: 0,
+        };
+        for (a, b) in pairs {
+            let same = u64::from(a.subject == b.subject);
+            if a.ambiguous || b.ambiguous {
+                found.flagged += 1;
+                found.flagged_agreed += same;
+            } else {
+                found.clear += 1;
+                found.clear_agreed += same;
+            }
+        }
+        found
+    }
+
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn clear_rate(&self) -> Option<f64> {
+        (self.clear > 0).then(|| self.clear_agreed as f64 / self.clear as f64)
+    }
+
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn flagged_rate(&self) -> Option<f64> {
+        (self.flagged > 0).then(|| self.flagged_agreed as f64 / self.flagged as f64)
+    }
 }
 
 fn score(
@@ -268,6 +368,51 @@ mod tests {
         let scored = score("subject", &pairs(&rows), |label| label.subject.clone());
         let (a, b, count) = scored.commonest_split.expect("they disagreed");
         assert_eq!((a.as_str(), b.as_str(), count), ("gameplay", "story", 2));
+    }
+
+    #[test]
+    fn the_contested_flag_is_checked_against_what_it_claims_to_mean() {
+        // Two claims neither labeller flagged, agreed on; two that one of them flagged, one
+        // agreed and one not. If the flag means what the sheet says, the unflagged ones are
+        // the ones the rules settle, and 100% on them is what "settled" looks like.
+        let rows = vec![
+            (label("1", 0, "bugs", false), label("1", 0, "bugs", false)),
+            (label("1", 1, "story", false), label("1", 1, "story", false)),
+            (label("1", 2, "genre", true), label("1", 2, "genre", false)),
+            (label("1", 3, "verdict", false), label("1", 3, "genre", true)),
+        ];
+        let found = over(&Paired {
+            both: rows,
+            only_first: 0,
+            only_second: 0,
+        });
+        let contested = &found.contested;
+        assert_eq!((contested.clear, contested.clear_agreed), (2, 2));
+        assert_eq!((contested.flagged, contested.flagged_agreed), (2, 1));
+        assert!((contested.first_share.unwrap() - 0.25).abs() < 1e-9);
+        assert!((contested.second_share.unwrap() - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pooling_two_games_adds_their_claims() {
+        let mut every = Paired {
+            both: vec![(label("1", 0, "bugs", false), label("1", 0, "bugs", false))],
+            only_first: 1,
+            only_second: 0,
+        };
+        every.extend(Paired {
+            both: vec![
+                (label("2", 0, "story", false), label("2", 0, "story", false)),
+                (label("2", 1, "story", false), label("2", 1, "price", false)),
+            ],
+            only_first: 0,
+            only_second: 2,
+        });
+        let found = over(&every);
+        assert_eq!(found.overlap, 3);
+        assert_eq!((found.only_first, found.only_second), (1, 2));
+        let subject = found.subject().expect("subject is always scored");
+        assert_eq!((subject.compared, subject.agreed), (3, 2));
     }
 
     #[test]
