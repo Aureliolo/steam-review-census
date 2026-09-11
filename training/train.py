@@ -446,9 +446,13 @@ def run(args) -> dict:
             scaler.step(optimiser)
             scaler.update()
             schedule.step()
-            running += float(loss)
+            running += float(loss.detach())
             if step % 50 == 0:
-                print(f"  epoch {epoch + 1} step {step}/{len(loaders['train'])} loss {running / (step + 1):.4f}")
+                print(
+                    f"  epoch {epoch + 1} step {step}/{len(loaders['train'])} "
+                    f"loss {running / (step + 1):.4f}",
+                    flush=True,
+                )
 
         metrics = evaluate(
             model, loaders["validation"], device, subjects, validation, args.min_accuracy
@@ -464,7 +468,8 @@ def run(args) -> dict:
         )
         print(
             f"  abstains below {metrics['threshold']:.2f}: {answers}"
-            f"{'' if metrics['threshold_met'] else f' (wanted {args.min_accuracy:.2f})'}"
+            f"{'' if metrics['threshold_met'] else f' (wanted {args.min_accuracy:.2f})'}",
+            flush=True,
         )
 
     # Scored once more outside the loop, so what `run.json` reports is measured from the same
