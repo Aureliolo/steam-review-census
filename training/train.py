@@ -33,6 +33,11 @@ import data as claimdata
 HERE = Path(__file__).resolve().parent
 POLARITIES = claimdata.POLARITIES
 
+# What marks the claim inside its window. Two characters no reviewer writes, which the
+# tokenizer already knows: a token added to the vocabulary starts from noise and this one has
+# to mean something after four thousand training claims, not four hundred thousand.
+MARK = "**"
+
 
 class Claims(Dataset):
     def __init__(
@@ -44,10 +49,12 @@ class Claims(Dataset):
         context=False,
         ambiguous_weight=1.0,
         split_wrong_weight=1.0,
+        mark=False,
     ):
         self.claims = claims
         self.ambiguous_weight = ambiguous_weight
         self.split_wrong_weight = split_wrong_weight
+        self.mark = mark
         self.tokenizer = tokenizer
         self.subjects = {name: index for index, name in enumerate(subjects)}
         self.polarities = {name: index for index, name in enumerate(POLARITIES)}
@@ -89,7 +96,16 @@ class Claims(Dataset):
         spare = max(self.max_length - 2 * (last - first) - 4, 0) // 2
         opens = offsets[max(first - spare, 0)][0]
         closes = offsets[min(last + spare, len(offsets)) - 1][1]
-        return claim.review[opens:closes]
+        if not self.mark:
+            return claim.review[opens:closes]
+        # Where the claim sits inside its window, said in the text itself. A pair alone gives
+        # the model the claim and its surroundings but not which sentence of the surroundings
+        # is the one being asked about, and in a review that makes the same point twice about
+        # two different things, that is the whole question.
+        return (
+            f"{claim.review[opens:at]}{MARK} {claim.review[at:ends]} {MARK}"
+            f"{claim.review[ends:closes]}"
+        )
 
     def __getitem__(self, at):
         claim = self.claims[at]
@@ -384,6 +400,7 @@ def run(args) -> dict:
                 # than a whole claim would be marking the model's own exam generously.
                 args.ambiguous_weight if name == "train" else 1.0,
                 args.split_wrong_weight if name == "train" else 1.0,
+                args.mark,
             ),
             batch_size=args.batch_size,
             shuffle=name == "train",
@@ -500,6 +517,7 @@ def run(args) -> dict:
         "max_length": args.max_length,
         "context": args.context,
         "seed": args.seed,
+        "mark": args.mark,
         "ambiguous_weight": args.ambiguous_weight,
         "split_wrong_weight": args.split_wrong_weight,
         "polarity_weight": args.polarity_weight,
@@ -570,6 +588,13 @@ def parse():
         help="train on only this many of the training games, chosen in a fixed hash order so "
         "that every run of a learning curve uses the same ones. The validation and frozen "
         "games are untouched, so the curve is read against one unmoving test set.",
+    )
+    parser.add_argument(
+        "--mark",
+        action="store_true",
+        help="mark the claim where it sits inside its window, as well as giving it as the "
+        "first sequence. A pair alone says what the claim is and what surrounds it, but not "
+        "which sentence of the surroundings is the one being asked about.",
     )
     parser.add_argument(
         "--ambiguous-weight",
