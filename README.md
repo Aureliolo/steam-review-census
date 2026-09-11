@@ -297,19 +297,20 @@ These rules keep those figures honest:
   would commit to. The share it declined is printed beside it, and a large one is a finding
   about the corpus rather than a footnote.
 
-  **Right now that share is most of the corpus.** Trained on eleven games, the model answers
-  about an eighth of the claims in a game it has never seen and agrees with a labeller on 62%
-  of those, so seven claims in eight come back unclassified and a mention rate is a floor
+  **Right now that share is most of the corpus.** Trained on fifteen games, the model answers
+  about a quarter of the claims in a game it has never seen and agrees with a labeller on 75%
+  of those, so three claims in four come back unclassified and a mention rate is a floor
   rather than a count. Every report says so on its face. The only cure is more labelled claims,
   which is what the reference sets are for; a threshold moved to make the number look better
-  would be the old classifier again.
+  would be the old classifier again. Four games earlier the figures were an eighth and 62%,
+  so the labels are doing what they are for.
 
-- **A threshold chosen on a few games does not transfer to a new one.** The threshold promises
-  an accuracy, and that promise is measured on the games that chose it. On the frozen games it
-  has never seen, the same threshold delivers eighteen points less. So every figure in the
-  model card comes from the frozen games, and the validation figures stay in the run record
-  where they belong. With eleven games there are two of each, which is thin; the fix is more
-  games, not a better estimator.
+- **A threshold chosen on a few games may not transfer to a new one.** The threshold promises
+  an accuracy, and that promise is measured on the games that chose it. On eleven games the
+  frozen ones delivered eighteen points less than promised; on fifteen they deliver within a
+  point. So every figure in the model card comes from the frozen games, and the validation
+  figures stay in the run record where they belong. Which games are frozen is fixed by a hash
+  of each game's id, so adding games never moves one across the line.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool

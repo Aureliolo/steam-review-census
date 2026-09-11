@@ -25,7 +25,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Every other percentage says which denominator it uses | done |
 | **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-3` and the reading pass counts per claim |
 | Shallow is the opt-out, and neither depth drops a review | done; `--depth shallow`, recorded in the reading and named on the page as not comparable |
-| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain is built and unrun: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it. The reports do not yet show induced rows |
+| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain is built end to end and unrun: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it, and the report shows what survives under the table with its evidence and no invented rate |
 | Extras are discovered by an **LLM reading an embedding-diverse sample** | the sample is farthest-point traversal over a hash-drawn pool of four thousand vectors, measured to put a mechanics review, a localisation joke, a crash report and a difficulty complaint in its first eight picks. The reading is one agent call of about 12k tokens per game, run one at a time behind the labellers |
 | Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
 | **Corrected prevalence**: the measured error corrects the rate rather than sitting beside it | done, per subject, where the model finds it better than chance |
@@ -125,6 +125,19 @@ Then eleven games, 5,574 claims, measured with games held out whole:
 | Does that promise transfer? | **No.** On the two frozen games the same threshold answers **13%** of claims at **0.620**, not 0.756. It was chosen on two validation games and overfits them |
 | Is it calibrated? | Better where it matters least: calibration error 0.066 on the frozen games against 0.132 on validation, but area under the risk-coverage curve 0.543 there against 0.386, so its confidence ranks claims worse on a game it has not seen |
 | What does it still not know? | `gameplay` has 257 labelled claims in one frozen game and the model answers **none** of them. `controls`, `difficulty` and `content` likewise. `accessibility`, `community`, `compatibility` and `language` score zero F1 for want of labels |
+
+Then fifteen games, 7,680 claims, on a frozen set fixed by hash so it cannot move again:
+
+| Question | Answer |
+|---|---|
+| How good is it on a game it has never seen? | Accuracy **0.476**, macro F1 **0.385**, polarity F1 0.700, on three frozen games |
+| How much does it answer, and how well? | **27% of claims at 0.747**, in [0.696, 0.792] over 316 claims. Four games earlier it was 13% at 0.620 |
+| Does the promise transfer now? | **Within a point**: 0.757 promised on validation, 0.747 delivered frozen |
+| Why did it start transferring? | Area under the risk-coverage curve fell from 0.543 to **0.351**. The model learned when it does not know, which is the whole of what lets a threshold carry to a new game |
+
+The frozen games are different games from the eleven-game run, because the old split
+reassigned them; so the before and after are not over the same reviews. What is not in doubt
+is the direction, and that labels are what moved it.
 
 Then the set was read a second time, a tenth of it, by a different labeller working blind:
 
