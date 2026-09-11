@@ -272,6 +272,22 @@ struct Subject {
     top_rate: Option<f64>,
     bias: Option<f64>,
     positive: Option<f64>,
+    /// What the share of claims would be with the model's measured errors taken out, where
+    /// this game has labels and the model finds the subject better than chance.
+    corrected: Option<f64>,
+    /// Of the labelled claims about this subject, the share the model found. A subject it
+    /// misses most of is a row whose rate is a floor, and the window marks it.
+    found: Option<f64>,
+}
+
+/// How often the model is measured to be wrong on this game, where it has been measured.
+#[derive(Debug, Clone, Serialize)]
+struct Measured {
+    answered: u64,
+    declined: u64,
+    agreement: Option<f64>,
+    low: Option<f64>,
+    high: Option<f64>,
 }
 
 /// What reading a corpus found, ready for the window.
@@ -290,6 +306,7 @@ struct Reading {
     model: String,
     threshold: f32,
     subjects: Vec<Subject>,
+    measured: Option<Measured>,
 }
 
 #[expect(
@@ -311,12 +328,27 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         .map_err(text)?;
     let facts = report::crawl_facts(&dir, app_id).map_err(text)?;
 
+    // The measurement, where this game has labelled claims. A game without them still
+    // renders; it just cannot say how often it is wrong, and the window says that instead.
+    let reference = census_core::claimset::default_reference_dir(app_id);
+    let agreement = reference
+        .join("labels.json")
+        .is_file()
+        .then(|| census_core::measure::agreement(&dir, app_id, &reference).ok())
+        .flatten();
+    let scored = |id: &str| {
+        agreement
+            .as_ref()
+            .and_then(|found| found.subjects.iter().find(|s| s.id == id))
+    };
+
     let subjects = found
         .subjects
         .iter()
         .map(|subject| {
             let rate = share_of(subject.mention_reviews, found.reviews);
             let top_rate = share_of(subject.top_mention_reviews, found.top_helpful);
+            let measured = scored(&subject.id).filter(|s| s.labelled >= 10);
             Subject {
                 id: subject.id.clone(),
                 label: subject.label.clone(),
@@ -332,9 +364,24 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
                     _ => None,
                 },
                 positive: share_of(subject.positive_mentions, subject.mention_reviews),
+                corrected: measured.and_then(|s| {
+                    share_of(subject.claims, found.claims).and_then(|observed| s.corrected(observed))
+                }),
+                found: measured.and_then(census_core::measure::SubjectAgreement::recall),
             }
         })
         .collect();
+
+    let measured = agreement.as_ref().map(|found| {
+        let interval = found.interval();
+        Measured {
+            answered: found.answered,
+            declined: found.declined,
+            agreement: found.rate(),
+            low: interval.map(|(low, _)| low),
+            high: interval.map(|(_, high)| high),
+        }
+    });
 
     Ok(Reading {
         app_id,
@@ -350,6 +397,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         model: found.model.clone(),
         threshold: found.threshold,
         subjects,
+        measured,
     })
 }
 

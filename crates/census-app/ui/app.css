@@ -545,6 +545,28 @@ button.quiet-button:hover {
   font-weight: 520;
 }
 
+.counts .thin {
+  display: inline-block;
+  margin-left: 0.4rem;
+  width: 1.1em;
+  height: 1.1em;
+  line-height: 1.1em;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--over-soft);
+  color: var(--over);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: help;
+}
+
+.counts .corrected {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  cursor: help;
+}
+
 .counts .rate {
   position: relative;
   text-align: right;

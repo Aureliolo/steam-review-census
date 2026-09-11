@@ -216,6 +216,22 @@ function drawTopics(counted) {
       `below is a floor: what it was sure of, not everything that was said.`,
   );
 
+  /* How often it is wrong, where that has been measured. A rate without this beside it is an
+     opinion with decimal places, and a game nobody has labelled is told so rather than
+     shown the same table with nothing missing from it. */
+  const measured = counted.measured;
+  const trust =
+    measured === null
+      ? `Nobody has labelled this game's claims, so how often the model is wrong here has ` +
+        `not been measured. Treat every rate as provisional.`
+      : measured.agreement === null
+        ? `The model declined every labelled claim on this game, so nothing here is measured.`
+        : `Where this game has been labelled, the model named the same subject a separate ` +
+          `labeller did ${share.format(measured.agreement)} of the time on the ` +
+          `${whole.format(measured.answered)} claims it answered, somewhere between ` +
+          `${share.format(measured.low)} and ${share.format(measured.high)}. That is agreement ` +
+          `with another model, not accuracy.`;
+
   set(
     el('topics-footnote'),
     `Mention rates count a review once for every subject it raises, however many times it ` +
@@ -223,8 +239,9 @@ function drawTopics(counted) {
       (caveat.hidden
         ? `${share.format(unread)} of points name no subject the model would commit to, and ` +
           `${whole.format(counted.silent_reviews)} reviews name none at all. Those are ` +
-          `counted here rather than filed under whatever came closest.`
-        : `Every row opens onto the points behind it.`),
+          `counted here rather than filed under whatever came closest. `
+        : `Every row opens onto the points behind it. `) +
+      trust,
   );
 
   const rows = el('topic-rows');
@@ -239,6 +256,26 @@ function drawTopics(counted) {
     open.textContent = subject.label;
     open.addEventListener('click', () => openClaims(subject, 0));
     name.append(open);
+    /* Marked where the model is measured to miss most of a subject's labelled claims: that
+       row's rate is a floor, and a reader scanning the table cannot tell it from a count
+       unless the row says so. */
+    if (subject.found !== null && subject.found < 0.25) {
+      const thin = document.createElement('span');
+      thin.className = 'thin';
+      thin.title = `Found in only ${share.format(subject.found)} of the labelled claims about it, so this rate is a floor rather than a count`;
+      thin.textContent = '!';
+      name.append(thin);
+    }
+    /* The corrected share, where the measured errors allow one. Shown as a hint on the name
+       rather than a column of its own, because most games have no labels and a column that
+       is empty for most of them teaches a reader to skip it. */
+    if (subject.corrected !== null) {
+      const fixed = document.createElement('span');
+      fixed.className = 'corrected';
+      fixed.title = 'The share of points about this with the model’s measured errors taken out';
+      fixed.textContent = `≈ ${share.format(subject.corrected)} of points`;
+      name.append(fixed);
+    }
 
     const rate = document.createElement('td');
     rate.className = 'num rate';
