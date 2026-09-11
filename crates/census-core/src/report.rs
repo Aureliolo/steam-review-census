@@ -129,6 +129,14 @@ pub struct Example {
 }
 
 impl Example {
+    /// Whether the model read this. An induced subject's evidence is whole reviews a
+    /// language model picked out, and the counting model has never seen them; they carry no
+    /// polarity and no confidence, and the page must not invent either.
+    #[must_use]
+    pub fn was_read(&self) -> bool {
+        !self.polarity.is_empty()
+    }
+
     /// Where this review lives on Steam, so any quoted claim can be checked at the source.
     #[must_use]
     pub fn url(&self, app_id: u32) -> Option<String> {
@@ -152,6 +160,16 @@ pub struct AppReport {
     pub top: Vec<Example>,
     /// Measured agreement against a reference set, or why there is none.
     pub agreement: Measurement,
+    /// What this game's players talk about that the spine has no row for, where a reading
+    /// has induced any, with the reviews behind each.
+    pub induced: Vec<InducedEvidence>,
+}
+
+/// One induced subject with the reviews that earned it, fetched so the page can quote them.
+#[derive(Debug, Clone)]
+pub struct InducedEvidence {
+    pub subject: crate::induced::Induced,
+    pub reviews: Vec<CapturedReview>,
 }
 
 /// Whether a game's error has been measured, and what stopped it if not.
@@ -482,13 +500,44 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     top.dedup_by(|a, b| a.review.id == b.review.id);
 
     let agreement = agreement_for(app_id, &options.out_dir);
+    let induced = induced_for(app_id, &snapshot, options.examples)?;
     Ok(AppReport {
         crawl,
         reading,
         examples,
         top,
         agreement,
+        induced,
     })
+}
+
+/// A game's induced subjects with a few of the reviews behind each, or nothing.
+///
+/// A game nobody has induced subjects for renders without the section, and the page says so
+/// in one line rather than leaving an empty heading.
+fn induced_for(app_id: u32, snapshot: &Path, examples: usize) -> Result<Vec<InducedEvidence>> {
+    let Some(set) = crate::induced::load(&crate::induced::default_path(app_id))? else {
+        return Ok(Vec::new());
+    };
+    let wanted: HashSet<String> = set
+        .subjects
+        .iter()
+        .flat_map(|subject| subject.evidence.iter().take(examples).cloned())
+        .collect();
+    let fetched = crate::capture::reviews_for(snapshot, &wanted)?;
+    Ok(set
+        .subjects
+        .into_iter()
+        .map(|subject| {
+            let reviews = subject
+                .evidence
+                .iter()
+                .take(examples)
+                .filter_map(|id| fetched.get(id).cloned())
+                .collect();
+            InducedEvidence { subject, reviews }
+        })
+        .collect())
 }
 
 /// The ids of the most-helpful reviews in a capture, as Steam ranks them.
@@ -704,6 +753,7 @@ mod tests {
             examples: Vec::new(),
             top: Vec::new(),
             agreement: Measurement::Unlabelled,
+            induced: Vec::new(),
         }
     }
 

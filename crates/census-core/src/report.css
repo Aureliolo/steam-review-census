@@ -406,6 +406,38 @@ section.game {
   font-variant-numeric: tabular-nums;
 }
 
+/* One entry per induced subject: a name, a sentence, and the reviews folded under it. Laid
+   out as a list rather than a table because these rows have no numbers to line up. */
+dl.induced {
+  margin: 0 0 1.5rem;
+  max-width: var(--measure);
+}
+
+dl.induced .found {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+}
+
+dl.induced dt {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+dl.induced dd {
+  margin: 0;
+}
+
+dl.induced dd > p {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+}
+
+dl.induced summary {
+  cursor: pointer;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
 .headline {
   background: var(--card);
   border: 1px solid var(--line);

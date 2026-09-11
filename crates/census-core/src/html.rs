@@ -510,6 +510,7 @@ fn game(out: &mut String, app: &AppReport, several: bool) {
     headline(out, app);
     over_time(out, app);
     categories(out, app);
+    induced(out, app);
     top_of_the_pile(out, app);
     languages(out, app);
     trust(out, app);
@@ -1245,6 +1246,78 @@ fn verdict_cell(out: &mut String, category: &SubjectCount, baseline: Option<f64>
     );
 }
 
+/// What this game's players talk about that no game shares.
+///
+/// Shown apart from the table above, and without a rate, because these have no readings: a
+/// subject was found by reading a hundred reviews chosen to be as unlike each other as the
+/// corpus allows, and the model that counts the table has never been trained on it. What can
+/// honestly be shown is the subject, a sentence on it, and the reviews it was found in.
+fn induced(out: &mut String, app: &AppReport) {
+    if app.induced.is_empty() {
+        return;
+    }
+    out.push_str("<h3>What this game's players talk about that others' do not</h3>\n");
+    let _ = writeln!(
+        out,
+        "<p class=\"note\">Found by reading reviews of this game chosen to be as unlike each \
+         other as possible, and named only where at least three of them raise the same thing. \
+         These rows carry no rate: the model that counts the table above has not been trained \
+         on them, so what is shown is the finding and the reviews it rests on.</p>"
+    );
+    out.push_str("<dl class=\"induced\">\n");
+    for found in &app.induced {
+        let subject = &found.subject;
+        let _ = write!(
+            out,
+            "<div class=\"found\"><dt>{}",
+            escape(&subject.label)
+        );
+        if let Some(parent) = subject
+            .refines
+            .as_deref()
+            .and_then(|id| CORE_SPINE.iter().find(|c| c.id == id))
+        {
+            let _ = write!(
+                out,
+                " <span class=\"chip\">a form of {}</span>",
+                escape(parent.label)
+            );
+        }
+        let _ = writeln!(
+            out,
+            "</dt>\n<dd><p>{}</p>",
+            escape(&subject.description)
+        );
+        if !found.reviews.is_empty() {
+            let _ = writeln!(
+                out,
+                "<details><summary>{} of the {} reviews it was found in</summary>",
+                found.reviews.len(),
+                subject.evidence.len()
+            );
+            out.push_str("<ol class=\"reviews\">\n");
+            for review in &found.reviews {
+                // The whole review, with no polarity and no confidence, because the
+                // counting model never read it and the renderer shows neither for one it
+                // did not.
+                let example = Example {
+                    review: review.clone(),
+                    claim: review.text.clone(),
+                    index: 0,
+                    polarity: String::new(),
+                    confidence: 0.0,
+                    also: Vec::new(),
+                    from_the_top: false,
+                };
+                self::review(out, app, &example);
+            }
+            out.push_str("</ol>\n</details>\n");
+        }
+        out.push_str("</dd></div>\n");
+    }
+    out.push_str("</dl>\n");
+}
+
 fn top_of_the_pile(out: &mut String, app: &AppReport) {
     if app.top.is_empty() {
         return;
@@ -1357,11 +1430,15 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
     }
     // A claim that scraped past the threshold and one the model is certain of are not equally
     // good evidence, and a page that shows them identically is inviting the wrong conclusion.
-    let _ = write!(
-        out,
-        "<span class=\"sure\">{} sure</span>",
-        percent(f64::from(example.confidence))
-    );
+    // A review the model never read carries no polarity and gets no confidence either: an
+    // invented "100% sure" on it would be the one lie this line exists to prevent.
+    if example.was_read() {
+        let _ = write!(
+            out,
+            "<span class=\"sure\">{} sure</span>",
+            percent(f64::from(example.confidence))
+        );
+    }
     out.push_str("</div>\n");
 
     // The page is in English and most of the reviews on it are not. Saying so is what lets a
@@ -1402,12 +1479,14 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
     }
 
     out.push_str("<div class=\"filed\">");
-    let _ = write!(
-        out,
-        "<span class=\"chip {}\">{}</span>",
-        escape(&example.polarity),
-        escape(&example.polarity)
-    );
+    if example.was_read() {
+        let _ = write!(
+            out,
+            "<span class=\"chip {}\">{}</span>",
+            escape(&example.polarity),
+            escape(&example.polarity)
+        );
+    }
     for id in &example.also {
         let label = CORE_SPINE
             .iter()
@@ -1968,6 +2047,7 @@ mod tests {
                 examples: vec![("bugs".to_owned(), vec![example])],
                 top: Vec::new(),
                 agreement: crate::report::Measurement::Unlabelled,
+                induced: Vec::new(),
             }],
         }
     }
@@ -2290,6 +2370,49 @@ mod tests {
         ] {
             no_dangling_links(&page);
         }
+    }
+
+    /// An induced subject's evidence was never read by the counting model, and the page must
+    /// not dress it as though it had been.
+    #[test]
+    fn an_induced_subject_shows_its_reviews_without_inventing_a_reading() {
+        let mut report = sample_report("ordinary text");
+        let review = report.apps[0].examples[0].1[0].review.clone();
+        report.apps[0].induced = vec![crate::report::InducedEvidence {
+            subject: crate::induced::Induced {
+                id: "mud-physics".to_owned(),
+                label: "Mud physics".to_owned(),
+                description: "How trucks behave in mud.".to_owned(),
+                refines: Some("gameplay".to_owned()),
+                evidence: vec!["42".to_owned(), "43".to_owned(), "44".to_owned()],
+            },
+            reviews: vec![review],
+        }];
+        let page = render(&report);
+
+        let section = page
+            .split_once("players talk about that others")
+            .expect("no induced section")
+            .1
+            .split_once("<h3>")
+            .map_or("", |(before, _)| before);
+        assert!(section.contains("Mud physics"), "{section}");
+        assert!(section.contains("a form of Gameplay"), "{section}");
+        assert!(section.contains("1 of the 3 reviews"), "{section}");
+        assert!(
+            !section.contains("sure</span>"),
+            "a review the model never read must not carry a confidence: {section}"
+        );
+        assert!(
+            !section.contains("class=\"chip neutral\"") && !section.contains("class=\"chip praise\""),
+            "nor a polarity: {section}"
+        );
+
+        let without = render(&sample_report("ordinary text"));
+        assert!(
+            !without.contains("players talk about that others"),
+            "a game with nothing induced gets no empty heading"
+        );
     }
 
     fn two_games() -> Report {
