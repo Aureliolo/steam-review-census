@@ -233,17 +233,27 @@ fn distinctive(this: &Counter, other: &Counter, everywhere: &HashMap<&str, u64>)
         if shown.len() == TERMS_SHOWN {
             break;
         }
-        // "frame drops" and "drops" say one thing, and the one that stood out more says it.
-        if shown.iter().any(|kept| shares_a_word(&kept.text, term)) {
-            continue;
-        }
-        // 中文, 文配 and 配音 used by exactly the same reviewers are one word, 中文配音, cut
-        // into the pairs the counter works in. Joined back up where the pairs overlap.
+        // "full price" and "full" say one thing. The word outranks the phrase whenever a few
+        // reviewers used it in some other phrase, and the phrase is still what was said, so
+        // it takes the word's place unless it was noticeably rarer.
         if let Some(kept) = shown
             .iter_mut()
-            .find(|kept| kept.reviews == reviews && overlaps(&kept.text, term))
+            .find(|kept| shares_a_word(&kept.text, term))
+        {
+            if term.contains(' ') && !kept.text.contains(' ') && nearly(reviews, kept.reviews) {
+                term.clone_into(&mut kept.text);
+                kept.reviews = reviews;
+            }
+            continue;
+        }
+        // 中文, 文配 and 配音 used by the same reviewers are one word, 中文配音, cut into the
+        // pairs the counter works in. Joined back up where the pairs overlap.
+        if let Some(kept) = shown
+            .iter_mut()
+            .find(|kept| nearly(reviews, kept.reviews) && overlaps(&kept.text, term))
         {
             kept.text = joined(&kept.text, term);
+            kept.reviews = kept.reviews.min(reviews);
             continue;
         }
         shown.push(Term {
@@ -252,6 +262,12 @@ fn distinctive(this: &Counter, other: &Counter, everywhere: &HashMap<&str, u64>)
         });
     }
     shown
+}
+
+/// Whether two counts are within a twentieth of each other, which is what "the same
+/// reviewers" means once a few of them have phrased a thing two ways.
+fn nearly(left: u64, right: u64) -> bool {
+    left * 20 >= right * 19 && right * 20 >= left * 19
 }
 
 /// Whether one term is a whole word of the other. "price tag" and "tag" are one finding;
@@ -332,6 +348,12 @@ impl Terms {
                     self.pair.clear();
                     self.pair.push(before);
                     self.pair.push(ch);
+                    // A filler pair breaks the chain as a filler word does, so 没有中文 yields
+                    // 中文 and not the bridge 有中 as well.
+                    if filler().contains(self.pair.as_str()) {
+                        last_dense = None;
+                        continue;
+                    }
                     visit(&self.pair);
                 }
                 last_dense = Some(ch);
@@ -418,12 +440,13 @@ const MODIFIERS: [&str; 12] = [
     "no", "not", "never", "without", "too", "on", "off", "less", "more", "only", "still", "always",
 ];
 
-/// English function words, and the handful of words that are function words in a Steam
-/// review: every claim is about a game somebody played. English only, because English is
-/// most of Steam and the other languages' function words fail the ownership bar on their
-/// own; a list for each of forty languages would be a maintenance burden with no measured
-/// return. Sentiment words are not here: "great" fails the ownership bar by itself, and
-/// "worth" is what the price subject is made of.
+/// Function words, and the handful of words that are function words in a Steam review:
+/// every claim is about a game somebody played. English and Chinese, which between them are
+/// most of Steam; the other languages' function words mostly fail the ownership bar on their
+/// own, and a list for each of forty languages would be a maintenance burden with no
+/// measured return. Sentiment words are not here: "great" fails the ownership bar by itself,
+/// and "worth" is what the price subject is made of. The Chinese entries are pairs, because
+/// pairs are what the counter cuts that script into.
 const FILLER: &str = "\
 the a an and or but if so as of to in at by for from with into onto about over under than \
 then that this these those there here it its it's is are was were be been being am i i'm i've \
@@ -435,7 +458,12 @@ every both few such own other another same one ones thing things something anyth
 everything someone anyone everyone yes yeah yep nope ok okay well like lot lots bit way \
 because cause while though although since until after before again out up down back through \
 around now ever yet far game games play played playing plays player players steam review \
-reviews";
+reviews \
+游戏 玩家 这个 那个 一个 自己 不是 就是 可以 什么 但是 因为 所以 如果 还是 已经 觉得 知道 一下 \
+一些 非常 比较 这样 那么 然后 而且 或者 虽然 不过 真的 感觉 我们 你们 他们 没有 有点 这种 那种 \
+时候 东西 的话 是的 不能 不会 不要 应该 可能 现在 之后 之前 以及 对于 关于 需要 只是 只有 而已 \
+的时 我的 你的 它的 他的 这些 那些 一样 一直 一点 一定 一起 还有 也是 都是 就会 就能 不了 不太 \
+太多 很多 玩了 玩的 玩过 玩到 小时 多小 个小";
 
 /// The filler words as a set, built once: the tokeniser asks about every word of every claim.
 fn filler() -> &'static HashSet<&'static str> {
@@ -654,6 +682,32 @@ mod tests {
     }
 
     #[test]
+    fn the_phrase_takes_the_place_of_a_word_nearly_always_said_inside_it() {
+        let mut said = Said::new(1);
+        for review in 0..100 {
+            said.note(0, Polarity::Praise, "cheap enough");
+            said.note(
+                0,
+                Polarity::Complaint,
+                if review < 97 {
+                    "full price is a joke"
+                } else {
+                    "the full game is a joke"
+                },
+            );
+            said.next_review();
+        }
+        let found = said.finish(&["price"]);
+        let criticised: Vec<&str> = found[0]
+            .criticised
+            .iter()
+            .map(|t| t.text.as_str())
+            .collect();
+        assert!(criticised.contains(&"full price"), "{criticised:?}");
+        assert!(!criticised.contains(&"full"), "{criticised:?}");
+    }
+
+    #[test]
     fn character_pairs_used_by_the_same_reviewers_are_joined_back_into_the_word() {
         let mut said = Said::new(1);
         for _ in 0..30 {
@@ -667,6 +721,8 @@ mod tests {
             .iter()
             .map(|t| t.text.as_str())
             .collect();
-        assert_eq!(criticised, ["没有中文配音"]);
+        // 没有 is "there is no", a function word, and the pair bridging it to the noun goes
+        // with it: what is left is the noun, joined back up from its pairs.
+        assert_eq!(criticised, ["中文配音"]);
     }
 }
