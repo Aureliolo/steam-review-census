@@ -476,6 +476,15 @@ the games that raise them, which is in progress. Diffuse rows are not fixed by l
 and `gameplay` at 0.55 on the largest pile in the set is the evidence: what those need is
 boundary text that says what they are not.
 
+**The cheapest fix for a starved row is not a new game, it is the claims already in the set.**
+`mods` went from nothing to 0.92 by being drawn out of `content` and `updates` by its own
+words: 213 claims asked, 155 moved. The same draw for the four broken rows, using the words
+`licence`, `adaptation`, `faithful`, `accessibility`, `subtitles`, `remap`, `vr`, `headset`,
+`toxic` and their neighbours, finds **458 claims across 34 games** already labelled as
+something else. At the rate the `mods` pass moved, that is roughly three times the current
+labels for `licensing`, `accessibility`, `vr` and `community` combined, without crawling or
+drawing a single new review. It is the first thing to spend labelling quota on.
+
 ## The corpus stopped being a corpus of games people like
 
 Measured 2026-09-11 over all 51 captures, 7.5M reviews. Before the fifteen chosen games
