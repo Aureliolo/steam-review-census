@@ -659,7 +659,12 @@ fn count_reviews(
                 positive_mentions: tally.positive_mentions,
             })
             .collect(),
-        said: said.finish(&CORE_SPINE.iter().map(|c| c.id).collect::<Vec<_>>()),
+        said: said.finish(
+            &CORE_SPINE
+                .iter()
+                .map(|c| (c.id, c.label))
+                .collect::<Vec<_>>(),
+        ),
         languages: ranked,
         months,
         elapsed: Duration::default(),

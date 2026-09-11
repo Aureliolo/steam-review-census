@@ -118,8 +118,10 @@ impl Said {
         }
     }
 
-    /// What stands out on each side of every subject, in the order the subjects were given.
-    pub(crate) fn finish(self, subject_ids: &[&str]) -> Vec<SaidAbout> {
+    /// What stands out on each side of every subject, in the order the subjects were given
+    /// as `(id, label)`. A subject's own name is never one of its words: "graphics" under
+    /// graphics and "tutorial" under tutorial say what the row label already said.
+    pub(crate) fn finish(self, subjects: &[(&str, &str)]) -> Vec<SaidAbout> {
         let mut everywhere: HashMap<&str, u64> = HashMap::new();
         for [praise, complaint] in &self.sides {
             for counter in [praise, complaint] {
@@ -130,13 +132,21 @@ impl Said {
         }
         self.sides
             .iter()
-            .zip(subject_ids)
-            .map(|([praise, complaint], id)| SaidAbout {
-                subject: (*id).to_owned(),
-                praising: praise.reviews,
-                complaining: complaint.reviews,
-                praised: distinctive(praise, complaint, &everywhere),
-                criticised: distinctive(complaint, praise, &everywhere),
+            .zip(subjects)
+            .map(|([praise, complaint], (id, label))| {
+                let mut own: Vec<String> = label
+                    .split(|ch: char| !ch.is_alphanumeric())
+                    .filter(|word| !word.is_empty())
+                    .map(str::to_lowercase)
+                    .collect();
+                own.push((*id).to_lowercase());
+                SaidAbout {
+                    subject: (*id).to_owned(),
+                    praising: praise.reviews,
+                    complaining: complaint.reviews,
+                    praised: distinctive(praise, complaint, &everywhere, &own),
+                    criticised: distinctive(complaint, praise, &everywhere, &own),
+                }
             })
             .collect()
     }
@@ -199,7 +209,12 @@ impl Counter {
     clippy::cast_precision_loss,
     reason = "review counts are far below 2^53"
 )]
-fn distinctive(this: &Counter, other: &Counter, everywhere: &HashMap<&str, u64>) -> Vec<Term> {
+fn distinctive(
+    this: &Counter,
+    other: &Counter,
+    everywhere: &HashMap<&str, u64>,
+    own_words: &[String],
+) -> Vec<Term> {
     if this.reviews < FEWEST_ON_A_SIDE {
         return Vec::new();
     }
@@ -207,6 +222,8 @@ fn distinctive(this: &Counter, other: &Counter, everywhere: &HashMap<&str, u64>)
         .terms
         .iter()
         .filter(|(_, here)| **here >= FEWEST_REVIEWS)
+        // The row's own name says nothing new alone; in a phrase ("no bugs") it does.
+        .filter(|(term, _)| !own_words.iter().any(|word| word == *term))
         .filter(|(term, here)| {
             let counted = everywhere.get(term.as_str()).copied().unwrap_or(**here);
             **here as f64 >= OWNED * counted as f64
@@ -442,9 +459,9 @@ const MODIFIERS: [&str; 12] = [
 ];
 
 /// Function words, and the handful of words that are function words in a Steam review:
-/// every claim is about a game somebody played. English and Chinese, which between them are
-/// most of Steam; the other languages' function words mostly fail the ownership bar on their
-/// own, and a list for each of forty languages would be a maintenance burden with no
+/// every claim is about a game somebody played. English, Chinese and a short list each for
+/// the next six languages Steam is written in; the rest mostly fail the ownership bar on
+/// their own, and a list for each of forty languages would be a maintenance burden with no
 /// measured return. Sentiment words are not here: "great" fails the ownership bar by itself,
 /// and "worth" is what the price subject is made of. The Chinese entries are pairs, because
 /// pairs are what the counter cuts that script into.
@@ -464,7 +481,26 @@ reviews \
 一些 非常 比较 这样 那么 然后 而且 或者 虽然 不过 真的 感觉 我们 你们 他们 没有 有点 这种 那种 \
 时候 东西 的话 是的 不能 不会 不要 应该 可能 现在 之后 之前 以及 对于 关于 需要 只是 只有 而已 \
 的时 我的 你的 它的 他的 这些 那些 一样 一直 一点 一定 一起 还有 也是 都是 就会 就能 不了 不太 \
-太多 很多 玩了 玩的 玩过 玩到 小时 多小 个小";
+太多 很多 玩了 玩的 玩过 玩到 小时 多小 个小 \
+и в не на что это как но а то же он она они мы вы я ты у из за для по от о до при или \
+если бы был была было были есть нет очень так только уже еще ещё все всё игра игры игру \
+игре этот эта это эти его её их мне меня тебе вас нам них там тут здесь \
+der das und ist nicht ein eine einer einen dem den des ich du er sie es wir ihr \
+mit von zu auf für aus bei nach über auch nur noch schon sehr aber oder wenn dass wie \
+wo da hier dort wird sind habe haben kann spiel spiele spielen \
+el la los las un una unos unas y o pero de del en con por para que es son está están \
+muy más menos también ya no sí este esta esto ese esa eso lo le les se me te su sus mi \
+juego juegos jugar jugando \
+o a os as um uma e é são está estão de do da dos das em no na nos nas com por para que \
+não sim muito mais menos também já este esta isto esse essa isso ele ela eles elas eu tu \
+jogo jogos jogar jogando \
+le la les un une des et ou mais de du au aux en dans sur pour par avec sans que qui ne \
+pas plus moins très aussi est sont c'est il elle ils elles je tu on nous vous ce cette \
+ces ça jeu jeux jouer \
+i w na z do nie się jest są to tak jak ale co za od po dla przez ten ta te tego tej tym \
+gra gry grę grze grać \
+ve bir bu şu o de da için ile çok daha ama ya en gibi kadar var yok mi mı mu mü değil \
+oyun oyunu oyunda oyna";
 
 /// The filler words as a set, built once: the tokeniser asks about every word of every claim.
 fn filler() -> &'static HashSet<&'static str> {
@@ -550,7 +586,7 @@ mod tests {
             }
             said.next_review();
         }
-        let found = said.finish(&["performance"]);
+        let found = said.finish(&[("performance", "Performance")]);
         let praised: Vec<&str> = found[0].praised.iter().map(|t| t.text.as_str()).collect();
         let criticised: Vec<&str> = found[0]
             .criticised
@@ -605,7 +641,7 @@ mod tests {
             said.note(0, Polarity::Praise, "buttery smooth");
             said.next_review();
         }
-        let found = said.finish(&["performance"]);
+        let found = said.finish(&[("performance", "Performance")]);
         assert!(found[0].criticised.is_empty(), "{:?}", found[0].criticised);
     }
 
@@ -617,7 +653,7 @@ mod tests {
             said.note(0, Polarity::Praise, "looks lovely");
             said.next_review();
         }
-        let found = said.finish(&["performance"]);
+        let found = said.finish(&[("performance", "Performance")]);
         let criticised: Vec<&str> = found[0]
             .criticised
             .iter()
@@ -657,7 +693,13 @@ mod tests {
         assert!(z >= CLEARLY, "{z}");
         assert!(delta < AT_LEAST_TWICE, "{delta}");
 
-        let subjects = ["gameplay", "audio", "story", "graphics", "controls"];
+        let subjects = [
+            ("gameplay", "Gameplay"),
+            ("audio", "Audio"),
+            ("story", "Story"),
+            ("graphics", "Graphics"),
+            ("controls", "Controls"),
+        ];
         let praised_for = ["combat", "music", "plot", "colours", "keybinds"];
         let mut said = Said::new(subjects.len());
         for review in 0..200 {
@@ -683,6 +725,23 @@ mod tests {
     }
 
     #[test]
+    fn a_subject_never_stands_out_for_its_own_name_unless_the_name_is_in_a_phrase() {
+        let mut said = Said::new(1);
+        for review in 0..100 {
+            said.note(0, Polarity::Praise, "no bugs at all, the graphics shine");
+            if review < 30 {
+                said.note(0, Polarity::Complaint, "bugs, bugs, bugs");
+            }
+            said.next_review();
+        }
+        let found = said.finish(&[("bugs", "Bugs and crashes")]);
+        let praised: Vec<&str> = found[0].praised.iter().map(|t| t.text.as_str()).collect();
+        assert!(praised.contains(&"no bugs"), "{praised:?}");
+        assert!(!praised.contains(&"bugs"), "{praised:?}");
+        assert!(found[0].criticised.is_empty(), "{:?}", found[0].criticised);
+    }
+
+    #[test]
     fn the_phrase_takes_the_place_of_a_word_nearly_always_said_inside_it() {
         let mut said = Said::new(1);
         for review in 0..100 {
@@ -698,7 +757,7 @@ mod tests {
             );
             said.next_review();
         }
-        let found = said.finish(&["price"]);
+        let found = said.finish(&[("price", "Price and value")]);
         let criticised: Vec<&str> = found[0]
             .criticised
             .iter()
@@ -716,7 +775,7 @@ mod tests {
             said.note(0, Polarity::Praise, "very good indeed");
             said.next_review();
         }
-        let found = said.finish(&["language"]);
+        let found = said.finish(&[("language", "Language and localisation")]);
         let criticised: Vec<&str> = found[0]
             .criticised
             .iter()
