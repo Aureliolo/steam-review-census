@@ -405,14 +405,27 @@ The interval printed beside a coverage figure is about 1.8 points, and it is the
 is the noise in scoring one finished model on 2,615 claims and says nothing about training the
 same thing again. A configuration has to clear **4.3 points** before it has changed anything.
 
-Against that bar, almost nothing in the sweep changed anything. Four settings are genuinely
-worse: a learning rate of 1e-5 answers 47.8%, three epochs 52.3%, a batch of 64 54.3%, and a
-polarity weight of 1.0 59.7%. One setting is genuinely better, and only just: **5e-5 answers
-73.5%**, 4.7 points clear of the best of the three baseline seeds, which is why it is trained
-again on two more seeds before anything ships on it. Everything else tried lands inside the
-band and bought nothing at all: batch 16, every window length from 96 to 256, marking the claim
-inside its window, a polarity weight of 0.2, down-weighting the contested and the mis-cut
-claims, and eight or twelve epochs against five.
+Against that bar, almost nothing the small model was asked changed anything. Everything here
+lands inside the band and bought nothing at all: batch 16, every window length from 96 to 256,
+marking the claim inside its window, a polarity weight of 0.2, down-weighting the contested and
+the mis-cut claims, and eight or twelve epochs against five.
+
+Five settings are genuinely worse. A learning rate of 1e-5 answers 47.8%, three epochs 52.3%, a
+batch of 64 54.3%, and a polarity weight of 1.0 59.7%. The fifth is the interesting one:
+**weighting the rare subjects up makes macro F1 worse, which is the figure it exists to fix.**
+At exponents of 0.3, 0.5 and 0.7 on the inverse frequency, coverage falls to 55%, 47% and 42%
+and macro F1 falls with it, 0.612, 0.605 and 0.581 against the baseline's 0.637. A rare row is
+rare because the corpus rarely says it, and shouting its few examples louder adds no evidence
+about it while costing the rows that had some.
+
+Two settings are genuinely better, and only one of them is small. **5e-5 answers 73.5%**, 4.7
+points clear of the best of the three baseline seeds, which is why it is trained again on two
+more seeds before anything ships on it. And **a backbone of twice the size answers 84.9%**,
+which is eleven points clear of that and four times the seed spread, on the same labels and the
+same schedule; at a learning rate of 1e-5 the same backbone still answers 76.9%, so it is not a
+happy accident of one rate. What that model costs to read a library with is the open question,
+and cost is the whole argument for this project over a frontier model, so it is measured on the
+card that does the reading before it is chosen.
 
 `training/sweep.py` prints that table and that spread from the run records, and it is the first
 thing to run before calling any configuration a winner.
