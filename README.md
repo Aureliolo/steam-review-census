@@ -224,6 +224,23 @@ GPU, offline, for the electricity. The claim being made is not that a 278M-param
 beats a frontier one. It is that it gets most of the way there at four orders of magnitude less
 cost, and that it can tell you exactly how far short it falls.
 
+### How a person turns silver into gold
+
+`steamgauge gold` writes one page, holding a blind random sample of claims from the games the
+model never saw and the claims two labellers answered differently. Blind means blind: a claim
+drawn for measurement carries no answer, because an answer on the page is an answer in the
+reader's head, and a figure produced by agreeing with a suggestion is a ratification rather
+than a measurement.
+
+The page is a single file that fetches nothing and sends nothing, marks each claim inside the
+review it came from, and keeps answers in the browser as they are made. A letter picks a
+subject, a digit picks the polarity, and a claim with both moves on by itself; a thousand
+claims is not one sitting and a closed tab must not cost a night's work.
+
+`steamgauge ingest-gold` reads the export back, files it beside the labels already there
+rather than over them, and prints the share that agrees. That share is the first number this
+project can call accuracy rather than agreement.
+
 ### How the reference sets are made
 
 They are a **silver standard**, not a gold one, and the distinction decides what every number

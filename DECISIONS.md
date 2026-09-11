@@ -439,8 +439,21 @@ nothing. Two are missing, and no amount of further labelling closes either.
 1. **Human-adjudicated labels.** Everything so far is a model agreeing with a model, which the
    README says plainly and which no citation can rest on. The user adjudicates: a random
    thousand from the frozen games, labelled blind, for an accuracy figure that means what it
-   says; then the four hundred the two labellers split on, shown both answers, to settle the
+   says; then the claims the two labellers split on, shown both answers, to settle the
    boundaries. After `core-6`, never before.
+
+   **The tool exists as of 2026-09-11.** `steamgauge gold` writes one self-contained page that
+   fetches nothing and sends nothing, holding 1,000 blind claims from the eight frozen games
+   and the 27 the two labellers split on there. A letter picks a subject, a digit the polarity,
+   and a claim with both moves on by itself; answers are kept in the browser as they are made,
+   because fourteen hundred claims is not one sitting. `steamgauge ingest-gold` reads the
+   export back and prints the share that matches the labeller already on record, which is the
+   first figure in this project that may be called accuracy. Chrome drives the page in CI.
+
+   Only 27 splits, rather than the four hundred first estimated, because a tenth of each set is
+   read twice and only the frozen games count here: 271 claims read twice at 93.2% agreement
+   leaves 27. Splits from the other games settle boundaries just as well and measure nothing,
+   so they can be drawn separately when the boundaries are what is wanted.
 2. **A comparison against the alternatives.** Half done: the trivial baselines run over the
    same frozen claims and the same abstention protocol, in "What it has to beat" above. What
    is missing is a frontier model asked the same question directly, on the same claims, with
