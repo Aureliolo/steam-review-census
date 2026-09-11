@@ -134,7 +134,7 @@ Then the set was read a second time, a tenth of it, by a different labeller work
 | On polarity? | 93.0%, kappa 0.89 |
 | On whether a claim is contested? | **60.3%, kappa 0.28.** The first labeller flagged a fifth of claims, the second three fifths. They are not applying the same bar |
 | Does the flag still mean something? | Yes. On the 181 claims neither flagged, the two agree on the subject **100%** of the time; where either flagged, 77.5%. The flag finds the right claims; what differs is how readily each labeller reaches for it |
-| Where do they disagree on subject? | `genre` against `verdict` most of all ("great platformer"), then `gameplay` against `genre`, `content` against `gameplay`, `updates` against `verdict`. Every one is a boundary already in the gap notes |
+| Where do they disagree on subject? | `genre` against `verdict` most of all ("great platformer"), then `gameplay` against `genre`, `content` against `gameplay`, `updates` against `verdict`. Every one is a boundary already in `reference/GAPS.md` |
 
 So a contested rate is a fact about a labeller as much as about a game, and the reports say so
 rather than comparing it across games as though it were the same measure. The per-field
