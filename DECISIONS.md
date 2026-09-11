@@ -92,7 +92,7 @@ removed.
 |---|---|
 | The unit is a **claim**, not a review. A review is split into the points it makes and each point carries one subject | splitter written and tested |
 | A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | built, training on each new wave of labels |
-| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | done, below: `gte-multilingual-base` wins on every measure but speed, and the speed it gives up is a quarter, not a multiple |
+| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | done, below: `gte-multilingual-base` wins every measure but speed among models of its size, and the first model tried at twice that size beats it by more than every other setting in the sweep combined |
 | **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | built, and the threshold is chosen by **the most coverage available at a promised accuracy**, never by maximising accuracy times coverage, which collapses to answering everything |
 | **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | done: a second head on the same trunk, and the report counts praise, complaint and mixed per subject |
 | **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
@@ -186,6 +186,14 @@ only so the frozen ones stay unread by the thing choosing:
 | `microsoft/mdeberta-v3-base` | 0.276 | 0.354 | 0.442 | 16% | 830 |
 | `intfloat/multilingual-e5-base` | 0.423 | 0.482 | 0.317 | 32% | 1,428 |
 | **`Alibaba-NLP/gte-multilingual-base`** | **0.449** | **0.518** | **0.295** | **34%** | 1,048 |
+
+**Every candidate in that table is about 278M parameters, which is the question the bake-off
+did not ask.** It compared four encoders of one size and concluded which family reads claims
+best. Asked on 2026-09-12 what a bigger one does, `intfloat/multilingual-e5-large` at 560M
+answered 84.9% of validation claims against `gte`'s 68.1% on the same labels, and that is four
+times the spread between two seeds. The runner-up family at twice the size beats the winner at
+one size by more than every other setting in the sweep put together. A bake-off is only ever an
+answer about the axis it varied.
 
 At three epochs the order was the same and the gaps wider, so it is not a schedule effect.
 `gte` answers half as many claims again as the shipped backbone at the same promised
