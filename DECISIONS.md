@@ -77,7 +77,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | **Opus spot-checks the labels** | done as a blind second reading of a tenth: 456 claims over ten games, subject kappa 0.85 |
 | Roughly 400 labels to start | 6,150 claims and counting, target 20,000 |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
-| Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out, two for validation and two frozen, and the frozen ones choose nothing |
+| Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
 | Measured error **corrects the reported prevalence** | done, on the report page, per subject where the model finds it better than chance |
 | The sets are a silver standard, and the README says so rather than calling them gold | done |
 
