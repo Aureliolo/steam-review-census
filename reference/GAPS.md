@@ -69,10 +69,19 @@ Related to the atmosphere and fear gap the review-level labellers reported six t
 two horror games. Both are about what a game makes a player feel rather than about any part
 that produces it. One category might take both.
 
-### Mods and user content: four reports, review era
+### Mods and user content: the most-reported gap there is
 
-Reported for Blade and Sorcery, Beat Saber, Helldivers 2, Cyberpunk 2077 and SnowRunner. Falls
-between `content`, `updates` and `community` with no rule choosing.
+Five games in the review era (Blade and Sorcery, Beat Saber, Helldivers 2, Cyberpunk 2077,
+SnowRunner) and now three more at claim level, on 1385380, 1465360 and 1592190, where one
+labeller called modding "the game's dominant theme" and had to file it under `content` at low
+confidence with every claim marked contested. Falls between `content`, `updates` and
+`community` with no rule choosing.
+
+Eight games is not a boundary dispute, it is a subject. The revision adds `mods`: "Mods and
+user-made content. Whether the game supports them, how easy they are to install, what the
+community has made, and whether the game is worth playing without them. A game that is
+better modded than shipped is a statement about mods, not about content." With a RULE on
+`content` sending anything user-made here.
 
 ### Playing with friends: one report, but it dominated that game
 
