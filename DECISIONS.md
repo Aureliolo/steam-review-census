@@ -318,6 +318,57 @@ game with its own predecessor, for praise or blame aimed at the studio, and for 
 will not start at all. Every earlier reference set and the shipped anchors are core-4 and are
 refused by this build, which is the guard working rather than failing.
 
+## The model was being asked a question the labeller never had to answer
+
+Every labeller read each claim inside the review it came from. Every model read it alone. "it
+doesn't", "same here", "this too" are unanswerable on their own, and every one of them in the
+training set was a label the model was asked to reach from text that cannot reach it.
+
+Measured on the validation games, all three runs identical but for the input:
+
+| input | budget | accuracy | macro F1 | polarity | answers at 75% |
+|---|---|---|---|---|---|
+| claim alone | 128 | 0.577 | 0.550 | 0.777 | 54% |
+| claim alone | 256 | 0.586 | 0.566 | 0.773 | 54% |
+| claim in review | 256 | 0.634 | 0.616 | 0.808 | **66%** |
+
+The middle row is the control, and it is the point: the same token budget spent on the claim
+alone buys nothing, so the twelve points of coverage come from the context and not from the
+larger window. One training run, no labelling, no quota.
+
+What it costs was measured on a real capture rather than on a drawn sample, which was a
+mistake made first: a few hundred drawn claims are distinct by construction and say nothing
+about a corpus. Over Cyberpunk's 1.55M English claims, 87% are already textually distinct, so
+reading distinct claims was saving an eighth of the forward passes rather than most of them.
+The cost is the sequence length: a claim is 21 tokens and a claim with its review is 168.
+About **9x the work**, or a library read of twelve hours instead of ninety minutes, once per
+model version.
+
+The budget is therefore spent **centred on the claim** rather than from the start of the
+review. Truncating a pair from the end gives a claim at the foot of a long review the opening
+paragraph and nothing it is near, at exactly the same price.
+
+## What it has to beat
+
+A number with nothing beside it says only that the thing runs. Three baselines now run over
+the same claims, the same split and the same selective-prediction protocol, on the **frozen**
+games that chose nothing:
+
+| | accuracy | macro F1 | AURC | answers at 75% |
+|---|---|---|---|---|
+| commonest subject | 0.233 | 0.015 | 0.731 | never reaches the promise |
+| bag of words (TF-IDF, word and character n-grams) | 0.441 | 0.347 | 0.339 | 32% |
+| nearest subject centroid, untuned backbone | 0.423 | 0.372 | 0.442 | **5%** |
+| the trained reader, claim alone | 0.605 | 0.504 | 0.216 | 58% |
+
+The third row is what this project did before it trained anything, and the last column is why
+it stopped. Cosine distance to a prototype has no way to say "this is about nothing", so its
+confidences carry almost no ordering: asked to be right three times in four, it can answer one
+claim in twenty. The bag of words is the honest floor, it takes seconds to fit, and a
+278M-parameter encoder that could not clear it would not be earning its electricity.
+
+What is still missing from this table is a frontier model asked the same question directly.
+
 ## Where this is going
 
 Settled 2026-09-11: **the dataset is the thing, and the benchmark comes before the polish.**
