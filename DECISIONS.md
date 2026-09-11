@@ -139,6 +139,14 @@ The frozen games are different games from the eleven-game run, because the old s
 reassigned them; so the before and after are not over the same reviews. What is not in doubt
 is the direction, and that labels are what moved it.
 
+Verified in the tool as before: 315 claims answered at 0.746 against training's 316 at
+0.747, one claim apart, which is the half-precision export reordering a single tie. And the
+per-game spread says something the pooled figure hides: 1057090 declined 61% and agreed on
+76.5%; 1466860 declined **80%** and agreed on 70.2%. 1466860 is the game whose labeller
+called modding its dominant theme and had nowhere to file it. A corpus about something the
+spine lacks is a corpus the model declines more of, which is the abstention doing its job and
+the taxonomy gap showing through it.
+
 Then the set was read a second time, a tenth of it, by a different labeller working blind:
 
 | Question | Answer |
