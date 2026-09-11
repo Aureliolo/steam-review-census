@@ -52,6 +52,36 @@ better or worse.
 urgent", "fix this 11 bit". `updates` is written around post-release patching and `policy`
 around the publisher and the platform, so a judgement of the studio itself lands in neither.
 
+### A balance change blamed on a patch: one report, and it dominated that game
+
+Tekken 8's set (1778820) is mostly Season 2 complaints, where one sentence names a balance
+problem (`difficulty`), the mechanic it broke (`gameplay`) and the patch that did it
+(`updates`). The labeller filed the balance under `difficulty` and the blame under `updates`
+and marked most of them contested. A RULE on `updates` would settle it: a complaint about what
+a patch changed is about the change (`difficulty`, `gameplay`, `content`); `updates` is for
+the patching itself, its pace, and whether the developers listen.
+
+### The alien that cannot be fought, and other enemies: two reports
+
+"You can't fight back", the alien's AI on 214490, parry windows, enemy spam and damage
+sponges on 1809540: `gameplay` against `difficulty` every time, and the sheet's `difficulty`
+rule ("how hard, and whether it is fair") does not say whether an enemy's behaviour is a
+mechanic or a difficulty. One line would: an enemy's design is `gameplay`; how hard it is to
+beat is `difficulty`.
+
+### Faithful to the film: one report, a third of that game's contested claims
+
+"Captures the feeling of the original film", "true to the movie", on 214490. Between
+`licensing` (faithful to the thing it adapts), `atmosphere` (the feeling itself) and
+`verdict`. The `licensing` description already says "how faithful the game is to the thing it
+is adapting", so the sheet has an answer and the labeller did not trust it against
+`atmosphere`. A RULE on `atmosphere` pointing at `licensing` for faithfulness would do.
+
+### Cutscenes that cannot be skipped: one report
+
+Filed under `gameplay` at low confidence on 1809540. It is a `controls` question by the
+sheet's "how many clicks it takes to do anything", and nothing says so.
+
 ### A game that will not start, with no reason given: two reports
 
 "Bought it, installed it, cannot run it". Splits between `bugs` and `compatibility` with
@@ -90,11 +120,20 @@ community has made, and whether the game is worth playing without them. A game t
 better modded than shipped is a statement about mods, not about content." With a RULE on
 `content` sending anything user-made here.
 
-### Playing with friends: one report, but it dominated that game
+### Playing with friends: two reports, and it dominated one game
 
 "Better with friends", "fun with mates", "does not grab you alone". Not servers or matchmaking
 (`multiplayer`), not calling it a co-op game (`genre`), and not a bare verdict. It was the
-commonest qualified claim in DEVOUR's set.
+commonest qualified claim in DEVOUR's set, and BeamNG's labeller (228380) hit the same three
+ways of filing it. "The game is dead" is its cousin, between `multiplayer` (nobody online)
+and `updates` (nobody developing), and the same labeller marked it contested.
+
+### Destruction and physics: one report, and it is what that game is
+
+BeamNG's damage deformation is a system, and reviewers praise how it looks. Sits on the
+`gameplay` and `graphics` line, filed `gameplay` and marked contested nearly every time. A
+spine row will not fix a game whose whole point is one mechanic; this is what the induced
+subjects are for, and 228380 is a good second game to run the induction on.
 
 ## Confirmed by the core-5 run
 
@@ -190,6 +229,15 @@ point; a closing tag with nothing but whitespace between it and the next line br
 end, ends one. Anywhere else the tag is styling and is skipped like `[b]`. Every real
 heading in the same review still splits, since they all sit on lines of their own. Goes in
 `claims-4`.
+
+### A line that ends on a comma has not finished, reported on 1809540
+
+A Japanese review of the economy (184812704) came back as thirteen claims, four of them
+ending on "、" and the next line starting mid-thought: the writer wrapped long sentences by
+hand and never used "。" at all. A line break ends a claim, which is right for lists and
+headings and wrong here. The rule: a line ending in a comma (",", "，" or "、") joins the line
+after it. A comma is never how anybody ends a point, in any script the splitter handles.
+Goes in `claims-4`.
 
 ### An emoticon after a sentence joins the wrong neighbour
 
