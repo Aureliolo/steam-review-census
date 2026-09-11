@@ -61,7 +61,9 @@ def throughput(backbone: str, batch: int = 64, length: int = 128, rounds: int = 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
-    parser.add_argument("--epochs", type=int, default=3)
+    # Five rather than three: at three every candidate was still climbing and the gaps
+    # between them measured how fast each learns as much as how well.
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--min-accuracy", type=float, default=0.75)

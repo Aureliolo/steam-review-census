@@ -29,7 +29,7 @@ Training wants a GPU. It will run on a CPU and you will not enjoy it.
 ```sh
 census export-training --to training/data/claims.jsonl   # labels plus their text, local only
 python bakeoff.py                                        # which backbone, decided by measurement
-python train.py --backbone <the winner> --save           # the model
+python train.py --backbone Alibaba-NLP/gte-multilingual-base --epochs 5 --save
 python export.py --run runs/<id> --spine core-5 --fp16   # ONNX, with a parity assertion
 python publish.py --run runs/<id> \
     --model-repo <you>/steam-review-claim-reader \
@@ -56,3 +56,7 @@ did not happen.
 
 The frozen games are read once, at the end, and choose nothing. The bake-off does not read
 them at all: a set used to choose between models cannot also say how the chosen one does.
+
+The bake-off's table, with the figures that chose the backbone, is in `DECISIONS.md`. It runs
+five epochs by default: at three the order was the same but every candidate was still
+climbing, and a gap measured mid-climb is a gap in learning speed as much as in the model.

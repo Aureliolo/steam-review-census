@@ -25,11 +25,11 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Every other percentage says which denominator it uses | done |
 | **Deep, claim-level by default**: a review is split into the points it makes, and each point carries a category | done; the splitter is `claims-3` and the reading pass counts per claim |
 | Shallow is the opt-out, and neither depth drops a review | done; `--depth shallow`, recorded in the reading and named on the page as not comparable |
-| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain is built end to end and unrun: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it, and the report shows what survives under the table with its evidence and no invented rate |
-| Extras are discovered by an **LLM reading an embedding-diverse sample** | the sample is farthest-point traversal over a hash-drawn pool of four thousand vectors, measured to put a mechanics review, a localisation joke, a crash report and a difficulty complaint in its first eight picks. The reading is one agent call of about 12k tokens per game, run one at a time behind the labellers |
+| Taxonomy is a **fixed core spine plus induced game-specific extras** | spine done (`core-5`); the induction chain runs end to end: `census distinct` draws the sample, an agent reads it against `reference/induction-brief.txt`, `census ingest-induced` refuses any subject without three real reviews behind it, and the report shows what survives under the table with its evidence and no invented rate. First run on 296970 (Renowned Explorers): nine subjects returned, nine kept, every one refining a spine row or naming something the spine cannot (mood combat, the explorer roster, the oddball enemies, save-scumming), each with four to fourteen reviews behind it |
+| Extras are discovered by an **LLM reading an embedding-diverse sample** | the sample is farthest-point traversal over a hash-drawn pool of four thousand vectors, measured to put a mechanics review, a localisation joke, a crash report and a difficulty complaint in its first eight picks. The reading is one agent call per game, 70k tokens on Opus for a 120-review handout, run one at a time behind the labellers |
 | Categories are assigned across the full corpus by a **linear probe over embeddings** | superseded: a fine-tuned encoder with abstention, which is a probe that can say no |
 | **Corrected prevalence**: the measured error corrects the rate rather than sitting beside it | done, per subject, where the model finds it better than chance |
-| **Summarise, per category, what people praise and complain about** | **not built**; praise, complaint and mixed are counted per subject, which is the input to it |
+| **Summarise, per category, what people praise and complain about** | built without a paraphrase: each side of a subject shows the words it uses that the other does not, counted by reviewers and ranked by log-odds z-score against the other side, and every word opens onto the claims it was counted from. Counted during the reading pass in bounded memory. A written summary by a hosted model is the upgrade, when one is configured |
 | **Build an overall picture of the game from those summaries** | **not built** |
 | **Click through from any number to the reviews behind it** | done in the app, every subject opens onto its claims a page at a time; the report quotes eight per subject |
 | Helpfulness bias ships as a column on every category | done |
@@ -91,7 +91,7 @@ removed.
 |---|---|
 | The unit is a **claim**, not a review. A review is split into the points it makes and each point carries one subject | splitter written and tested |
 | A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | built, training on each new wave of labels |
-| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | to build; judged on area under the risk-coverage curve as well, since a backbone that knows when it does not know is worth more here than one point of accuracy |
+| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | done, below: `gte-multilingual-base` wins on every measure but speed, and the speed it gives up is a quarter, not a multiple |
 | **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | built, and the threshold is chosen by **the most coverage available at a promised accuracy**, never by maximising accuracy times coverage, which collapses to answering everything |
 | **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | done: a second head on the same trunk, and the report counts praise, complaint and mixed per subject |
 | **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
@@ -166,6 +166,31 @@ So a contested rate is a fact about a labeller as much as about a game, and the 
 rather than comparing it across games as though it were the same measure. The per-field
 figures are what `census compare-labels` prints, and the contested check runs every time.
 
+Then the backbone was put to the bake-off it was always going to face, on sixteen games and
+8,608 claims, every candidate on the same split and schedule, judged on the validation games
+only so the frozen ones stay unread by the thing choosing:
+
+| Backbone, five epochs | Macro F1 | Accuracy | AURC | Answers at 75% | Claims/s |
+|---|---|---|---|---|---|
+| `xlm-roberta-base`, what shipped | 0.375 | 0.443 | 0.378 | 23% | 1,431 |
+| `microsoft/mdeberta-v3-base` | 0.276 | 0.354 | 0.442 | 16% | 830 |
+| `intfloat/multilingual-e5-base` | 0.423 | 0.482 | 0.317 | 32% | 1,428 |
+| **`Alibaba-NLP/gte-multilingual-base`** | **0.449** | **0.518** | **0.295** | **34%** | 1,048 |
+
+At three epochs the order was the same and the gaps wider, so it is not a schedule effect.
+`gte` answers half as many claims again as the shipped backbone at the same promised
+accuracy, its confidence ranks claims better (AURC 0.295 against 0.378), and it costs a
+quarter of the throughput, which on a corpus of thirteen million claims is an hour on the
+card this was measured on. `e5` is the runner-up and as fast as `xlm-roberta`; `mdeberta`
+is slower and worse at everything, whatever its reputation. `gte` exports to the same ONNX
+graph shape with parity intact (largest drift 8.3e-03 at half precision, no answers changed),
+which was the condition for being a candidate at all.
+
+Trained on its own on the same 5,988 training claims and measured on the same four frozen
+games (1,800 claims), `gte` answers **37% at 0.803** where `xlm-roberta` answers 28% at
+0.762; frozen accuracy 0.608 against 0.507, macro F1 0.512 against 0.405, AURC 0.236 against
+0.322. The wave that ships next is `gte`.
+
 The chain is verified end to end against that last row. Training measures the frozen games in
 Python, on the full-precision weights, from the claim text as labelled. The tool measures them
 in Rust, on the half-precision ONNX graph, over a corpus it split itself and joined back to the
@@ -198,7 +223,8 @@ In the order they matter:
 2. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
    players mention difficulty and telling a reader what they said about it.
 3. **Induced per-game categories**, so a game's own subjects appear rather than only the
-   twenty-five every game shares. Needs an LLM reading a sample, so it waits on quota.
+   twenty-five every game shares. Run on one game; the other thirty-five each need one
+   agent call of about 70k tokens, so they go one at a time behind the labellers.
 4. **Publishing.** The script and the pinned fetch path are built; the pin is empty until
    `training/publish.py` is run against a model worth publishing, which is the one after the
    labels.
