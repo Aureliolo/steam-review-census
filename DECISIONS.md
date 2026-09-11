@@ -338,9 +338,25 @@ larger window. One training run, no labelling, no quota.
 
 The budget is spent **centred on the claim** rather than from the start of the review.
 Truncating a pair from the end gives a claim at the foot of a long review the opening
-paragraph and nothing it is near, at exactly the same price. Centred, 128 tokens beats
-head-truncated 256 on every figure, and 256 centred is no better than 128: once the window is
-around the claim, more budget buys nothing.
+paragraph and nothing it is near, at exactly the same price.
+
+What centring is worth depends entirely on how tight the budget is, which is obvious once
+stated and was not obvious before it was measured:
+
+| window | budget | answers at 75% |
+|---|---|---|
+| from the start of the review | 96 | 57% |
+| centred on the claim | 96 | **66%** |
+| from the start of the review | 256 | 66% |
+| centred on the claim | 128 | 68% |
+| centred on the claim | 256 | 66% |
+
+At 96 tokens the head of a review usually misses the claim entirely and centring is worth nine
+points. At 256 the head usually reaches it anyway, and centring is worth nothing measurable.
+So centring does not beat a long window, it **buys the same answer at half the budget**, and
+that is a cost saving rather than an accuracy gain. Between 96 and 256 tokens, centred, every
+window scores the same; 128 ships because it is the cheapest of the ones that cannot be told
+apart.
 
 What it costs took three measurements to get right, and the first two were wrong in
 instructive ways.
@@ -360,6 +376,36 @@ instructive ways.
 
 The lesson is the one the project keeps relearning: measure the thing itself, on the hardware
 that will do it, not a proxy for it.
+
+## Most of a sweep is the seed
+
+Twenty-five configurations were trained on one set of labels overnight on 2026-09-11, every one
+of them on the validation games only. Ranking them and taking the top row is how a sweep is
+usually read, and here it would be wrong almost every time.
+
+Train one configuration twice, changing nothing but the seed, and it lands **0.5 to 4.3 points
+apart** on how many claims it answers: `win-128` on three seeds gives 64.5%, 68.1% and 68.8%.
+The interval printed beside a coverage figure is about 1.8 points, and it is the wrong bar: it
+is the noise in scoring one finished model on 2,615 claims and says nothing about training the
+same thing again. A configuration has to clear **4.3 points** before it has changed anything.
+
+Against that bar, almost nothing in the sweep changed anything. Four settings are genuinely
+worse: a learning rate of 1e-5 answers 47.8%, three epochs 52.3%, a batch of 64 54.3%, and a
+polarity weight of 1.0 59.7%. One setting is genuinely better, and only just: **5e-5 answers
+73.5%**, 4.7 points clear of the best of the three baseline seeds, which is why it is trained
+again on two more seeds before anything ships on it. Everything else tried lands inside the
+band and bought nothing at all: batch 16, every window length from 96 to 256, marking the claim
+inside its window, a polarity weight of 0.2, down-weighting the contested and the mis-cut
+claims, and eight or twelve epochs against five.
+
+`training/sweep.py` prints that table and that spread from the run records, and it is the first
+thing to run before calling any configuration a winner.
+
+Two things the sweep cannot say. The first is whether the higher rate's worse calibration
+survives: the expected calibration error climbs from 0.066 at 1e-5 to 0.203 at 5e-5, and
+calibration is exactly what makes a threshold chosen on the validation games hold on the frozen
+ones. That has failed before and it is checked on the frozen games before the model ships. The
+second is anything about the frozen games at all, because no sweep run ever reads them.
 
 ## What it has to beat
 
