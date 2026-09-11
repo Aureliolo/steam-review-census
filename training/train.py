@@ -50,11 +50,27 @@ class Claims(Dataset):
         ambiguous_weight=1.0,
         split_wrong_weight=1.0,
         mark=False,
+        balance=0.0,
     ):
         self.claims = claims
         self.ambiguous_weight = ambiguous_weight
         self.split_wrong_weight = split_wrong_weight
         self.mark = mark
+        # What a claim about a rare subject is worth against one about a common subject. The
+        # loss treats a `verdict` claim and a `licensing` claim as equally informative when
+        # one is a quarter of the set and the other is two in a thousand, and macro F1 is the
+        # figure that notices. The exponent is a dial rather than a switch: full inverse
+        # frequency makes forty claims of `vr` outweigh four thousand of `verdict` and the
+        # model learns to shout about headsets.
+        self.balance = {}
+        if balance:
+            counts = {}
+            for claim in claims:
+                counts[claim.subject] = counts.get(claim.subject, 0) + 1
+            commonest = max(counts.values()) if counts else 1
+            self.balance = {
+                subject: (commonest / count) ** balance for subject, count in counts.items()
+            }
         self.tokenizer = tokenizer
         self.subjects = {name: index for index, name in enumerate(subjects)}
         self.polarities = {name: index for index, name in enumerate(POLARITIES)}
@@ -138,7 +154,7 @@ class Claims(Dataset):
             weight *= self.ambiguous_weight
         if claim.split_wrong:
             weight *= self.split_wrong_weight
-        return weight
+        return weight * self.balance.get(claim.subject, 1.0)
 
 
 class ClaimReader(torch.nn.Module):
@@ -401,6 +417,7 @@ def run(args) -> dict:
                 args.ambiguous_weight if name == "train" else 1.0,
                 args.split_wrong_weight if name == "train" else 1.0,
                 args.mark,
+                args.balance if name == "train" else 0.0,
             ),
             batch_size=args.batch_size,
             shuffle=name == "train",
@@ -523,6 +540,7 @@ def run(args) -> dict:
         "context": args.context,
         "seed": args.seed,
         "mark": args.mark,
+        "balance": args.balance,
         "ambiguous_weight": args.ambiguous_weight,
         "split_wrong_weight": args.split_wrong_weight,
         "polarity_weight": args.polarity_weight,
@@ -600,6 +618,14 @@ def parse():
         help="mark the claim where it sits inside its window, as well as giving it as the "
         "first sequence. A pair alone says what the claim is and what surrounds it, but not "
         "which sentence of the surroundings is the one being asked about.",
+    )
+    parser.add_argument(
+        "--balance",
+        type=float,
+        default=0.0,
+        help="how hard to weight rare subjects up, as an exponent on the ratio between a "
+        "subject's count and the commonest subject's. 0 is off, 1 is full inverse frequency, "
+        "0.5 is the square root of it. Macro F1 is the figure this moves.",
     )
     parser.add_argument(
         "--ambiguous-weight",
