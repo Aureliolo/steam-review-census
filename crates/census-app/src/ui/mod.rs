@@ -331,6 +331,51 @@ fn behind(app: AppHandle, app_id: u32, category: String, from: usize, count: usi
     })
 }
 
+/// How far a reading has got, as the window draws it.
+#[derive(Debug, Clone, Serialize)]
+struct ReadStep {
+    app_id: u32,
+    done: u64,
+    reading_claims: bool,
+}
+
+/// Reads a whole corpus with the trained model.
+///
+/// Runs off the window's thread: it is minutes of arithmetic on a million claims, and a
+/// webview that stops answering is a webview a person force-quits.
+#[tauri::command]
+async fn read_game(app: AppHandle, app_id: u32, language: Option<String>) -> Result<(), String> {
+    let out_dir = library_dir(&app);
+    let options = census_core::read::ReadOptions {
+        out_dir: out_dir.clone(),
+        language,
+        ..census_core::read::ReadOptions::default()
+    };
+    let window = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let mut model =
+            census_core::reader::ClaimReader::load(&census_core::reader::default_dir())
+                .map_err(text)?;
+        let report =
+            census_core::read::read_corpus(&mut model, app_id, &options, |progress| {
+                let _ = window.emit(
+                    "read",
+                    ReadStep {
+                        app_id,
+                        done: progress.done,
+                        reading_claims: progress.reading_claims,
+                    },
+                );
+            })
+            .map_err(text)?;
+        let snapshot = embed::latest_snapshot(&options.out_dir, app_id).map_err(text)?;
+        report.save(&snapshot.join("reading.json")).map_err(text)
+    })
+    .await
+    .map_err(text)?
+}
+
 /// One subject, as the window draws it after a corpus has been read.
 #[derive(Debug, Clone, Serialize)]
 struct Subject {
@@ -535,7 +580,8 @@ pub fn run() -> anyhow::Result<()> {
             analysis,
             behind,
             reading,
-            claims_behind
+            claims_behind,
+            read_game
         ])
         .run(tauri::generate_context!())?;
     Ok(())

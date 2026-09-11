@@ -264,9 +264,10 @@ enum Command {
         /// Directory holding the capture.
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
-        /// Directory holding model.onnx, tokenizer.json and reader.json.
-        #[arg(long, default_value = "models/claim-reader")]
-        model: PathBuf,
+        /// Directory holding model.onnx, tokenizer.json and reader.json. Defaults to
+        /// models/claim-reader in the working tree if there is one, else the platform cache.
+        #[arg(long)]
+        model: Option<PathBuf>,
         /// Claims per forward pass.
         #[arg(long, default_value_t = census_core::read::DEFAULT_READ_BATCH)]
         batch_size: usize,
@@ -500,7 +501,7 @@ pub async fn run() -> Result<()> {
             top_helpful,
         } => run_read(
             app_id,
-            &model,
+            &model.unwrap_or_else(census_core::reader::default_dir),
             &census_core::read::ReadOptions {
                 out_dir: out,
                 top_helpful,

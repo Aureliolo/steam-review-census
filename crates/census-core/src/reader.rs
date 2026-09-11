@@ -71,6 +71,21 @@ pub struct Provenance {
     pub data_fingerprint: String,
 }
 
+/// Where the claim reader lives when nobody has said.
+///
+/// Beside the encoder in the platform cache, for the same reason: an application opened from
+/// a menu has no working directory, and a model found only relative to a checkout is a model
+/// only a developer can use. A directory in the working tree wins when there is one, which is
+/// how a freshly trained model is tried before it is published.
+#[must_use]
+pub fn default_dir() -> std::path::PathBuf {
+    let local = std::path::PathBuf::from("models").join("claim-reader");
+    if local.join("model.onnx").is_file() {
+        return local;
+    }
+    crate::model::default_cache_dir().join("claim-reader")
+}
+
 /// The trained model, loaded and ready to read claims.
 pub struct ClaimReader {
     session: Session,

@@ -106,17 +106,57 @@ async function loadTopics(game) {
     if (counted.app_id !== chosen) return;
     drawTopics(counted);
     panel.hidden = false;
+    el('game-actions').hidden = true;
     set(el('game-note'), '');
   } catch (failure) {
     panel.hidden = true;
+    el('game-actions').hidden = busy;
     set(
       el('game-note'),
-      game.stage === 'crawled'
-        ? 'Downloaded but not read yet. Reading a corpus turns it into rates you can open.'
+      String(failure).includes('not been read')
+        ? 'Downloaded but not read yet. Reading turns it into rates you can open.'
         : String(failure),
     );
   }
 }
+
+async function readGame() {
+  if (busy || chosen === null) return;
+  busy = true;
+  const appId = chosen;
+  el('game-actions').hidden = true;
+  el('work').hidden = false;
+  set(el('work-what'), 'Starting');
+  set(el('work-count'), '');
+  el('work-fill').style.width = '0%';
+  set(el('game-note'), '');
+
+  try {
+    await invoke('read_game', { appId, language: 'english' });
+    await refresh();
+  } catch (failure) {
+    const note = el('game-note');
+    note.classList.add('bad');
+    set(note, String(failure));
+    el('game-actions').hidden = false;
+  } finally {
+    busy = false;
+    el('work').hidden = true;
+  }
+}
+
+listen('read', ({ payload }) => {
+  if (payload.app_id !== chosen) return;
+  set(
+    el('work-what'),
+    payload.reading_claims ? 'Reading each point' : 'Counting what they add up to',
+  );
+  set(el('work-count'), whole.format(payload.done));
+  /* No total to divide by: how many distinct points a corpus holds is not known until it has
+     been walked, and a bar that invents a denominator is a bar that lies. */
+  el('work-fill').style.width = '100%';
+  el('work-fill').classList.add('working');
+});
 
 function cell(text, className) {
   const td = document.createElement('td');
@@ -557,6 +597,7 @@ el('lookup-form').addEventListener('submit', lookUp);
 el('start').addEventListener('click', start);
 el('cancel').addEventListener('click', () => (chosen === null ? show('welcome') : choose(chosen)));
 el('back').addEventListener('click', () => choose(chosen));
+el('do-read').addEventListener('click', readGame);
 el('earlier').addEventListener('click', () => {
   if (reading) openBehind(reading.topic, Math.max(0, reading.from - PER_PAGE));
 });

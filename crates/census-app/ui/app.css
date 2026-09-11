@@ -439,6 +439,34 @@ button.quiet-button:hover {
   transition: width 240ms ease;
 }
 
+/* For work whose end is not knowable until it is reached. A bar that fills at a made-up rate
+   reads as a promise about when it will finish. */
+.fill.working {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0 35%,
+    var(--accent-soft) 50%,
+    var(--accent) 65% 100%
+  );
+  background-size: 260% 100%;
+  animation: sweep 1.4s linear infinite;
+}
+
+@keyframes sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill.working {
+    animation: none;
+  }
+}
+
 /* What people talk about */
 
 .lede {
