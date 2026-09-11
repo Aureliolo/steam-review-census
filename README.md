@@ -231,6 +231,13 @@ rather than about somebody's afternoon:
   contested, and whether the claim was cut in the wrong place. The last two are read back:
   agreement is reported separately over the contested claims, and the mis-split rate is what
   drives the splitting rules. Three rounds of them came from labellers reporting it.
+- **A tenth is read again by a different labeller, blind.** `census second-opinion` draws the
+  same reviews as fresh batches with no labels in them, and `census compare-labels` reads the
+  two labellings together. It reports each field apart from the others, because they fail
+  differently: subject is a judgement about the claim, and `ambiguous` is a judgement about the
+  taxonomy. Beside every percentage is Cohen's kappa, which is what the percentage cannot tell
+  you: a corpus is mostly `verdict` and `offtopic`, so two labellers who never read a claim
+  would still agree most of the time by landing on the commonest subject.
 - **What comes back is checked rather than trusted.** `census ingest-claims` refuses a set that
   does not cover the drawn sample exactly: claims nobody labelled, labels naming claims nobody
   drew, subjects the taxonomy does not have, claims labelled twice, and labels whose judgements
