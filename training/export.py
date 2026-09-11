@@ -105,7 +105,11 @@ def main():
     )
     args = parser.parse_args()
 
+    # `runs/<name>` names a run of this project wherever the command was typed from, so a
+    # script driving the whole chain from the repository root does not silently export nothing.
     run = Path(args.run)
+    if not run.is_absolute() and not run.joinpath("run.json").is_file():
+        run = HERE / args.run
     record = json.loads((run / "run.json").read_text(encoding="utf-8"))
     subjects = record["subjects"]
 
