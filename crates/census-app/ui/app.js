@@ -145,6 +145,21 @@ async function readGame() {
   }
 }
 
+listen('fetch', ({ payload }) => {
+  if (!busy) return;
+  const mb = (bytes) => `${Math.round(bytes / 1e6)} MB`;
+  set(el('work-what'), `Fetching the model, ${payload.file}`);
+  set(
+    el('work-count'),
+    payload.total === null ? mb(payload.downloaded) : `${mb(payload.downloaded)} of ${mb(payload.total)}`,
+  );
+  /* The one bar in the window that does have a denominator: the server said how big the file
+     is, so the fill can mean something. */
+  el('work-fill').classList.remove('working');
+  el('work-fill').style.width =
+    payload.total === null ? '100%' : `${(100 * payload.downloaded) / payload.total}%`;
+});
+
 listen('read', ({ payload }) => {
   if (payload.app_id !== chosen) return;
   set(

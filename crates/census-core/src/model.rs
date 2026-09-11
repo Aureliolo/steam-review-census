@@ -183,11 +183,13 @@ impl Encoder {
     }
 }
 
+/// One file pinned by hash: where it lives in a repository, what it is called here, and what
+/// it must hash to before it is used.
 #[derive(Debug, Clone, Copy)]
-struct Asset {
-    remote: &'static str,
-    local: &'static str,
-    sha256: &'static str,
+pub(crate) struct Asset {
+    pub(crate) remote: &'static str,
+    pub(crate) local: &'static str,
+    pub(crate) sha256: &'static str,
 }
 
 /// Which build of the graph to run.
@@ -277,44 +279,62 @@ pub async fn ensure(
 ) -> Result<()> {
     let dir = encoder_dir(cache_dir, encoder);
     std::fs::create_dir_all(&dir)?;
-    let http = reqwest::Client::builder()
-        .user_agent(concat!("steam-review-census/", env!("CARGO_PKG_VERSION")))
-        .build()?;
+    let http = client()?;
 
     for asset in [encoder.tokenizer(), encoder.graph(precision)] {
-        let path = dir.join(asset.local);
-        if path.is_file() && sha256_file(&path)? == asset.sha256 {
-            continue;
-        }
-        download(&http, encoder, asset, &path, &mut on_progress).await?;
-
-        let actual = sha256_file(&path)?;
-        if actual != asset.sha256 {
-            // A file that fails verification is removed rather than left to be picked up
-            // by the next run, which would otherwise skip the download and load it.
-            std::fs::remove_file(&path)?;
-            return Err(Error::ModelChecksum {
-                file: asset.local,
-                expected: asset.sha256,
-                actual,
-            });
-        }
+        ensure_asset(&http, encoder.id(), asset, &dir, &mut on_progress).await?;
     }
     Ok(())
 }
 
+/// Fetches one pinned file from a Hugging Face repository unless the copy on disk already
+/// matches its hash.
+///
+/// # Errors
+///
+/// Returns [`Error::ModelChecksum`] if what was downloaded does not match, and propagates
+/// transport and filesystem failures.
+pub(crate) async fn ensure_asset(
+    http: &reqwest::Client,
+    repository: &str,
+    asset: Asset,
+    dir: &Path,
+    on_progress: &mut impl FnMut(DownloadProgress),
+) -> Result<()> {
+    let path = dir.join(asset.local);
+    if path.is_file() && sha256_file(&path)? == asset.sha256 {
+        return Ok(());
+    }
+    download(http, repository, asset, &path, on_progress).await?;
+
+    let actual = sha256_file(&path)?;
+    if actual != asset.sha256 {
+        // A file that fails verification is removed rather than left to be picked up by the
+        // next run, which would otherwise skip the download and load it.
+        std::fs::remove_file(&path)?;
+        return Err(Error::ModelChecksum {
+            file: asset.local,
+            expected: asset.sha256,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn client() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .user_agent(concat!("steam-review-census/", env!("CARGO_PKG_VERSION")))
+        .build()?)
+}
+
 async fn download(
     http: &reqwest::Client,
-    encoder: Encoder,
+    repository: &str,
     asset: Asset,
     path: &Path,
     on_progress: &mut impl FnMut(DownloadProgress),
 ) -> Result<()> {
-    let url = format!(
-        "https://huggingface.co/{}/resolve/main/{}",
-        encoder.id(),
-        asset.remote
-    );
+    let url = format!("https://huggingface.co/{repository}/resolve/main/{}", asset.remote);
     let mut response = http.get(&url).send().await?.error_for_status()?;
     let total = response.content_length();
 

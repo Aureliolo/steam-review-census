@@ -367,16 +367,20 @@ pub async fn run() -> Result<()> {
             batch_size,
             language,
             top_helpful,
-        } => run_read(
-            &app_ids,
-            &model.unwrap_or_else(census_core::reader::default_dir),
-            &census_core::read::ReadOptions {
-                out_dir: out,
-                top_helpful,
-                batch_size,
-                language,
-            },
-        ),
+        } => {
+            let model_dir = model.unwrap_or_else(census_core::reader::default_dir);
+            fetch_reader(&model_dir).await?;
+            run_read(
+                &app_ids,
+                &model_dir,
+                &census_core::read::ReadOptions {
+                    out_dir: out,
+                    top_helpful,
+                    batch_size,
+                    language,
+                },
+            )
+        }
         Command::ExportTraining { from, to } => {
             let written = census_core::claimset::export_training(&from, &to)?;
             println!("{written} labelled claims -> {}", to.display());
@@ -510,6 +514,47 @@ fn run_sample_claims(
             .collect::<Vec<_>>()
             .join(", ")
     );
+    Ok(())
+}
+
+/// Fetches the published reader when the directory holds none.
+///
+/// A directory that already holds a model is left alone whatever the pins say, because that
+/// is how a freshly trained model is tried before it is published. Only an empty one is
+/// filled, and only from the pinned release.
+async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
+    if model_dir.join("model.onnx").is_file() {
+        return Ok(());
+    }
+    if !census_core::reader::PUBLISHED.is_pinned() {
+        anyhow::bail!(
+            "no claim reader at {} and none has been published yet; train one with \
+             training/train.py and export it there, or pass --model",
+            model_dir.display()
+        );
+    }
+    eprintln!("fetching the claim reader from {}", census_core::reader::PUBLISHED.repository);
+    // One line every ten megabytes rather than one per chunk, which would be thousands.
+    let mut shown = (String::new(), 0_u64);
+    census_core::reader::ensure(model_dir, |progress| {
+        let step = progress.downloaded / 10_000_000;
+        if (progress.file, step) == (shown.0.as_str(), shown.1) {
+            return;
+        }
+        shown = (progress.file.to_owned(), step);
+        #[expect(clippy::cast_precision_loss, reason = "a download is under a gigabyte")]
+        let mb = |bytes: u64| bytes as f64 / 1e6;
+        match progress.total {
+            Some(total) => eprintln!(
+                "  {:<14} {:>6.0} / {:.0} MB",
+                progress.file,
+                mb(progress.downloaded),
+                mb(total)
+            ),
+            None => eprintln!("  {:<14} {:>6.0} MB", progress.file, mb(progress.downloaded)),
+        }
+    })
+    .await?;
     Ok(())
 }
 

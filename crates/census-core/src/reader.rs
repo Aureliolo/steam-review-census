@@ -90,6 +90,72 @@ pub fn default_dir() -> std::path::PathBuf {
     crate::model::default_cache_dir().join("claim-reader")
 }
 
+/// The published model, pinned file by file.
+///
+/// Empty hashes mean nothing has been published yet, and [`ensure`] refuses rather than
+/// fetching something unverified: a model file that does not match a pin would change every
+/// number the tool reports without anything appearing to go wrong, and "no pin" is not a
+/// weaker version of that guarantee, it is its absence.
+pub const PUBLISHED: Published = Published {
+    repository: "",
+    files: [
+        crate::model::Asset {
+            remote: "model.onnx",
+            local: "model.onnx",
+            sha256: "",
+        },
+        crate::model::Asset {
+            remote: "tokenizer.json",
+            local: "tokenizer.json",
+            sha256: "",
+        },
+        crate::model::Asset {
+            remote: "reader.json",
+            local: "reader.json",
+            sha256: "",
+        },
+    ],
+};
+
+/// A claim reader as published: which repository, and which three files at which hashes.
+#[derive(Debug, Clone, Copy)]
+pub struct Published {
+    pub repository: &'static str,
+    files: [crate::model::Asset; 3],
+}
+
+impl Published {
+    /// Whether anything is pinned at all.
+    #[must_use]
+    pub fn is_pinned(&self) -> bool {
+        !self.repository.is_empty() && self.files.iter().all(|file| !file.sha256.is_empty())
+    }
+}
+
+/// Fetches the published reader into `dir` unless the copy there already matches its pins.
+///
+/// # Errors
+///
+/// Fails if no reader has been published, if a downloaded file does not match its pin, or on
+/// transport and filesystem failures.
+pub async fn ensure(
+    dir: &Path,
+    mut on_progress: impl FnMut(crate::model::DownloadProgress),
+) -> Result<()> {
+    if !PUBLISHED.is_pinned() {
+        return Err(Error::NoAnchors {
+            path: dir.to_path_buf(),
+        });
+    }
+    std::fs::create_dir_all(dir)?;
+    let http = crate::model::client()?;
+    for file in PUBLISHED.files {
+        crate::model::ensure_asset(&http, PUBLISHED.repository, file, dir, &mut on_progress)
+            .await?;
+    }
+    Ok(())
+}
+
 /// The trained model, loaded and ready to read claims.
 pub struct ClaimReader {
     session: Session,
@@ -287,5 +353,32 @@ mod tests {
         let (best, confidence) = softmax_best(&[90.0, 10.0]);
         assert_eq!(best, 0);
         assert!(confidence.is_finite() && confidence > 0.99);
+    }
+
+    #[test]
+    fn a_pin_with_any_hash_missing_is_no_pin_at_all() {
+        let mut half = PUBLISHED;
+        half.repository = "someone/claim-reader";
+        half.files[0].sha256 = "0".repeat(64).leak();
+        half.files[1].sha256 = "0".repeat(64).leak();
+        assert!(
+            !half.is_pinned(),
+            "two of three files pinned would fetch the third unverified"
+        );
+        half.files[2].sha256 = "0".repeat(64).leak();
+        assert!(half.is_pinned());
+    }
+
+    #[tokio::test]
+    async fn nothing_is_fetched_until_something_is_published() {
+        // The empty pin must refuse rather than reach for the network. A refusal that names
+        // the directory is what the CLI turns into "train one, or pass --model".
+        if PUBLISHED.is_pinned() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("census-unpinned-{}", std::process::id()));
+        let refused = ensure(&dir, |_| {}).await;
+        assert!(matches!(refused, Err(Error::NoAnchors { .. })));
+        assert!(!dir.exists(), "a refused fetch must leave nothing behind");
     }
 }

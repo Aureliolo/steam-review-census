@@ -192,6 +192,14 @@ struct ReadStep {
     reading_claims: bool,
 }
 
+/// How far a model download has got, as the window draws it.
+#[derive(Debug, Clone, Serialize)]
+struct Fetch {
+    file: String,
+    downloaded: u64,
+    total: Option<u64>,
+}
+
 /// Reads a whole corpus with the trained model.
 ///
 /// Runs off the window's thread: it is minutes of arithmetic on a million claims, and a
@@ -206,10 +214,31 @@ async fn read_game(app: AppHandle, app_id: u32, language: Option<String>) -> Res
     };
     let window = app.clone();
 
+    // A standard user has the binary and nothing else. The model is fetched by checksum the
+    // first time it is needed, and the window is told how far the download has got, because
+    // half a gigabyte with no progress shown is indistinguishable from a hang.
+    let model_dir = census_core::reader::default_dir();
+    if !model_dir.join("model.onnx").is_file() {
+        if !census_core::reader::PUBLISHED.is_pinned() {
+            return Err("no claim reader is installed and none has been published yet".to_owned());
+        }
+        let fetching = app.clone();
+        census_core::reader::ensure(&model_dir, |progress| {
+            let _ = fetching.emit(
+                "fetch",
+                Fetch {
+                    file: progress.file.to_owned(),
+                    downloaded: progress.downloaded,
+                    total: progress.total,
+                },
+            );
+        })
+        .await
+        .map_err(text)?;
+    }
+
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let mut model =
-            census_core::reader::ClaimReader::load(&census_core::reader::default_dir())
-                .map_err(text)?;
+        let mut model = census_core::reader::ClaimReader::load(&model_dir).map_err(text)?;
         let report =
             census_core::read::read_corpus(&mut model, app_id, &options, |progress| {
                 let _ = window.emit(
