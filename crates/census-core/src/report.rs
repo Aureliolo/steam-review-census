@@ -673,6 +673,7 @@ mod tests {
                 positive: 70_000,
                 top_helpful,
                 model: "test".to_owned(),
+                trained_on: String::new(),
                 spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                 threshold: 0.5,
                 device: "cpu".to_owned(),

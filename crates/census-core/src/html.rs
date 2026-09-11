@@ -1432,8 +1432,16 @@ fn review(out: &mut String, app: &AppReport, example: &Example) {
 /// different thresholds are not comparable, and a reader given the numbers without it cannot
 /// tell which they have.
 fn built_from(app: &AppReport) -> String {
+    let labels = if app.reading.trained_on.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " trained on label set <code>{}</code>,",
+            escape(&app.reading.trained_on)
+        )
+    };
     format!(
-        "{}, answering only above {:.2} confidence",
+        "{},{labels} answering only above {:.2} confidence",
         escape(&app.reading.model),
         app.reading.threshold
     )
@@ -1921,6 +1929,7 @@ mod tests {
                     top_helpful: 50,
                     spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                     model: "test-reader".to_owned(),
+                    trained_on: "0123456789abcdef".to_owned(),
                     threshold: 0.5,
                     device: "cpu".to_owned(),
                     subjects: vec![

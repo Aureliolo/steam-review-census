@@ -185,6 +185,11 @@ pub struct ReadReport {
     pub positive: u64,
     pub top_helpful: u64,
     pub model: String,
+    /// Which labels the model was trained from. Two readers with the same backbone and the
+    /// same threshold trained on different label sets give different numbers, and a reading
+    /// that recorded only the backbone could not say which it was.
+    #[serde(default)]
+    pub trained_on: String,
     pub spine_version: String,
     pub threshold: f32,
     pub device: String,
@@ -251,6 +256,7 @@ pub fn read_corpus(
         device: model.device().to_owned(),
         threshold: model.provenance().threshold,
         model: model.provenance().trained_from.clone(),
+        trained_on: model.provenance().data_fingerprint.clone(),
         spine_version: model.provenance().spine_version.clone(),
         ..counted
     })
@@ -529,6 +535,7 @@ fn count_reviews(
         positive,
         top_helpful: top_reviews.len() as u64,
         model: String::new(),
+        trained_on: String::new(),
         spine_version: String::new(),
         threshold: 0.0,
         device: String::new(),
