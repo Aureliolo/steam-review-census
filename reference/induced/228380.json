@@ -1,0 +1,64 @@
+{
+  "app_id": 228380,
+  "seed": 1,
+  "handout_size": 120,
+  "induced_by": "claude-opus-5",
+  "subjects": [
+    {
+      "id": "damage-and-wrecking",
+      "label": "Car damage and wrecking",
+      "description": "The soft-body damage model and the carnage it enables: dents and crumpling, losing wheels and being wrecked out of a race, the damage-level setting, destructible track objects, and the pleasure of smashing opponents; not the driving physics or track design as such.",
+      "refines": "gameplay",
+      "evidence": [
+        "158519398",
+        "192224020",
+        "55453855",
+        "55927841",
+        "69297829",
+        "75097725",
+        "76851709",
+        "81210734",
+        "83832832",
+        "85643423",
+        "8766764",
+        "9513658"
+      ]
+    },
+    {
+      "id": "flatout-successor",
+      "label": "FlatOut successor",
+      "description": "Whether this is the true heir to FlatOut 1 and 2 from the same studio, what it keeps from them and what it lost; comparisons to other racers or demolition games belong in the fixed genre subject.",
+      "refines": "genre",
+      "evidence": [
+        "120596630",
+        "229562154",
+        "43100599",
+        "81858894",
+        "91061168"
+      ]
+    },
+    {
+      "id": "vehicle-roster",
+      "label": "Vehicle roster and novelty cars",
+      "description": "The cars on offer: how many there are, which ones players favour, and the joke vehicles such as the lawnmower, sofa, combine harvester, bus and toilet on wheels; not how cars handle or break.",
+      "refines": "content",
+      "evidence": [
+        "102442707",
+        "158519398",
+        "70697153"
+      ]
+    },
+    {
+      "id": "game-modes",
+      "label": "Game modes, tournament and events",
+      "description": "Which modes exist and how they play: demolition derby versus racing, the tournament and its seasonal events, sandbox and stunt modes, and requests for modes that are missing; not the core driving and damage mechanics.",
+      "refines": "gameplay",
+      "evidence": [
+        "130716055",
+        "51255515",
+        "54866437",
+        "8766764"
+      ]
+    }
+  ]
+}
