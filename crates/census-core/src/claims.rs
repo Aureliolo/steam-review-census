@@ -36,8 +36,26 @@ use crate::Result;
 /// than kept, a heading ending in a colon joined to what it introduces, and no splitting
 /// inside a quotation. `claims-3` added the rest of what they found: Steam's markup removed,
 /// semicolons no longer ending a thought, numbered list markers, parenthetical asides, web
-/// addresses and abbreviations.
-pub const SPLITTER_VERSION: &str = "claims-3";
+/// addresses and abbreviations. `claims-4` is what twenty-six labellers found after that: a
+/// list of short comma-separated points is that many points, a question keeps its short
+/// answer, a heading tag opened mid-sentence is emphasis rather than a heading, a line that
+/// ends on a comma has not finished, and an emoticon belongs to the sentence before it.
+pub const SPLITTER_VERSION: &str = "claims-4";
+
+/// The most a comma-separated part may weigh for a sentence of three or more of them to be
+/// read as a list of points. "Stunning visual, calm music, epic story" is three of weight
+/// fifteen and under; "The combat, which took a while to click, is superb" has a middle
+/// twice that and stays one thought.
+const SHORT_PART: usize = 18;
+
+/// The least a part of such a list may weigh. A part names a thing and says something about
+/// it, which is two words; "Yes, yes, yes." is three words of the same one and no list.
+const LEAST_PART: usize = 6;
+
+/// The most a piece may weigh and still be an answer to the question before it rather than a
+/// point of its own. "Top left of the screen." answers "Want to see your objectives?"; a
+/// paragraph after a question is a paragraph.
+const SHORT_ANSWER: usize = 30;
 
 /// Below this much of a piece it is not a point, it is the tail of one. "Yes." and "10/10."
 /// are joined to what they qualify rather than counted as opinions of their own.
@@ -89,6 +107,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
     let mut start = 0;
     let mut quoted = false;
     let mut open_brackets = 0_i32;
+    let mut heading = false;
     let mut chars = text.char_indices().peekable();
 
     while let Some((at, ch)) = chars.next() {
@@ -98,9 +117,20 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
             while chars.peek().is_some_and(|(next, _)| *next < after) {
                 chars.next();
             }
-            if kind == Markup::Break && !text[start..at].trim().is_empty() {
-                pieces.push((start, at));
-                start = at;
+            let cut = match kind {
+                Markup::Break => Some(at),
+                Markup::Skip => None,
+                Markup::Heading { closing: false } => {
+                    heading = opens_a_heading(text, start, at);
+                    heading.then_some(at)
+                }
+                Markup::Heading { closing: true } => std::mem::take(&mut heading).then_some(after),
+            };
+            if let Some(cut) = cut
+                && !text[start..cut].trim().is_empty()
+            {
+                pieces.push((start, cut));
+                start = cut;
             }
             continue;
         }
@@ -116,7 +146,9 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
         // "Так денег никто не даст. Давай по-новой" is one joke being retold, and cutting it
         // in half leaves two fragments that mean nothing apart.
         let ends = if ch == '\n' {
-            true
+            // A line that ends on a comma was wrapped by hand mid-sentence, which is how a
+            // reviewer who never types a full stop writes a long one.
+            !ends_on_a_comma(&text[start..at])
         } else if quoted || open_brackets > 0 || inside_a_link(text, at) {
             false
         } else if ch == '.' {
@@ -135,18 +167,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
             continue;
         }
 
-        // Run out any further terminators and the whitespace after them, so "Wait... what?!"
-        // is one boundary rather than five.
-        let mut end = at + ch.len_utf8();
-        while let Some(&(next_at, next)) = chars.peek() {
-            if next == '\n' || next.is_whitespace() || TERMINATORS.contains(&next) {
-                end = next_at + next.len_utf8();
-                chars.next();
-            } else {
-                break;
-            }
-        }
-
+        let end = run_out(text, &mut chars, at + ch.len_utf8());
         if !text[start..end].trim().is_empty() {
             pieces.push((start, end));
         }
@@ -159,6 +180,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
 
     join_the_fragments(text, pieces)
         .into_iter()
+        .flat_map(|piece| listed_points(text, piece))
         .filter_map(|(from, to)| tidied(text, from, to))
         .filter_map(|at| {
             let piece = &text[at.clone()];
@@ -177,20 +199,107 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
         .collect()
 }
 
+/// Runs a boundary that begins at `end` out over any further terminators and the whitespace
+/// after them, so "Wait... what?!" is one boundary rather than five, and over an emoticon
+/// after those, which colours the sentence it follows: "Great fun. :D If you like Vermintide"
+/// smiles about the fun. Not past a line break, where a lone dash is the next line's bullet.
+fn run_out(
+    text: &str,
+    chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>,
+    mut end: usize,
+) -> usize {
+    let mut broke_the_line = false;
+    loop {
+        while let Some(&(next_at, next)) = chars.peek() {
+            if next.is_whitespace() || TERMINATORS.contains(&next) {
+                broke_the_line |= next == '\n';
+                end = next_at + next.len_utf8();
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        let token = text[end..].split(char::is_whitespace).next().unwrap_or("");
+        if broke_the_line || !is_an_emoticon(token) {
+            return end;
+        }
+        end += token.len();
+        while chars.peek().is_some_and(|&(next_at, _)| next_at < end) {
+            chars.next();
+        }
+    }
+}
+
 /// What a piece of Steam's markup does to the text around it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Markup {
-    /// Starts a new point: a list item, a heading, a rule, a table cell.
+    /// Starts a new point: a list item, a rule, a table cell.
     Break,
     /// Styling around text that carries on: bold, italic, spoiler, a link.
     Skip,
+    /// A heading tag, which is a point of its own where it opens a line and emphasis where
+    /// a reviewer opened it mid-sentence.
+    Heading { closing: bool },
+}
+
+/// Whether a heading tag opened at `at` is a heading rather than emphasis.
+///
+/// On Steam a heading is a block, so a reviewer who opens one mid-sentence, after a word or
+/// a comma, wanted bold text, and the sentence runs straight through it and through the
+/// closing tag. Opened with nothing written since the line began or the last point ended,
+/// or right after a sentence ended, it is the heading it looks like. Markup does not count
+/// as written: a heading straight after `[/list]` is still the first thing on its line.
+fn opens_a_heading(text: &str, start: usize, at: usize) -> bool {
+    let line_start = text[..at].rfind('\n').map_or(0, |index| index + 1);
+    let written = without_markup(&text[start.max(line_start)..at]);
+    let written = written.trim_end();
+    written.is_empty() || written.ends_with(TERMINATORS)
 }
 
 /// Tags that separate one point from the next. Everything else wraps a point without
 /// interrupting it.
-const BREAKING_TAGS: [&str; 12] = [
-    "*", "h1", "h2", "h3", "hr", "list", "olist", "quote", "table", "tr", "td", "th",
+const BREAKING_TAGS: [&str; 9] = [
+    "*", "hr", "list", "olist", "quote", "table", "tr", "td", "th",
 ];
+
+/// Whether a piece ends on a comma, in any of the scripts that write one.
+fn ends_on_a_comma(piece: &str) -> bool {
+    piece.trim_end().ends_with([',', '\u{FF0C}', '\u{3001}'])
+}
+
+/// Cuts a sentence that is a list of short comma-separated points into those points.
+///
+/// "Stunning visual, calm music, epic story" is three subjects in one sentence, and a
+/// labeller given it as one claim picks one and marks it contested. Three or more parts, each
+/// short, is the shape of a list rather than of prose: a clause with a comma in it is longer
+/// than any item anyone lists. Left alone where the piece holds a quotation or a bracket,
+/// since a comma inside either is that thing's own.
+///
+/// Cut after the fragments are joined, not before, because the parts of a list are shorter
+/// than a claim on purpose and joining them back together would undo the cut.
+fn listed_points(text: &str, (from, to): (usize, usize)) -> Vec<(usize, usize)> {
+    let piece = &text[from..to];
+    if piece.contains([
+        '"', '(', ')', '\u{201C}', '\u{201D}', '\u{FF08}', '\u{FF09}',
+    ]) {
+        return vec![(from, to)];
+    }
+    let mut parts: Vec<(usize, usize)> = Vec::new();
+    let mut part_start = from;
+    for (offset, ch) in piece.char_indices() {
+        if matches!(ch, ',' | '\u{FF0C}' | '\u{3001}') {
+            parts.push((part_start, from + offset));
+            part_start = from + offset + ch.len_utf8();
+        }
+    }
+    parts.push((part_start, to));
+
+    let short = parts.len() >= 3
+        && parts.iter().all(|&(start, end)| {
+            (LEAST_PART..=SHORT_PART).contains(&weight(text[start..end].trim()))
+        });
+    if short { parts } else { vec![(from, to)] }
+}
 
 /// Recognises Steam's markup at `at`, returning where it ends and what it does.
 ///
@@ -210,6 +319,7 @@ fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
         return None;
     }
 
+    let closing = inside.starts_with('/');
     let name = inside
         .split(['=', ' '])
         .next()
@@ -226,7 +336,9 @@ fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
         return None;
     }
 
-    let kind = if BREAKING_TAGS.contains(&name.as_str()) {
+    let kind = if matches!(name.as_str(), "h1" | "h2" | "h3") {
+        Markup::Heading { closing }
+    } else if BREAKING_TAGS.contains(&name.as_str()) {
         Markup::Break
     } else {
         Markup::Skip
@@ -286,8 +398,10 @@ fn quote_state(ch: char, quoted: bool) -> Option<bool> {
 /// with a hyphen in front of it. Leaving the hyphen on gives the model a token that appears
 /// in every category and means nothing in any of them.
 fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> {
-    const MARKERS: [char; 8] = [
-        '-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>',
+    // A comma in front of a point is the end of the point before it, left behind by a cut.
+    const MARKERS: [char; 11] = [
+        '-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>', ',', '\u{FF0C}',
+        '\u{3001}',
     ];
 
     let mut piece = &text[from..to];
@@ -347,20 +461,26 @@ fn numbers_a_list(so_far: &str) -> bool {
 /// A list rather than a rule, because every rule general enough to catch "ca." also catches
 /// "fun." A short list of the ones that actually appear in reviews costs nothing and is wrong
 /// about nothing else. Reviews arrive in many languages, so this is not only English.
-const ABBREVIATIONS: [&str; 34] = [
+const ABBREVIATIONS: [&str; 42] = [
     "mr", "mrs", "ms", "dr", "prof", "vs", "etc", "eg", "ie", "approx", "max", "vol", "ch", "pp",
     "st", "inc", "ltd", "jr", "sr", "ca", "bzw", "evtl", "ggf", "usw", "zb", "dh", "uvm", "inkl",
-    "bspw", "eig", "sog", "bzgl", "env", "ecc",
+    "bspw", "eig", "sog", "bzgl", "env", "ecc", "def", "ed", "ver", "vers", "esp", "resp", "orig",
+    "hrs",
 ];
 
-/// Whether the word before this stop is one of them.
+/// Whether the word before this stop is one of them, written with or without the stops
+/// inside it: "i.e." and "z.B." are "ie" and "zb" with their dots taken out.
 fn abbreviates(text: &str, at: usize) -> bool {
     let word_start = text[..at]
         .char_indices()
         .rev()
-        .find(|(_, ch)| !ch.is_alphabetic())
+        .find(|(_, ch)| !ch.is_alphabetic() && *ch != '.')
         .map_or(0, |(index, ch)| index + ch.len_utf8());
-    let word = text[word_start..at].to_ascii_lowercase();
+    let word: String = text[word_start..at]
+        .chars()
+        .filter(|ch| *ch != '.')
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect();
     ABBREVIATIONS.contains(&word.as_str())
 }
 
@@ -387,17 +507,28 @@ fn continues_a_word(text: &str, from: usize) -> bool {
 }
 
 /// How much a piece says, in Latin characters or their equivalent.
+///
+/// Markup weighs nothing: `[h1]Cons[/h1]` says exactly what "Cons" says, and both are a
+/// heading that belongs to the point under it rather than a point of their own.
 fn weight(piece: &str) -> usize {
-    piece
-        .chars()
-        .map(|ch| {
-            if writes_without_spaces(ch) {
-                DENSE_CHARACTER
-            } else {
-                1
-            }
-        })
-        .sum()
+    let mut total = 0;
+    let mut at = 0;
+    while at < piece.len() {
+        let ch = piece[at..].chars().next().unwrap_or('\0');
+        if ch == '['
+            && let Some((after, _)) = markup_at(piece, at)
+        {
+            at = after;
+            continue;
+        }
+        total += if writes_without_spaces(ch) {
+            DENSE_CHARACTER
+        } else {
+            1
+        };
+        at += ch.len_utf8();
+    }
+    total
 }
 
 /// Whether a character belongs to a script that carries about a word per character and puts
@@ -416,11 +547,28 @@ pub(crate) fn writes_without_spaces(ch: char) -> bool {
 ///
 /// Forward, because a short opener is nearly always a verdict on what follows ("Yes. Buy
 /// it while it is on sale"), and a short piece with nothing after it has only one neighbour.
+/// Backward in two shapes where the point is plainly the one before: a short answer after a
+/// question ("Want to see your objectives?" "Top left of the screen."), and an emoticon,
+/// which colours the sentence it follows and never the one it precedes.
 fn join_the_fragments(text: &str, pieces: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     let mut joined: Vec<(usize, usize)> = Vec::with_capacity(pieces.len());
     let mut held: Option<(usize, usize)> = None;
 
     for (from, to) in pieces {
+        let piece = text[from..to].trim();
+        let answers = held.is_none()
+            && joined
+                .last()
+                .is_some_and(|&(_, end)| asks_a_question(&text[..end]))
+            && weight(piece) <= SHORT_ANSWER;
+        if (answers || is_an_emoticon(piece))
+            && let Some(last) = joined.last_mut()
+            && held.is_none()
+        {
+            last.1 = to;
+            continue;
+        }
+
         let (from, to) = match held.take() {
             Some((earlier, _)) => (earlier, to),
             None => (from, to),
@@ -445,6 +593,22 @@ fn join_the_fragments(text: &str, pieces: Vec<(usize, usize)>) -> Vec<(usize, us
     }
 
     joined
+}
+
+/// Whether text ends on a question mark, once any trailing whitespace is ignored.
+fn asks_a_question(so_far: &str) -> bool {
+    so_far.trim_end().ends_with(['?', '\u{FF1F}'])
+}
+
+/// Whether a token is an emoticon or a flourish rather than words: ":D", "<3", "^^", ":)".
+/// One letter at most, because "D:" is an emoticon and "ok" is a verdict, and never a letter
+/// alone, because "A" after a full stop is the next sentence starting. "xD" is the one
+/// two-letter emoticon common enough to name.
+fn is_an_emoticon(token: &str) -> bool {
+    let length = token.chars().count();
+    let letters = token.chars().filter(|ch| ch.is_alphanumeric()).count();
+    (1..=4).contains(&length)
+        && ((letters <= 1 && letters < length) || token.eq_ignore_ascii_case("xd"))
 }
 
 /// What splitting a corpus produced.
@@ -773,10 +937,115 @@ mod tests {
     #[test]
     fn a_heading_tag_starts_a_new_point() {
         let claims = split(
+            "[h3]Combat[/h3]\nThe parrying is the best in years.\n[h3]Sound[/h3]\nMuffled and thin.",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].contains("parrying"), "got {:?}", claims[0]);
+        assert!(claims[1].contains("Muffled"), "got {:?}", claims[1]);
+        assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
+    }
+
+    #[test]
+    fn a_heading_glued_to_a_sentence_end_is_still_a_heading() {
+        let claims = split(
             "[h3]Combat[/h3]The parrying is the best in years.[h3]Sound[/h3]Muffled and thin.",
         );
-        assert!(claims.len() >= 2, "got {claims:?}");
-        assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[1].starts_with("Sound"), "got {:?}", claims[1]);
+    }
+
+    #[test]
+    fn a_heading_tag_opened_mid_sentence_is_emphasis() {
+        assert_eq!(
+            split("The biggest improvement might be [h1]EVERYONE WALK FAST[/h1], really nice"),
+            vec!["The biggest improvement might be EVERYONE WALK FAST, really nice"]
+        );
+        let claims = split(
+            "\u{91CD}\u{5934}\u{620F}\u{6765}\u{4E86}\u{FF1A}[h2] \u{6574}\u{4E2A}UI\u{8BBE}\u{8BA1} [/h2]\u{FF0C}\u{5C24}\u{5176}\u{662F}\u{5546}\u{5E97}\u{754C}\u{9762}\u{5B9E}\u{5728}\u{592A}\u{4E71}\u{4E86}",
+        );
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+    }
+
+    #[test]
+    fn a_heading_after_a_list_opens_its_own_line() {
+        let claims = split(
+            "[list][*]Runs well on old hardware[*]Looks great at night[/list][h1]Cons[/h1]\nThe menus are a disaster.",
+        );
+        assert_eq!(claims.len(), 3, "got {claims:?}");
+        assert!(claims[2].starts_with("Cons"), "got {:?}", claims[2]);
+        assert!(claims[2].contains("menus"), "got {:?}", claims[2]);
+    }
+
+    #[test]
+    fn a_list_of_short_parts_is_a_point_per_part() {
+        let claims = split("Stunning visual, calm music, epic story");
+        assert_eq!(claims.len(), 3, "got {claims:?}");
+        assert_eq!(claims[1], "calm music");
+        let claims = split(
+            "\u{753B}\u{9762}\u{7F8E}\u{3057}\u{3044}\u{3001}\u{97F3}\u{697D}\u{6700}\u{9AD8}\u{3001}\u{7269}\u{8A9E}\u{6DF1}\u{3044}",
+        );
+        assert_eq!(claims.len(), 3, "got {claims:?}");
+    }
+
+    #[test]
+    fn a_clause_set_off_by_commas_is_not_a_list() {
+        assert_eq!(
+            split("The combat, which took a while to click, is superb").len(),
+            1
+        );
+        assert_eq!(
+            split("Runs well on my machine, looks great at night, and the story kept me going until three in the morning").len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_short_answer_belongs_to_its_question() {
+        assert_eq!(
+            split("Want to see your objectives? Top left of the screen."),
+            vec!["Want to see your objectives? Top left of the screen."]
+        );
+        let claims = split("Is this Frost Punk? No. Is this a phenomenal game? Yes.");
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert_eq!(claims[0], "Is this Frost Punk? No.");
+    }
+
+    #[test]
+    fn a_long_sentence_after_a_question_is_its_own_point() {
+        let claims = split(
+            "Is the story any good? The writing is sharp for the first ten hours and falls apart after that.",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+    }
+
+    #[test]
+    fn an_emoticon_colours_the_sentence_before_it() {
+        let claims = split("Great fun with friends. :D If you like Vermintide you will like this.");
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert_eq!(claims[0], "Great fun with friends. :D");
+        assert!(claims[1].starts_with("If you"), "got {:?}", claims[1]);
+    }
+
+    #[test]
+    fn a_line_ending_on_a_comma_continues_on_the_next() {
+        let claims = split(
+            "\u{7D4C}\u{6E08}\u{306F}\u{3068}\u{3066}\u{3082}\u{53B3}\u{3057}\u{304F}\u{3001}\n\u{5E8F}\u{76E4}\u{306F}\u{91D1}\u{304C}\u{5168}\u{304F}\u{8DB3}\u{308A}\u{306A}\u{3044}",
+        );
+        assert_eq!(claims.len(), 1, "got {claims:?}");
+        let claims = split(
+            "The economy is brutal at the start,\nand the tutorial never explains why.\nThe art is lovely though.",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].contains("tutorial"), "got {:?}", claims[0]);
+    }
+
+    #[test]
+    fn an_edition_is_an_abbreviation() {
+        assert_eq!(
+            split("Since I've been playing the Def. Editions for a while, the changes stand out.")
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -829,6 +1098,14 @@ mod tests {
         );
         assert_eq!(
             split("Roughly 40 hours, vs. 20 for the first one, which is generous.").len(),
+            1
+        );
+        assert_eq!(
+            split("Play with a friend, i.e. Someone patient, and it is a great time.").len(),
+            1
+        );
+        assert_eq!(
+            split("Manche Missionen dauern z.B. 40 Minuten ohne Speicherpunkt.").len(),
             1
         );
     }

@@ -213,11 +213,13 @@ already uses so it works in scripts without spaces. "Stunning visual, calm music
 is three parts of weight 14, 10 and 10 and splits; "The combat, which took a while to click, is
 superb" has a long middle and does not.
 
-**Not done during the run.** Every game's batches are already drawn under `claims-3`, and a
-label points at a claim index. Changing the splitter now would mean the indices in the
-reference sets no longer name the same text the reader produces, which silently breaks the
-join that `census measure-claims` depends on. It goes in `claims-4`, after this set is
-labelled and measured, and the sets are redrawn together.
+**Done in `claims-4`**, mid-run after all, because a label now names a span of its review
+rather than an index, and `census measure-claims` joins by span: a labelled claim the new
+splitter cuts differently is counted as unjoined rather than silently scored against the
+wrong sentence. Three or more comma-separated parts, each of weight 6 to 18, split; the cut
+happens after the fragments are joined, or the short parts would be joined straight back.
+Readings record the splitter that cut them, and a reading cut by an older one is refused
+wherever a claim is quoted or scored by its index, until the game is read again.
 
 ### A question and its answer are one claim, reported on 1601580
 
@@ -232,6 +234,12 @@ exclamation mark, is one claim with the question, not two. The scorecard is the 
 again with a question mark in it, and the same short-parts rule that fixes the comma list
 covers it once "?" is allowed to end a part.
 
+**Done in `claims-4`** for the question and its answer: a piece of weight 30 or under after
+a piece ending in "?" joins it. The scorecard is not: "?" still ends a piece, so "Visuals?
+fantastic!, Atmosphere? fantastic!" comes out as one claim per question through the
+question-and-answer rule, which is the right count, and the tail "Story? mid at best,
+Balance? bad" stays one claim of two.
+
 ### Abbreviations the list does not have, reported on 1466860
 
 "Since I've been playing the Def. Editions for a while" cut at "Def.". A capitalised word
@@ -239,6 +247,14 @@ after a full stop that follows a three-letter capitalised token is a weaker sign
 list, but "Def." is not in ABBREVIATIONS and "Ed." is not either. Add both, and consider
 treating a one-to-four-letter capitalised token before a full stop, followed by a lowercase
 word, as an abbreviation regardless of the list. Goes in `claims-4` with the comma list.
+
+**Done in `claims-4`** as list entries: "def", "ed", "ver", "vers", "esp", "resp", "orig"
+and "hrs", and the list is now matched with the dots taken out, so "i.e." and "z.B." are
+caught when a capital follows them (the 3551340 labeller found two "i.e." cuts). The
+capitalised-token rule is not in, because a lowercase word after "Fun." is how most
+reviewers start their next sentence. The same labeller reported "the old Champ." cut before
+"Manager", which "champ" would cover if it were an abbreviation anybody else used; it is not
+added on one report.
 
 ### A heading tag used as bold, reported on 1466860 and 1716740
 
@@ -256,6 +272,14 @@ end, ends one. Anywhere else the tag is styling and is skipped like `[b]`. Every
 heading in the same review still splits, since they all sit on lines of their own. Goes in
 `claims-4`.
 
+**Done in `claims-4`**, decided at the opening tag: it is a heading where nothing but markup
+has been written since the line began or the last point ended, or where the previous
+sentence has ended; otherwise it and its closing tag are styling. A heading then ends with
+its closing tag wherever that sits, and weighs what its words weigh, so "Cons" joins the
+point under it exactly as "Cons" on a bare line does. In the drawn sets 147 of 150 closing
+heading tags are followed by a line break, so the line rule and this one agree everywhere
+but in the synthetic cases.
+
 ### A line that ends on a comma has not finished, reported on 1809540
 
 A Japanese review of the economy (184812704) came back as thirteen claims, four of them
@@ -265,12 +289,20 @@ headings and wrong here. The rule: a line ending in a comma (",", "，" or "、"
 after it. A comma is never how anybody ends a point, in any script the splitter handles.
 Goes in `claims-4`.
 
+**Done in `claims-4`** as written.
+
 ### An emoticon after a sentence joins the wrong neighbour
 
 ":D", ":(", ";)" and ":|" sit after the sentence they colour, but a fragment below the
 minimum weight joins forward, so "Great fun. :D If you like Vermintide..." hands the smile to
 the next claim. Five claims across the drawn sets begin this way. A fragment with no letter
 in it, on a line that has one before it, should join backward. Goes in `claims-4`.
+
+**Done in `claims-4`** in both shapes: a token of up to four characters with at most one
+letter in it, and at least one that is not a letter, following a sentence end on the same
+line is run into that sentence's boundary, and a piece that is only such a token joins the
+piece before it. "xD" is the one two-letter emoticon named. A bare letter never counts,
+because "A" after a full stop is the next sentence starting.
 
 ### Two shapes that may not be fixable mechanically
 

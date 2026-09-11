@@ -470,6 +470,16 @@ function drawTopics(counted) {
     );
   }
 
+  /* The counts stand whatever cut them; a claim quoted by its index does not, because this
+     build would cut the review into different pieces. */
+  const cut = el('split-caveat');
+  cut.hidden = !counted.older_splitter;
+  set(
+    cut,
+    `These counts were made with an older way of taking reviews apart, so the points behind ` +
+      `them cannot be shown until the game is read again.`,
+  );
+
   const unread = counted.claims > 0 ? counted.unclassified_claims / counted.claims : 0;
   const silent = counted.reviews > 0 ? counted.silent_reviews / counted.reviews : 0;
 

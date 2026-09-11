@@ -1079,7 +1079,25 @@ fn run_measure_claims(
 
     for &app_id in app_ids {
         let found =
-            census_core::measure::agreement(out, app_id, &reference.join(app_id.to_string()))?;
+            match census_core::measure::agreement(out, app_id, &reference.join(app_id.to_string()))
+            {
+                // The readings are fine as counts and useless as a score: their indexes name
+                // sentences this build cuts differently. Saying so per game lets the rest of
+                // the list be scored rather than the whole run stopping at the first stale one.
+                Err(census_core::Error::StaleAnchors {
+                    field: "splitter",
+                    actual,
+                    ..
+                }) => {
+                    println!(
+                        "\napp {app_id}\n  read under {actual}, and this build splits with {}; \
+                     read it again before measuring",
+                        census_core::claims::SPLITTER_VERSION
+                    );
+                    continue;
+                }
+                other => other?,
+            };
 
         println!("\napp {app_id}");
         println!(

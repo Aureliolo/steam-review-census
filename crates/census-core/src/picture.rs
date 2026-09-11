@@ -208,6 +208,7 @@ mod tests {
             corpus_reviews: 1_000,
             language: None,
             depth: crate::read::Depth::Deep,
+            splitter: String::new(),
             claims: 3_000,
             unclassified_claims: 0,
             silent_reviews: 0,

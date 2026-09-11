@@ -275,20 +275,26 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
 
 /// Where each labelled claim sits in the readings, by the span of text it names.
 ///
-/// A label was made against a claim as some splitter cut it, and the readings were made
-/// against claims as this build's splitter cuts them. The two agree on an index only while
-/// the splitter is the same, and the splitter is meant to improve. What does not change is
-/// the text: a label names a span of its review, so the claim it belongs to is whichever
-/// claim of the current split covers exactly that span, wherever it now sits. A label whose
-/// span no claim covers any more is left out, and counted.
+/// A label was made against a claim as some splitter cut it, and the readings against
+/// claims as this build's splitter cuts them. The two agree on an index only while the
+/// splitter is the same, and the splitter is meant to improve. What does not change is the
+/// text: a label names a span of its review, so the claim it belongs to is whichever claim
+/// of the current split covers exactly that span, wherever it now sits. A label whose span
+/// no claim covers any more is left out, and counted. The readings themselves have no such
+/// anchor, so readings cut by an older splitter are refused rather than joined by an index
+/// that no longer names the same sentence.
 fn join_by_span<'a>(
     snapshot: &Path,
     labels: &'a [ClaimLabel],
 ) -> Result<HashMap<(&'a str, u16), u16>> {
-    let depth = std::fs::read(snapshot.join("reading.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<crate::read::ReadReport>(&bytes).ok())
-        .map_or(crate::read::Depth::Deep, |found| found.depth);
+    let reading: crate::read::ReadReport =
+        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            crate::Error::NoClassifications {
+                path: snapshot.join("reading.json"),
+            }
+        })?)?;
+    reading.cut_as_this_build()?;
+    let depth = reading.depth;
     let ids: std::collections::HashSet<String> =
         labels.iter().map(|label| label.review_id.clone()).collect();
     let texts = crate::capture::texts_for(snapshot, &ids)?;

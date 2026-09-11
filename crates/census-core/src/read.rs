@@ -260,6 +260,11 @@ pub struct ReadReport {
     /// take the review apart the same way, so this is recorded rather than assumed.
     #[serde(default)]
     pub depth: Depth,
+    /// Which splitter cut the claims the readings are indexed by. A build with a newer one
+    /// cuts a review into different pieces, and an index into the old pieces then names
+    /// whatever sentence sits there now, so the readings say which cut they mean.
+    #[serde(default)]
+    pub splitter: String,
     pub claims: u64,
     /// Claims the model would not put a subject on. Reported rather than filed under
     /// whatever scored highest, which is the whole point of the rebuild.
@@ -305,6 +310,30 @@ impl ReadReport {
     )]
     pub fn unclassified_share(&self) -> Option<f64> {
         (self.claims > 0).then(|| self.unclassified_claims as f64 / self.claims as f64)
+    }
+
+    /// Refuses a reading whose claims this build would cut differently.
+    ///
+    /// The counts stay true, since they describe the corpus as it was read, but a claim
+    /// index in the readings names a sentence only under the splitter that cut it, and
+    /// quoting or scoring through one would look right and be wrong.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the readings were cut by another splitter than this build's.
+    pub fn cut_as_this_build(&self) -> Result<()> {
+        if self.splitter == crate::claims::SPLITTER_VERSION {
+            return Ok(());
+        }
+        Err(crate::Error::StaleAnchors {
+            field: "splitter",
+            expected: crate::claims::SPLITTER_VERSION.to_owned(),
+            actual: if self.splitter.is_empty() {
+                "one before claims-4".to_owned()
+            } else {
+                self.splitter.clone()
+            },
+        })
     }
 
     /// How much more of this corpus the model declined than it usually does, as a ratio.
@@ -649,6 +678,7 @@ fn count_reviews(
         corpus_reviews,
         language: options.language.clone(),
         depth: options.depth,
+        splitter: crate::claims::SPLITTER_VERSION.to_owned(),
         claims,
         unclassified_claims: unclassified,
         silent_reviews: silent,
@@ -849,6 +879,22 @@ mod tests {
         let found: ReadReport = serde_json::from_value(stored).expect("an older reading opens");
         assert_eq!(found.depth, Depth::Deep);
         assert!(found.trained_on.is_empty());
+
+        // It opens, and its counts stand, but nothing may quote a claim of it by index: the
+        // index names a sentence only under the splitter that cut it.
+        let refused = found
+            .cut_as_this_build()
+            .expect_err("an older cut is refused");
+        assert!(
+            matches!(
+                refused,
+                crate::Error::StaleAnchors {
+                    field: "splitter",
+                    ..
+                }
+            ),
+            "got {refused}"
+        );
     }
 
     #[test]
@@ -859,6 +905,7 @@ mod tests {
             corpus_reviews: 100,
             language: None,
             depth: Depth::Deep,
+            splitter: String::new(),
             claims: 1_000,
             unclassified_claims: 900,
             silent_reviews: 0,

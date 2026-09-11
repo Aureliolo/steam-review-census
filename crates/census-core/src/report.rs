@@ -414,8 +414,8 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let crawl = crawl_facts(&options.out_dir, app_id)?;
 
     // A reading made against a different taxonomy counts subjects this build does not have,
-    // and one made by a model that has since been replaced describes answers nothing here
-    // holds any more. Either would render perfectly and be wrong.
+    // and one whose claims were cut by another splitter quotes, at every index, whatever
+    // sentence sits there now. Either would render perfectly and be wrong.
     if reading.spine_version != crate::CORE_SPINE_VERSION {
         return Err(crate::Error::StaleAnchors {
             field: "taxonomy",
@@ -423,6 +423,7 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
             actual: reading.spine_version.clone(),
         });
     }
+    reading.cut_as_this_build()?;
 
     let drawn = shortlist(&snapshot, options)?;
     let top_ids: HashSet<String> = top_of_the_pile(&snapshot, reading.top_helpful)?;
@@ -589,9 +590,8 @@ fn top_of_the_pile(snapshot: &Path, how_many: u64) -> Result<HashSet<String>> {
 /// already give.
 ///
 /// More are drawn than will be shown. A drawn claim can turn out to be unquotable, because
-/// the splitter that produced the readings and the splitter in this build can disagree about
-/// how many points a review makes, and a subject left with nothing to show is a count nobody
-/// can check.
+/// a review edited since the reading was made may no longer make as many points, and a
+/// subject left with nothing to show is a count nobody can check.
 fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String, Vec<DrawnClaim>>> {
     let draw = options.examples * 2;
     let mut per_side: HashMap<(&'static str, &'static str), Smallest<[u8; 32], DrawnClaim>> =
@@ -743,6 +743,7 @@ mod tests {
                 corpus_reviews: 100_000,
                 language: None,
                 depth: crate::read::Depth::Deep,
+                splitter: crate::claims::SPLITTER_VERSION.to_owned(),
                 claims: 300_000,
                 unclassified_claims: 0,
                 silent_reviews: 0,

@@ -361,6 +361,10 @@ struct Reading {
     /// When the capture was last brought up to date after these counts were made, so the
     /// window can say the counts describe the corpus as it was.
     swept_since: Option<i64>,
+    /// Whether this build takes reviews apart differently from the pass that made these
+    /// readings. The counts stand; a claim quoted by its index does not, until the game is
+    /// read again.
+    older_splitter: bool,
     subjects: Vec<Subject>,
     measured: Option<Measured>,
     /// Oldest first. Fewer than two and there is no line to draw.
@@ -432,6 +436,16 @@ fn subject_row(
     }
 }
 
+/// What the reading pass wrote beside a snapshot's readings.
+fn read_report(snapshot: &std::path::Path) -> Result<census_core::read::ReadReport, String> {
+    serde_json::from_slice(
+        &std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            "this game has not been read yet; run the reading pass first".to_owned()
+        })?,
+    )
+    .map_err(text)
+}
+
 #[tauri::command]
 #[expect(
     clippy::needless_pass_by_value,
@@ -440,11 +454,7 @@ fn subject_row(
 fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
     let dir = library_dir(&app);
     let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
-    let found: census_core::read::ReadReport =
-        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
-            "this game has not been read yet; run the reading pass first".to_owned()
-        })?)
-        .map_err(text)?;
+    let found = read_report(&snapshot)?;
     let facts = report::crawl_facts(&dir, app_id).map_err(text)?;
 
     // The measurement, where this game has labelled claims. A game without them still
@@ -489,6 +499,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         swept_since: facts
             .swept_unix
             .filter(|swept| found.captured_unix < *swept),
+        older_splitter: found.cut_as_this_build().is_err(),
         subjects,
         measured,
         months: found
@@ -633,12 +644,11 @@ fn claims_behind(
 ) -> Result<ClaimsBehind, String> {
     let dir = library_dir(&app);
     let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
-    // The depth the readings were made at, so a claim index names the same sentence here
-    // that it named when the model read it.
-    let depth = std::fs::read(snapshot.join("reading.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<census_core::read::ReadReport>(&bytes).ok())
-        .map_or(census_core::read::Depth::Deep, |found| found.depth);
+    // Taken apart the way the reading pass took it apart, so a claim index names the same
+    // sentence here that it named when the model read it.
+    let found = read_report(&snapshot)?;
+    found.cut_as_this_build().map_err(text)?;
+    let depth = found.depth;
 
     let (total, wanted) = match term
         .as_deref()

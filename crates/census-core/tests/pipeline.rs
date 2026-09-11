@@ -334,6 +334,7 @@ fn write_readings(snapshot: &Path) {
             "top_helpful": 2,
             "model": MODEL,
             "spine_version": CORE_SPINE_VERSION,
+            "splitter": census_core::claims::SPLITTER_VERSION,
             "threshold": 0.5,
             "device": "cpu",
             "subjects": subjects,

@@ -2100,6 +2100,7 @@ mod tests {
                     corpus_reviews: 1_000,
                     language: None,
                     depth: crate::read::Depth::Deep,
+                    splitter: crate::claims::SPLITTER_VERSION.to_owned(),
                     claims: 3_000,
                     unclassified_claims: 300,
                     silent_reviews: 3,
