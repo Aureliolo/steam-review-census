@@ -122,6 +122,29 @@ game. The rule above settles each of them, and it is the first line `core-6` sho
 is adapting", so the sheet has an answer and the labeller did not trust it against
 `atmosphere`. A RULE on `atmosphere` pointing at `licensing` for faithfulness would do.
 
+**Reported again 2026-09-11**, independently, by the frontier model reading 471 frozen claims
+for the baseline: it named this the single unclearest boundary on the sheet, because such
+claims "usually lead with atmosphere words" and the sheet sends faithfulness to `licensing`.
+Two readers who could not see each other's work naming the same boundary is the strongest
+evidence in this file, and the rule is still not written.
+
+### A VR complaint whose cause is not the headset: reported by the frontier reader
+
+Claims about stutter over wireless streaming, or about a mod that makes a flat game playable
+in VR, sit between `vr`, `performance` and `mods` with nothing to choose between them. The
+`vr` row is about playing in VR; it does not say whether a VR-specific performance problem is
+`vr` or `performance`, and the same question will arise for every VR game added. With two VR
+games now drawn (546560, 438100), this stops being hypothetical.
+
+### A claim that carries two subjects because it was cut wrong
+
+Not a taxonomy gap but a splitter one, reported by the frontier reader as the largest single
+source of its own low-confidence answers: checkbox-template rows, pros-and-cons lists, and
+"great X, but Y" arrive as one claim carrying two subjects. It took the head of the claim
+except where a "but" clause carried the conclusion. The `split_wrong` flag exists for exactly
+this and is set on a sixth of the set; what is missing is a rule saying which half to label
+when it happens, so that two labellers make the same choice.
+
 ### Cutscenes that cannot be skipped: one report
 
 Filed under `gameplay` at low confidence on 1809540. It is a `controls` question by the

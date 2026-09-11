@@ -1,0 +1,26 @@
+{
+  "max probability": {
+    "aurc": 0.2226326370364239,
+    "coverage": 0.5437858508604206,
+    "accuracy": 0.7510548523206751,
+    "met": true,
+    "threshold_scaled": 0.7,
+    "curve_points": 95
+  },
+  "margin over the runner-up": {
+    "aurc": 0.22420389763773882,
+    "coverage": 0.5449330783938815,
+    "accuracy": 0.7501754385964913,
+    "met": true,
+    "threshold_scaled": 0.63,
+    "curve_points": 95
+  },
+  "negative entropy": {
+    "aurc": 0.22309966454661143,
+    "coverage": 0.5445506692160612,
+    "accuracy": 0.7528089887640449,
+    "met": true,
+    "threshold_scaled": 0.65,
+    "curve_points": 95
+  }
+}

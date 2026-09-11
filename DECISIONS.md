@@ -380,6 +380,18 @@ confidences carry almost no ordering: asked to be right three times in four, it 
 claim in twenty. The bag of words is the honest floor, it takes seconds to fit, and a
 278M-parameter encoder that could not clear it would not be earning its electricity.
 
+### Things tried that bought nothing, so nobody tries them again
+
+**A better uncertainty score.** The reader abstains on the largest softmax probability, which
+is the obvious choice and not usually the best one. Two others cost nothing from the same
+forward pass: the margin between the best class and the runner-up, and the entropy of the
+whole distribution. Over 2,615 validation claims they are indistinguishable, AURC 0.2226
+against 0.2242 and 0.2231, and all three answer 54.5% at the accuracy they promise. Max
+probability stays. `training/confidence.py` re-runs it against any reader.
+
+**Three epochs instead of five.** 0.588 accuracy and 52% coverage against 0.639 and 67%. The
+model was not overfitting at five; it was underfitting at three.
+
 ### The frontier model wins, and that is the finding
 
 Measured 2026-09-11. A frontier model was given the category sheet the labellers work from,
