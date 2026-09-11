@@ -109,6 +109,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             model: "Alibaba-NLP/gte-multilingual-base".to_owned(),
             trained_on: "0123456789abcdef".to_owned(),
             usual_declined: Some(0.53),
+            context: true,
             spine_version: CORE_SPINE_VERSION.to_owned(),
             threshold: 0.77,
             device: "directml".to_owned(),

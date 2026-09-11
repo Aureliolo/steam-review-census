@@ -31,6 +31,7 @@ CONFIDENCE_WEIGHT = {"high": 1.0, "medium": 0.7, "low": 0.4}
 class Claim:
     text: str
     review: str
+    review_offset: int
     subject: str
     polarity: str
     confidence: str
@@ -54,6 +55,18 @@ class Claim:
         return CONFIDENCE_WEIGHT.get(self.confidence, 0.7)
 
 
+def _offset_in(review: str, claim: str, exported: int | None) -> int:
+    """Where the claim starts in the review, as a Python string index.
+
+    The exporter counts bytes, because every other reader of a label set does. Searching for
+    the text instead is the fallback for label sets written before the offset was recorded,
+    and it finds the first copy of "Great game." in a review that says it twice.
+    """
+    if exported is None:
+        return review.find(claim)
+    return len(review.encode("utf-8")[:exported].decode("utf-8", "ignore"))
+
+
 def load(path: str | Path) -> list[Claim]:
     """Reads the JSONL that `census export-training` writes."""
     claims = []
@@ -66,6 +79,9 @@ def load(path: str | Path) -> list[Claim]:
                 Claim(
                     text=row["text"],
                     review=row.get("review") or row["text"],
+                    review_offset=_offset_in(
+                        row.get("review") or row["text"], row["text"], row.get("review_offset")
+                    ),
                     subject=row["subject"],
                     polarity=row.get("polarity", "neutral"),
                     confidence=row.get("confidence", "medium"),

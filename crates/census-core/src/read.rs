@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Result,
-    reader::{ClaimReader, Polarity, Reading},
+    reader::{Asked, ClaimReader, Polarity, Reading},
     taxonomy::CORE_SPINE,
 };
 
@@ -283,6 +283,10 @@ pub struct ReadReport {
     /// read against something.
     #[serde(default)]
     pub usual_declined: Option<f32>,
+    /// Whether each claim was read with its review around it. The same model cannot be asked
+    /// both ways, so this says which question the corpus was actually asked.
+    #[serde(default)]
+    pub context: bool,
     pub spine_version: String,
     pub threshold: f32,
     pub device: String,
@@ -391,7 +395,15 @@ pub fn read_corpus(
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
 
     let answers = read_distinct_claims(model, &snapshot, options, &mut on_progress)?;
-    let counted = count_reviews(app_id, &snapshot, options, &answers, &mut on_progress)?;
+    let context = model.provenance().context;
+    let counted = count_reviews(
+        app_id,
+        &snapshot,
+        options,
+        context,
+        &answers,
+        &mut on_progress,
+    )?;
     let captured = crate::report::crawl_facts(&options.out_dir, app_id)?;
 
     Ok(ReadReport {
@@ -401,10 +413,42 @@ pub fn read_corpus(
         model: model.provenance().trained_from.clone(),
         trained_on: model.provenance().data_fingerprint.clone(),
         usual_declined: model.provenance().usual_declined,
+        context,
         spine_version: model.provenance().spine_version.clone(),
         captured_unix: captured.changed_unix(),
         ..counted
     })
+}
+
+/// Where a reading is filed.
+///
+/// A claim read alone is the same question wherever it appears, so one answer serves every
+/// copy of it and a corpus of a million reviews is a few hundred thousand forward passes. A
+/// claim read with its review around it is a different question in every review, so it is
+/// filed by where it sits instead, and the saving goes. On a real corpus that saving was
+/// about an eighth of the passes, which is what buying it back costs.
+fn key(context: bool, review_id: &str, index: usize, claim: &str) -> [u8; 32] {
+    if context {
+        crate::embed::sha256_bytes(&format!("{review_id}\u{0}{index}"))
+    } else {
+        crate::embed::sha256_bytes(claim)
+    }
+}
+
+/// The claims of a review joined back together, which is what a labeller was shown.
+///
+/// Not the captured text: the splitter drops markup, list bullets and ticked boxes, and a
+/// model trained on what the labeller read must be asked in the same form.
+fn rejoined(claims: &[std::borrow::Cow<'_, str>]) -> String {
+    claims.join(" ")
+}
+
+/// One claim queued for the model, with the review it sits in.
+struct Queued {
+    key: [u8; 32],
+    claim: String,
+    review: Arc<str>,
+    at: usize,
 }
 
 /// Asks the model about every distinct claim in the corpus.
@@ -414,10 +458,11 @@ fn read_distinct_claims(
     options: &ReadOptions,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<HashMap<[u8; 32], Reading>> {
+    let context = model.provenance().context;
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
-    let mut window: Vec<([u8; 32], String)> = Vec::with_capacity(LENGTH_WINDOW);
+    let mut window: Vec<Queued> = Vec::with_capacity(LENGTH_WINDOW);
 
-    crate::capture::for_each_body(snapshot, |_, language, text| {
+    crate::capture::for_each_body(snapshot, |review_id, language, text| {
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
         // where the named language is a third of the reviews it is most of the work.
         if options
@@ -427,15 +472,29 @@ fn read_distinct_claims(
         {
             return Ok(());
         }
-        for claim in options.depth.claims_of(text) {
-            let key = crate::embed::sha256_bytes(&claim);
+        let claims = options.depth.claims_of(text);
+        let review: Arc<str> = if context {
+            Arc::from(rejoined(&claims))
+        } else {
+            Arc::from("")
+        };
+        let mut at = 0;
+        for (index, claim) in claims.into_iter().enumerate() {
+            let starts = at;
+            at += claim.len() + 1;
+            let key = key(context, review_id, index, &claim);
             if answers.contains_key(&key) {
                 continue;
             }
             // Reserved immediately, so a claim repeated later in the same window is not
             // queued twice. The reading is filled in when the window drains.
             answers.insert(key, Reading::default());
-            window.push((key, claim.into_owned()));
+            window.push(Queued {
+                key,
+                claim: claim.into_owned(),
+                review: Arc::clone(&review),
+                at: starts,
+            });
             if window.len() >= LENGTH_WINDOW {
                 drain(model, options.batch_size, &mut window, &mut answers)?;
                 on_progress(ReadProgress {
@@ -464,18 +523,25 @@ const LENGTH_WINDOW: usize = 16_384;
 fn drain(
     model: &mut ClaimReader,
     batch_size: usize,
-    window: &mut Vec<([u8; 32], String)>,
+    window: &mut Vec<Queued>,
     answers: &mut HashMap<[u8; 32], Reading>,
 ) -> Result<()> {
     if window.is_empty() {
         return Ok(());
     }
-    window.sort_unstable_by_key(|(_, claim)| claim.len());
+    window.sort_unstable_by_key(|queued| queued.claim.len() + queued.review.len());
 
     for chunk in window.chunks(batch_size.max(1)) {
-        let texts: Vec<String> = chunk.iter().map(|(_, claim)| claim.clone()).collect();
-        for ((key, _), reading) in chunk.iter().zip(model.read(&texts)?) {
-            answers.insert(*key, reading);
+        let asked: Vec<Asked<'_>> = chunk
+            .iter()
+            .map(|queued| Asked {
+                claim: &queued.claim,
+                review: &queued.review,
+                at: queued.at,
+            })
+            .collect();
+        for (queued, reading) in chunk.iter().zip(model.read(&asked)?) {
+            answers.insert(queued.key, reading);
         }
     }
     window.clear();
@@ -492,7 +558,13 @@ struct Verdict {
     unclassified: usize,
 }
 
-fn judge(text: &str, depth: Depth, answers: &HashMap<[u8; 32], Reading>) -> Verdict {
+fn judge(
+    text: &str,
+    review_id: &str,
+    context: bool,
+    depth: Depth,
+    answers: &HashMap<[u8; 32], Reading>,
+) -> Verdict {
     let mut praise = vec![false; CORE_SPINE.len()];
     let mut complaint = vec![false; CORE_SPINE.len()];
     let mut seen = vec![false; CORE_SPINE.len()];
@@ -501,9 +573,9 @@ fn judge(text: &str, depth: Depth, answers: &HashMap<[u8; 32], Reading>) -> Verd
     let mut claims = 0;
     let mut unclassified = 0;
 
-    for claim in depth.claims_of(text) {
+    for (index, claim) in depth.claims_of(text).into_iter().enumerate() {
         claims += 1;
-        let Some(reading) = answers.get(&crate::embed::sha256_bytes(&claim)) else {
+        let Some(reading) = answers.get(&key(context, review_id, index, &claim)) else {
             unclassified += 1;
             continue;
         };
@@ -543,6 +615,7 @@ fn count_reviews(
     app_id: u32,
     snapshot: &Path,
     options: &ReadOptions,
+    context: bool,
     answers: &HashMap<[u8; 32], Reading>,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<ReadReport> {
@@ -588,7 +661,7 @@ fn count_reviews(
             positive += 1;
         }
 
-        let verdict = judge(text, options.depth, answers);
+        let verdict = judge(text, &row.recommendationid, context, options.depth, answers);
         claims += verdict.claims as u64;
         unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
@@ -627,7 +700,7 @@ fn count_reviews(
             }
         }
         for (index, claim) in options.depth.claims_of(text).into_iter().enumerate() {
-            let reading = answers.get(&crate::embed::sha256_bytes(&claim));
+            let reading = answers.get(&key(context, &row.recommendationid, index, &claim));
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
             {
@@ -687,6 +760,7 @@ fn count_reviews(
         model: String::new(),
         trained_on: String::new(),
         usual_declined: None,
+        context: false,
         spine_version: String::new(),
         threshold: 0.0,
         device: String::new(),
@@ -854,6 +928,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_same_claim_is_one_question_alone_and_two_in_context() {
+        let (a, b) = (
+            key(false, "111", 0, "Great game."),
+            key(false, "222", 3, "Great game."),
+        );
+        assert_eq!(a, b, "read alone, a repeated claim is asked once");
+
+        let (a, b) = (
+            key(true, "111", 0, "Great game."),
+            key(true, "222", 3, "Great game."),
+        );
+        assert_ne!(
+            a, b,
+            "read in context, the same words in two reviews are two questions"
+        );
+        assert_eq!(
+            a,
+            key(true, "111", 0, "whatever the splitter now calls it"),
+            "filed by place rather than by text, so both passes agree however the claim reads"
+        );
+    }
+
+    #[test]
     fn shallow_reads_a_review_as_one_point_and_deep_as_several() {
         let text = "The art is stunning. The story is a mess. Runs fine on a 3070.";
         assert_eq!(Depth::Shallow.claims_of(text).len(), 1);
@@ -914,6 +1011,7 @@ mod tests {
             model: String::new(),
             trained_on: String::new(),
             usual_declined: Some(0.73),
+            context: false,
             spine_version: String::new(),
             threshold: 0.5,
             device: String::new(),

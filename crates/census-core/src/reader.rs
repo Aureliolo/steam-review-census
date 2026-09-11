@@ -69,6 +69,11 @@ pub struct Provenance {
     /// ones, because a threshold tuned against the test set makes the test set an opinion.
     pub threshold: f32,
     pub max_tokens: usize,
+    /// Whether the model was trained on the claim with its review around it. A model trained
+    /// one way and read the other is answering a question in a form it has never seen, and
+    /// nothing about the output would look wrong, so the graph carries the answer.
+    #[serde(default)]
+    pub context: bool,
     #[serde(default)]
     pub trained_from: String,
     #[serde(default)]
@@ -263,14 +268,21 @@ impl ClaimReader {
     /// # Errors
     ///
     /// Fails if tokenisation or the forward pass fails.
-    pub fn read(&mut self, claims: &[String]) -> Result<Vec<Reading>> {
-        if claims.is_empty() {
+    pub fn read(&mut self, asked: &[Asked<'_>]) -> Result<Vec<Reading>> {
+        if asked.is_empty() {
             return Ok(Vec::new());
         }
-        let encodings = self
-            .tokenizer
-            .encode_batch(claims.to_vec(), true)
-            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        let encodings = if self.provenance.context {
+            let pairs: Vec<(String, String)> = asked
+                .iter()
+                .map(|one| (one.claim.to_owned(), self.window(one)))
+                .collect();
+            self.tokenizer.encode_batch(pairs, true)
+        } else {
+            let alone: Vec<String> = asked.iter().map(|one| one.claim.to_owned()).collect();
+            self.tokenizer.encode_batch(alone, true)
+        }
+        .map_err(|e| Error::Tokenizer(e.to_string()))?;
 
         let rows = encodings.len();
         let cols = encodings.first().map_or(0, |e| e.get_ids().len());
@@ -308,6 +320,63 @@ impl ClaimReader {
             })
             .collect())
     }
+
+    /// The part of the review the token budget can afford, centred on the claim.
+    ///
+    /// Truncating a pair from the end spends the whole budget on the opening of the review,
+    /// so a claim at the foot of a long one would be read beside paragraphs it is nowhere
+    /// near. The budget is the same either way; where it is spent is not, and it is worth
+    /// the most immediately around the claim.
+    fn window(&self, asked: &Asked<'_>) -> String {
+        let Ok(encoded) = self.tokenizer.encode(asked.review, false) else {
+            return asked.review.to_owned();
+        };
+        let offsets = encoded.get_offsets();
+        if offsets.is_empty() {
+            return asked.review.to_owned();
+        }
+        let (opens, closes) = centred(
+            offsets,
+            asked.at,
+            asked.claim.len(),
+            self.provenance.max_tokens,
+        );
+        asked
+            .review
+            .get(opens..closes)
+            .unwrap_or(asked.review)
+            .to_owned()
+    }
+}
+
+/// The bytes of a review to keep, given where its tokens fall and where the claim sits.
+fn centred(offsets: &[(usize, usize)], at: usize, length: usize, budget: usize) -> (usize, usize) {
+    let ends = at + length;
+    let first = offsets.iter().position(|&(_, end)| end > at).unwrap_or(0);
+    let last = offsets
+        .iter()
+        .position(|&(start, _)| start >= ends)
+        .unwrap_or(offsets.len());
+    // Four special tokens on a pair, and the claim is spent twice: once as the first
+    // sequence, and again where it sits inside the window.
+    let spare = budget.saturating_sub(2 * last.saturating_sub(first) + 4) / 2;
+    (
+        offsets[first.saturating_sub(spare)].0,
+        offsets[(last + spare).clamp(1, offsets.len()) - 1].1,
+    )
+}
+
+/// A claim and the review around it, as the labeller saw the pair.
+#[derive(Debug, Clone, Copy)]
+pub struct Asked<'a> {
+    pub claim: &'a str,
+    /// The claims of the review joined back together: what the labeller read, and so what
+    /// the model was trained against. The capture's own text carries the markup and list
+    /// bullets the splitter removed, and asking the model about that instead would put the
+    /// question in a form it has never seen. Ignored by a model that reads claims alone.
+    pub review: &'a str,
+    /// Where `claim` starts in `review`.
+    pub at: usize,
 }
 
 /// The best class and its probability, from logits.
@@ -372,6 +441,59 @@ mod tests {
         );
         half.files[2].sha256 = "0".repeat(64).leak();
         assert!(half.is_pinned());
+    }
+
+    /// One token a word, which is close enough to make the arithmetic readable.
+    fn words(review: &str) -> Vec<(usize, usize)> {
+        let mut offsets = Vec::new();
+        let mut at = 0;
+        for word in review.split(' ') {
+            offsets.push((at, at + word.len()));
+            at += word.len() + 1;
+        }
+        offsets
+    }
+
+    #[test]
+    fn the_window_is_centred_on_the_claim_not_the_start_of_the_review() {
+        let review = (0..40)
+            .map(|n| format!("w{n}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let offsets = words(&review);
+        let (at, length) = (offsets[30].0, offsets[30].1 - offsets[30].0);
+
+        let (opens, closes) = centred(&offsets, at, length, 12);
+        let kept = &review[opens..closes];
+        assert!(
+            kept.contains("w30"),
+            "the claim itself must be in its own window"
+        );
+        assert!(
+            kept.contains("w28") && kept.contains("w32"),
+            "a budget of twelve tokens should reach either side, got {kept:?}"
+        );
+        assert!(
+            !kept.contains("w0 ") && !kept.contains("w39"),
+            "the window must not run to the ends of the review, got {kept:?}"
+        );
+    }
+
+    #[test]
+    fn a_budget_that_fits_the_whole_review_keeps_all_of_it() {
+        let review = "one two three four five";
+        let offsets = words(review);
+        let (opens, closes) = centred(&offsets, offsets[2].0, 5, 512);
+        assert_eq!(&review[opens..closes], review);
+    }
+
+    #[test]
+    fn a_claim_longer_than_the_budget_still_yields_a_window() {
+        // The spare is zero here and the arithmetic must not run off either end.
+        let review = "one two three four five";
+        let offsets = words(review);
+        let (opens, closes) = centred(&offsets, 0, review.len(), 4);
+        assert!(opens < closes && closes <= review.len());
     }
 
     #[tokio::test]

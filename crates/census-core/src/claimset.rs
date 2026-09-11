@@ -643,7 +643,10 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
         let drawn: Vec<DrawnReview> =
             serde_json::from_slice(&std::fs::read(set.join("sample.json"))?)?;
 
-        let mut text: std::collections::HashMap<(&str, u16), &str> =
+        // The claim, and where it starts in the review around it. Searching for the text
+        // instead would find the first copy of "Great game." in a review that says it twice,
+        // and centre the window on the wrong half of the review.
+        let mut text: std::collections::HashMap<(&str, u16), (&str, usize)> =
             std::collections::HashMap::new();
         // The review around each claim, rebuilt exactly as the labeller was shown it. A
         // labeller reads "it doesn't" with the sentence before it; a model given the claim
@@ -651,19 +654,22 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
         // two saw is measurable error attributed to the model.
         let mut around: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
         for review in &drawn {
+            let mut at = 0;
             for claim in &review.claims {
-                text.insert((review.id.as_str(), claim.index), claim.text.as_str());
+                text.insert((review.id.as_str(), claim.index), (claim.text.as_str(), at));
+                at += claim.text.len() + 1;
             }
             around.insert(review.id.as_str(), rejoined(review));
         }
 
         for label in &labels {
-            let Some(claim) = text.get(&(label.review_id.as_str(), label.index)) else {
+            let Some(&(claim, at)) = text.get(&(label.review_id.as_str(), label.index)) else {
                 continue;
             };
             let row = serde_json::json!({
                 "text": claim,
                 "review": around.get(label.review_id.as_str()),
+                "review_offset": at,
                 "subject": label.subject,
                 "polarity": label.polarity,
                 "confidence": label.confidence,

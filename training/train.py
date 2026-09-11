@@ -49,11 +49,39 @@ class Claims(Dataset):
     def __len__(self):
         return len(self.claims)
 
+    def window(self, claim):
+        """The part of the review the budget can afford, centred on the claim.
+
+        Truncating a pair from the end spends the whole budget on the opening of the review,
+        so a claim at the foot of a long one is read beside paragraphs it is nowhere near.
+        The budget is the same either way; where it is spent is not, and it is worth the most
+        immediately around the claim.
+        """
+        at = claim.review_offset
+        if at < 0:
+            return claim.review
+        offsets = self.tokenizer(
+            claim.review, add_special_tokens=False, return_offsets_mapping=True
+        )["offset_mapping"]
+        if not offsets:
+            return claim.review
+        ends = at + len(claim.text)
+        first = next((index for index, (_, end) in enumerate(offsets) if end > at), 0)
+        last = next(
+            (index for index, (start, _) in enumerate(offsets) if start >= ends), len(offsets)
+        )
+        # Four special tokens on a pair, and the claim is spent twice: once as the first
+        # sequence, and again where it sits inside the window.
+        spare = max(self.max_length - 2 * (last - first) - 4, 0) // 2
+        opens = offsets[max(first - spare, 0)][0]
+        closes = offsets[min(last + spare, len(offsets)) - 1][1]
+        return claim.review[opens:closes]
+
     def __getitem__(self, at):
         claim = self.claims[at]
         encoded = self.tokenizer(
             claim.text,
-            *([claim.review] if self.context else []),
+            *([self.window(claim)] if self.context else []),
             truncation=True,
             max_length=self.max_length,
             padding="max_length",
@@ -425,6 +453,7 @@ def run(args) -> dict:
         "batch_size": args.batch_size,
         "learning_rate": args.learning_rate,
         "max_length": args.max_length,
+        "context": args.context,
         "polarity_weight": args.polarity_weight,
         "split_seed": args.split_seed,
         "device": device,

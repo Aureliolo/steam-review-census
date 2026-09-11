@@ -2113,6 +2113,7 @@ mod tests {
                     model: "test-reader".to_owned(),
                     trained_on: "0123456789abcdef".to_owned(),
                     usual_declined: Some(0.1),
+                    context: true,
                     threshold: 0.5,
                     device: "cpu".to_owned(),
                     captured_unix: 1_700_000_000,
