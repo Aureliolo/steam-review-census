@@ -52,7 +52,7 @@ cargo build --release -p census-app --features directml
 Two things follow. A build without that flag replaces the same file with a CPU one, and the
 only sign is the device `census embed` prints on its third line: read it. And on Windows a
 running `census.exe` holds its own binary open, so a build started mid-crawl fails with
-"Access is denied" — wait for the run rather than reaching for `--target-dir`, which is how
+"Access is denied": wait for the run rather than reaching for `--target-dir`, which is how
 this repository once ended up with four build trees and twenty gigabytes in them.
 
 Two of those promises are watched rather than read. The page is reloaded with the network
