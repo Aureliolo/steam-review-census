@@ -103,6 +103,20 @@ pub struct SubjectCount {
     pub positive_mentions: u64,
 }
 
+/// One month of a corpus.
+///
+/// A subject raised steadily for two years and one raised furiously in a single week read
+/// identically in a total, and they are not the same fact about anything.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Month {
+    /// `2024-02`, which sorts as it reads.
+    pub label: String,
+    pub reviews: u64,
+    pub positive: u64,
+    /// Reviews raising each subject, in taxonomy order.
+    pub subjects: Vec<u64>,
+}
+
 /// What reading a corpus found.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadReport {
@@ -126,6 +140,8 @@ pub struct ReadReport {
     pub device: String,
     pub subjects: Vec<SubjectCount>,
     pub languages: Vec<(String, u64)>,
+    /// What was said month by month, oldest first.
+    pub months: Vec<Month>,
     #[serde(skip)]
     pub elapsed: Duration,
 }
@@ -320,6 +336,7 @@ fn count_reviews(
 
     let mut tallies = vec![Tally::default(); CORE_SPINE.len()];
     let mut languages: HashMap<String, u64> = HashMap::new();
+    let mut calendar: HashMap<String, Month> = HashMap::new();
     let mut top: crate::bounded::Smallest<std::cmp::Reverse<u64>, Vec<usize>> =
         crate::bounded::Smallest::new(options.top_helpful);
     let mut rows = ReadingRows::default();
@@ -355,6 +372,22 @@ fn count_reviews(
         if let Some(primary) = verdict.primary {
             tallies[primary].primary_reviews += 1;
         }
+        let month = calendar
+            .entry(crate::time::year_month(row.created))
+            .or_insert_with(|| Month {
+                label: crate::time::year_month(row.created),
+                reviews: 0,
+                positive: 0,
+                subjects: vec![0; CORE_SPINE.len()],
+            });
+        month.reviews += 1;
+        if row.voted_up {
+            month.positive += 1;
+        }
+        for &subject in &verdict.subjects {
+            month.subjects[subject] += 1;
+        }
+
         for &subject in &verdict.subjects {
             let tally = &mut tallies[subject];
             tally.mention_reviews += 1;
@@ -409,6 +442,8 @@ fn count_reviews(
 
     let mut ranked: Vec<(String, u64)> = languages.into_iter().collect();
     ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
+    let mut months: Vec<Month> = calendar.into_values().collect();
+    months.sort_by(|left, right| left.label.cmp(&right.label));
 
     Ok(ReadReport {
         app_id,
@@ -441,6 +476,7 @@ fn count_reviews(
             })
             .collect(),
         languages: ranked,
+        months,
         elapsed: Duration::default(),
     })
 }
