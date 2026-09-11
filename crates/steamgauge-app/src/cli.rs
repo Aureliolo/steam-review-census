@@ -239,6 +239,11 @@ enum Command {
         /// Where the claim reference sets live.
         #[arg(long, default_value = "reference/claims")]
         reference: PathBuf,
+        /// Which labels to score against, as a directory inside each set: `gold` for the ones
+        /// a person adjudicated, `second` for the second labeller's. The set's own labels by
+        /// default. Only a gold figure may be called accuracy; the rest are agreement.
+        #[arg(long)]
+        labels: Option<String>,
     },
 
     /// Draw the share of a labelled set that a second labeller should read.
@@ -664,7 +669,8 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             app_ids,
             out,
             reference,
-        } => run_measure_claims(app_ids, out, reference),
+            labels,
+        } => run_measure_claims(app_ids, out, reference, labels.as_deref()),
         Command::SecondOpinion {
             app_ids,
             reference,
@@ -1119,6 +1125,8 @@ fn run_ingest_gold(from: &std::path::Path, reference: &std::path::Path, by: &str
         ambiguous: bool,
         #[serde(default)]
         split_wrong: bool,
+        #[serde(default)]
+        unsure: bool,
     }
 
     let answers: Vec<Adjudicated> = serde_json::from_slice(&std::fs::read(from)?)?;
@@ -1134,35 +1142,47 @@ fn run_ingest_gold(from: &std::path::Path, reference: &std::path::Path, by: &str
         let dir = reference.join(app_id.to_string());
         let existing: Vec<steamgauge_core::claimset::ClaimLabel> =
             serde_json::from_slice(&std::fs::read(dir.join("labels.json"))?)?;
-        let silver: std::collections::HashMap<(&str, u16), &str> = existing
-            .iter()
-            .map(|label| {
-                (
-                    (label.review_id.as_str(), label.index),
-                    label.subject.as_str(),
-                )
-            })
-            .collect();
+        let silver: std::collections::HashMap<(&str, u16), &steamgauge_core::claimset::ClaimLabel> =
+            existing
+                .iter()
+                .map(|label| ((label.review_id.as_str(), label.index), label))
+                .collect();
 
-        let gold: Vec<serde_json::Value> = rows
-            .iter()
-            .map(|answer| {
-                let same = silver
-                    .get(&(answer.review_id.as_str(), answer.index))
-                    .is_some_and(|subject| *subject == answer.subject);
-                agreed += usize::from(same);
-                serde_json::json!({
-                    "review_id": answer.review_id,
-                    "index": answer.index,
-                    "app_id": answer.app_id,
-                    "subject": answer.subject,
-                    "polarity": answer.polarity,
-                    "ambiguous": answer.ambiguous,
-                    "split_wrong": answer.split_wrong,
-                    "produced_by": by,
-                })
-            })
-            .collect();
+        let mut gold: Vec<steamgauge_core::claimset::ClaimLabel> = Vec::new();
+        let mut unplaced = 0;
+        for answer in rows {
+            // The span comes through from the claim the person was actually shown. A label
+            // that carries only an index names whatever sentence sits there after the next
+            // splitter change, which is the mistake this project already made once.
+            let Some(was) = silver.get(&(answer.review_id.as_str(), answer.index)) else {
+                unplaced += 1;
+                continue;
+            };
+            agreed += usize::from(was.subject == answer.subject);
+            gold.push(steamgauge_core::claimset::ClaimLabel {
+                review_id: answer.review_id.clone(),
+                index: answer.index,
+                app_id: answer.app_id,
+                language: was.language.clone(),
+                subset: was.subset.clone(),
+                start: was.start,
+                end: was.end,
+                splitter: was.splitter.clone(),
+                taxonomy: steamgauge_core::CORE_SPINE_VERSION.to_owned(),
+                produced_by: by.to_owned(),
+                subject: answer.subject.clone(),
+                polarity: answer.polarity.clone(),
+                // The page does not ask about irony: the brief already says polarity is what
+                // the reviewer meant, so an adjudicator's polarity has accounted for it.
+                ironic: false,
+                confidence: if answer.unsure { "low" } else { "high" }.to_owned(),
+                ambiguous: answer.ambiguous,
+                split_wrong: answer.split_wrong,
+            });
+        }
+        if unplaced > 0 {
+            println!("{app_id:>9}  {unplaced} answers name a claim this set does not have");
+        }
 
         let out = dir.join("gold");
         std::fs::create_dir_all(&out)?;
@@ -1554,16 +1574,17 @@ fn run_measure_claims(
     app_ids: &[u32],
     out: &std::path::Path,
     reference: &std::path::Path,
+    labels: Option<&str>,
 ) -> Result<()> {
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
 
     for &app_id in app_ids {
-        let found = match steamgauge_core::measure::agreement(
-            out,
-            app_id,
-            &reference.join(app_id.to_string()),
-        ) {
+        let mut set = reference.join(app_id.to_string());
+        if let Some(which) = labels {
+            set = set.join(which);
+        }
+        let found = match steamgauge_core::measure::agreement(out, app_id, &set) {
             // The readings are fine as counts and useless as a score: their indexes name
             // sentences this build cuts differently. Saying so per game lets the rest of
             // the list be scored rather than the whole run stopping at the first stale one.
@@ -1652,13 +1673,28 @@ fn run_measure_claims(
         }
     }
 
+    print_what_these_figures_are(labels);
+    Ok(())
+}
+
+/// The one paragraph that decides whether a reader may call these numbers accuracy.
+fn print_what_these_figures_are(labels: Option<&str>) {
+    if labels == Some("gold") {
+        println!(
+            "\nThese are ACCURACY figures. The labels were adjudicated by a person, so what is\n\
+             measured is whether the model is right rather than whether two models are\n\
+             consistent. This is the only measurement in this tool that may be called that,\n\
+             and it is worth exactly as much as the adjudication behind it."
+        );
+        return;
+    }
     println!(
         "\nThese are AGREEMENT figures, not accuracy. The labels were produced by a model, so\n\
          this measures consistency between two models rather than correctness. Two models can\n\
          agree and both be wrong, most easily on sarcasm and on the boundaries between\n\
-         subjects, which is exactly where this one is weakest."
+         subjects, which is exactly where this one is weakest.\n\n\
+         Where a person has adjudicated a set, `--labels gold` scores against that instead."
     );
-    Ok(())
 }
 
 fn run_ingest_claims(

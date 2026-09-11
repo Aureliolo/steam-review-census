@@ -175,12 +175,21 @@
         (mine.split_wrong ? " chosen" : "") +
         '" id="split">was cut wrong <kbd>9</kbd></button>'
     );
+    // The reader's own uncertainty, kept apart from whether the claim is contested: one is
+    // about them and one is about the sheet, and a set that conflates them cannot say which
+    // of the two a disagreement came from.
+    html.push(
+      '<button class="tone' +
+        (mine.unsure ? " chosen" : "") +
+        '" id="unsure">I am unsure <kbd>8</kbd></button>'
+    );
     html.push("</div>");
     html.push("</div>");
 
     html.push(
       '<p class="note"><kbd>&larr;</kbd> and <kbd>&rarr;</kbd> move, a letter picks a subject, ' +
         "<kbd>1</kbd>&ndash;<kbd>3</kbd> the polarity. Pick both and it moves on by itself. " +
+        "<kbd>0</kbd> contested, <kbd>9</kbd> cut wrong, <kbd>8</kbd> unsure. " +
         "Your answers are kept in this browser as you go.</p>"
     );
 
@@ -249,6 +258,8 @@
     if (ambiguous) ambiguous.onclick = function () { set(question, "ambiguous", !mine.ambiguous); };
     var split = document.getElementById("split");
     if (split) split.onclick = function () { set(question, "split_wrong", !mine.split_wrong); };
+    var unsure = document.getElementById("unsure");
+    if (unsure) unsure.onclick = function () { set(question, "unsure", !mine.unsure); };
     var out = document.getElementById("export");
     if (out) out.onclick = exportAnswers;
   }
@@ -287,6 +298,9 @@
     } else if (event.key === "9") {
       var held = answers[keyOf(question)] || {};
       set(question, "split_wrong", !held.split_wrong);
+    } else if (event.key === "8") {
+      var doubted = answers[keyOf(question)] || {};
+      set(question, "unsure", !doubted.unsure);
     } else {
       for (var id in keys) {
         if (keys[id] === event.key) {
