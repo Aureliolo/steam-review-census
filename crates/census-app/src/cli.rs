@@ -232,6 +232,20 @@ enum Command {
         to: PathBuf,
     },
 
+    /// Score stored readings against a claim reference set.
+    MeasureClaims {
+        /// Steam app IDs to score. Each is reported separately, because a model that reads
+        /// one game well and another badly is not a model with one accuracy.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+    },
+
     /// Merge returned claim labels into a reference set.
     IngestClaims {
         /// Steam app ID whose labels are being merged.
@@ -492,6 +506,11 @@ pub async fn run() -> Result<()> {
             to,
         } => run_sample_claims(&app_ids, &out, reviews, batch_size, seed, english, &to),
         Command::IngestClaims { app_id, from, to } => run_ingest_claims(app_id, &from, to),
+        Command::MeasureClaims {
+            app_ids,
+            out,
+            reference,
+        } => run_measure_claims(&app_ids, &out, &reference),
         Command::Read {
             app_id,
             out,
@@ -1903,6 +1922,94 @@ fn run_read(
             thousands(subject.mixed),
         );
     }
+    Ok(())
+}
+
+fn run_measure_claims(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    reference: &std::path::Path,
+) -> Result<()> {
+    let pct = |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+
+    for &app_id in app_ids {
+        let found = census_core::measure::agreement(
+            out,
+            app_id,
+            &reference.join(app_id.to_string()),
+        )?;
+
+        println!("\napp {app_id}");
+        println!(
+            "  {} labelled claims found in the readings, {} answered, {} declined ({})",
+            thousands(found.matched),
+            thousands(found.answered),
+            thousands(found.declined),
+            pct(found.declined_share())
+        );
+        println!(
+            "  {} agreement on what it answered, macro F1 {}",
+            pct(found.rate()),
+            found
+                .macro_f1()
+                .map_or_else(|| "-".to_owned(), |v| format!("{v:.3}"))
+        );
+        println!("  {} of polarity", pct(found.polarity_rate()));
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "reference sets are thousands of claims"
+        )]
+        {
+            let share = |part: u64, whole: u64| {
+                (whole > 0).then(|| part as f64 / whole as f64)
+            };
+            println!(
+                "  split by how the labeller called it: {} on {} clear-cut, {} on {} contested",
+                pct(share(found.clear_agreed, found.clear_answered)),
+                thousands(found.clear_answered),
+                pct(share(found.contested_agreed, found.contested_answered)),
+                thousands(found.contested_answered)
+            );
+        }
+
+        let mut ranked: Vec<&census_core::measure::SubjectAgreement> = found
+            .subjects
+            .iter()
+            .filter(|subject| subject.labelled > 0)
+            .collect();
+        ranked.sort_by(|left, right| {
+            right
+                .f1()
+                .unwrap_or(0.0)
+                .total_cmp(&left.f1().unwrap_or(0.0))
+        });
+        println!(
+            "\n  {:<26} {:>8} {:>10} {:>8} {:>7}  {}",
+            "subject", "labelled", "precision", "recall", "F1", "most often read as"
+        );
+        for subject in ranked {
+            println!(
+                "  {:<26} {:>8} {:>10} {:>8} {:>7}  {}",
+                subject.label,
+                thousands(subject.labelled),
+                pct(subject.precision()),
+                pct(subject.recall()),
+                subject
+                    .f1()
+                    .map_or_else(|| "-".to_owned(), |v| format!("{v:.2}")),
+                subject
+                    .mistaken_for
+                    .map_or_else(String::new, |(label, count)| format!("{label} ({count})"))
+            );
+        }
+    }
+
+    println!(
+        "\nThese are AGREEMENT figures, not accuracy. The labels were produced by a model, so\n\
+         this measures consistency between two models rather than correctness. Two models can\n\
+         agree and both be wrong, most easily on sarcasm and on the boundaries between\n\
+         subjects, which is exactly where this one is weakest."
+    );
     Ok(())
 }
 

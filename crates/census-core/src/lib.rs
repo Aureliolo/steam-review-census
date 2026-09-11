@@ -13,6 +13,7 @@ pub mod crawl;
 pub mod embed;
 pub mod evaluate;
 pub mod html;
+pub mod measure;
 pub mod model;
 pub mod query;
 pub mod read;
