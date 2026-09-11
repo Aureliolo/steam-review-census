@@ -317,24 +317,24 @@ These rules keep those figures honest:
   would commit to. The share it declined is printed beside it, and a large one is a finding
   about the corpus rather than a footnote.
 
-  **Right now that share is most of the corpus.** Trained on eighteen games, the model answers
-  37% of the labelled claims in games it has never seen and agrees with a labeller on 80% of
-  those, so nearly two claims in three come back unclassified and a mention rate is a floor
-  rather than a count. Every report says so on its face. The only cure is more labelled claims,
-  which is what the reference sets are for; a threshold moved to make the number look better
-  would be the old classifier again. Seven games earlier the figures were an eighth and 62%,
-  and the backbone has since been chosen by bake-off rather than by reputation, so the labels
-  and the measurements are doing what they are for.
+  **Right now that share is most of the corpus.** Trained on twenty-three games, the model
+  answers 43% of the labelled claims in games it has never seen and agrees with a labeller on
+  81% of those, so more than half of the claims come back unclassified and a mention rate is a
+  floor rather than a count. Every report says so on its face. The only cure is more labelled
+  claims, which is what the reference sets are for; a threshold moved to make the number look
+  better would be the old classifier again. Twelve games earlier the figures were an eighth
+  and 62%, and the backbone has since been chosen by bake-off rather than by reputation, so
+  the labels and the measurements are doing what they are for.
 
 - **A threshold chosen on a few games may not transfer to a new one.** The threshold promises
   an accuracy, and that promise is measured on the games that chose it. On eleven games the
-  frozen ones delivered eighteen points less than promised; on eighteen they deliver five
+  frozen ones delivered eighteen points less than promised; on twenty-three they deliver six
   points more. So every figure in the model card comes from the frozen games, and the
   validation figures stay in the run record where they belong. Which games are frozen is fixed
   by a hash of each game's id, so adding games never moves one across the line. And the tool
-  reproduces the training measurement to the claim: 666 answered at 80.3% in Python on the
-  full-precision weights, 666 at 80.3% in Rust on the half-precision graph over a corpus it
-  split and joined back itself.
+  reproduces the training measurement to the claim: 1,071 answered at 80.8% in Python on the
+  full-precision weights, 1,070 at 80.7% in Rust on the half-precision graph over five corpora
+  it split and joined back itself.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool

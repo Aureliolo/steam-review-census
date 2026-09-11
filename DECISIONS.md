@@ -73,9 +73,9 @@ State means: **done** is built and in use; **partial** is built for one case and
 
 | Decided | State |
 |---|---|
-| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 16 of 36 games, one labeller at a time on the user's instruction |
+| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 25 of 36 games, one labeller at a time on the user's instruction |
 | **Opus spot-checks the labels** | done as a blind second reading of a tenth: 456 claims over ten games, subject kappa 0.85 |
-| Roughly 400 labels to start | 8,608 claims and counting, target 20,000 |
+| Roughly 400 labels to start | 12,991 claims and counting, target 20,000 |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
 | Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
 | Measured error **corrects the reported prevalence** | done, on the report page, per subject where the model finds it better than chance |
@@ -189,12 +189,23 @@ which was the condition for being a candidate at all.
 Trained on its own on the same 5,988 training claims and measured on the same four frozen
 games (1,800 claims), `gte` answers **37% at 0.803** where `xlm-roberta` answers 28% at
 0.762; frozen accuracy 0.608 against 0.507, macro F1 0.512 against 0.405, AURC 0.236 against
-0.322. It is the installed reader now, and the chain is verified against it as before: the
-tool answers **666 claims at 0.803** across the four frozen games, which is training's figure
-to the claim and to the decimal, on a different tokenizer and a different architecture from
-the last time this was checked. Per game it runs from 74.5% (1466860, the modding game) to
-84.2% (1809540), and over the whole corpora it declines between 54% and 71% against a usual
-63%.
+0.322. The chain is verified against it as before: the tool answers **666 claims at 0.803**
+across the four frozen games, which is training's figure to the claim and to the decimal,
+on a different tokenizer and a different architecture from the last time this was checked.
+Per game it runs from 74.5% (1466860, the modding game) to 84.2% (1809540), and over the
+whole corpora it declines between 54% and 71% against a usual 63%.
+
+Then twenty-three games, 12,011 claims, five frozen (214490 joined them), 2,495 frozen claims:
+
+| Question | Answer |
+|---|---|
+| How much does it answer, and how well? | **43% of claims at 0.808**, 1,071 claims, at a threshold of 0.78 chosen on the validation games |
+| How good is it on a game it has never seen? | Accuracy 0.606, macro F1 0.479 over the five, polarity F1 0.760, calibration error 0.082, AURC **0.217** |
+| Does the tool agree? | 1,070 answered at 0.807 across the five corpora, one claim from training's 1,071 at 0.808, which is the half-precision tie again |
+| Per game? | 76.3% on 1466860 to 87.0% on 1057090; declined 47% to 63% of labelled claims, and 57% is now the usual figure the reader carries |
+
+That is the installed reader. Five games earlier it answered 37%; the labels are still what
+moves it, and twelve games remain to be labelled.
 
 The chain is verified end to end against that last row. Training measures the frozen games in
 Python, on the full-precision weights, from the claim text as labelled. The tool measures them
@@ -222,9 +233,9 @@ refused by this build, which is the guard working rather than failing.
 
 In the order they matter:
 
-1. **Labels.** Nineteen games of the thirty-six are labelled. At 37% of claims answered the
-   model carries a report with a caveat over it rather than without one, and nothing else on
-   this list changes that: it is the one input every other number depends on.
+1. **Labels.** Twenty-five games of the thirty-six are labelled. At 43% of claims answered
+   the model carries a report with a caveat over it rather than without one, and nothing else
+   on this list changes that: it is the one input every other number depends on.
 2. **Publishing.** The script and the pinned fetch path are built and the fourth wave is a
    model worth publishing; the pin stays empty until `training/publish.py` is run against a
    Hugging Face account, which is the user's to name.
