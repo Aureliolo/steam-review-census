@@ -273,6 +273,10 @@ pub struct ClaimLabel {
 #[derive(Debug, Clone, Default)]
 pub struct ClaimIngest {
     pub accepted: usize,
+    /// Labels whose subject the revision moved. The measure of what a rule change was worth:
+    /// a rule that moves nothing was already understood, and one that moves everything was
+    /// not a clarification.
+    pub moved: u32,
     /// Claims that were drawn and came back with no label. A partly labelled review cannot
     /// say what share of a corpus names no aspect, so this is a failure rather than a gap.
     pub missing: Vec<String>,
@@ -335,6 +339,141 @@ pub fn draw_second(dir: &Path, share: f64, seed: u64) -> Result<Vec<DrawnReview>
         .take(wanted)
         .map(|(_, review)| review)
         .collect())
+}
+
+/// Draws the claims of a labelled set that a revision of the sheet puts back in question.
+///
+/// A taxonomy revision does not invalidate a set: the subjects that survive it mean what they
+/// meant, and re-asking about all of them costs what the set cost. What it does is move
+/// boundaries, and only claims near a moved one can change. This finds them by what they say,
+/// because a claim about a subject the sheet has just learned to name almost always says its
+/// name: eight games' worth of "modding" sat under `content` and `updates` without a single
+/// one of them failing to use the word.
+///
+/// Matched by the same word cut that counts the terms a report shows, so "mod" finds "mod"
+/// and "mods" and not "modern", and a caller need not know how a word is bounded in a script
+/// that writes without spaces.
+///
+/// Returns the claims that matched, as a set the labeller reads exactly like a fresh one.
+///
+/// # Errors
+///
+/// Fails if the set has no drawn sample or labels, or they cannot be read.
+pub fn draw_revisit(dir: &Path, words: &[String]) -> Result<Vec<DrawnReview>> {
+    let drawn: Vec<DrawnReview> =
+        serde_json::from_slice(&std::fs::read(dir.join("sample.json")).map_err(|_| {
+            crate::Error::NoReferenceSet {
+                path: dir.join("sample.json"),
+            }
+        })?)?;
+    let labels: Vec<ClaimLabel> =
+        serde_json::from_slice(&std::fs::read(dir.join("labels.json")).map_err(|_| {
+            crate::Error::NoReferenceSet {
+                path: dir.join("labels.json"),
+            }
+        })?)?;
+    let labelled: std::collections::HashSet<(&str, u16)> = labels
+        .iter()
+        .map(|label| (label.review_id.as_str(), label.index))
+        .collect();
+
+    Ok(drawn
+        .iter()
+        .filter_map(|review| {
+            // The whole review goes to the labeller, as it did the first time, but only the
+            // claims in question are asked about: a claim shown without the rest of its
+            // review is a claim nobody can label, and a claim nobody asked about is one
+            // whose existing label stands.
+            let claims: Vec<DrawnClaim> = review
+                .claims
+                .iter()
+                .filter(|claim| labelled.contains(&(review.id.as_str(), claim.index)))
+                .filter(|claim| {
+                    words
+                        .iter()
+                        .any(|word| crate::said::mentions(&claim.text, word))
+                })
+                .cloned()
+                .collect();
+            (!claims.is_empty()).then(|| DrawnReview {
+                claims,
+                ..review.clone()
+            })
+        })
+        .collect())
+}
+
+/// Replaces the labels of the revisited claims, leaving every other label alone.
+///
+/// The returned labels are the answers under the sheet as it now reads, so they carry the
+/// current taxonomy while the rest of the set carries the one it was labelled under. A set
+/// where every row claimed the current version would be a set that had quietly relabelled
+/// itself.
+///
+/// # Errors
+///
+/// Fails if the set or the returned files cannot be read or written.
+pub fn ingest_revisit(dir: &Path, from: &Path) -> Result<ClaimIngest> {
+    let mut labels: Vec<ClaimLabel> =
+        serde_json::from_slice(&std::fs::read(dir.join("labels.json")).map_err(|_| {
+            crate::Error::NoReferenceSet {
+                path: dir.join("labels.json"),
+            }
+        })?)?;
+    let mut held: std::collections::HashMap<(String, u16), &mut ClaimLabel> = labels
+        .iter_mut()
+        .map(|label| ((label.review_id.clone(), label.index), label))
+        .collect();
+
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(from)?
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|kind| kind == "json"))
+        .collect();
+    files.sort();
+
+    let mut report = ClaimIngest::default();
+    let mut changed = 0;
+    for file in files {
+        let returned: Vec<ReturnedClaimLabel> = serde_json::from_slice(&std::fs::read(&file)?)?;
+        for answer in returned {
+            let Some(label) = held.get_mut(&(answer.review_id.clone(), answer.index)) else {
+                report
+                    .unknown
+                    .push(format!("{}#{}", answer.review_id, answer.index));
+                continue;
+            };
+            if !crate::taxonomy::CORE_SPINE
+                .iter()
+                .any(|category| category.id == answer.subject)
+                || !crate::taxonomy::POLARITY.contains(&answer.polarity.as_str())
+                || !crate::taxonomy::CONFIDENCE.contains(&answer.confidence.as_str())
+            {
+                report.rejected.push(format!(
+                    "{}#{} {} / {} / {}",
+                    answer.review_id,
+                    answer.index,
+                    answer.subject,
+                    answer.polarity,
+                    answer.confidence
+                ));
+                continue;
+            }
+            changed += u32::from(label.subject != answer.subject);
+            label.subject = answer.subject;
+            label.polarity = answer.polarity;
+            label.ironic = answer.ironic;
+            label.confidence = answer.confidence;
+            label.ambiguous = answer.ambiguous;
+            label.split_wrong = answer.split_wrong;
+            crate::CORE_SPINE_VERSION.clone_into(&mut label.taxonomy);
+            report.accepted += 1;
+        }
+    }
+
+    std::fs::write(dir.join("labels.json"), serde_json::to_vec_pretty(&labels)?)?;
+    report.moved = changed;
+    Ok(report)
 }
 
 /// Where the claim reference sets live.

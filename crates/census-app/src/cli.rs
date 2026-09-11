@@ -340,6 +340,40 @@ enum Command {
         reference: PathBuf,
     },
 
+    /// Draw the claims of a labelled set that a revision of the sheet puts back in question.
+    ///
+    /// A taxonomy revision does not invalidate a set: every subject that survives it means
+    /// what it meant. What it moves is boundaries, and only claims near a moved one can
+    /// change. A claim about a subject the sheet has just learned to name almost always says
+    /// its name, so naming the words finds the slice: eight games of "modding" sat under
+    /// `content` and `updates` and not one of them failed to use the word.
+    Revisit {
+        /// Words that put a claim back in question. A claim using any of them is drawn.
+        #[arg(long, required = true, num_args = 1..)]
+        words: Vec<String>,
+        /// Steam app IDs to draw from. Every labelled set when none are named.
+        #[arg(num_args = 0..)]
+        app_ids: Vec<u32>,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+        /// Reviews per batch file.
+        #[arg(long, default_value_t = 40)]
+        batch_size: usize,
+    },
+
+    /// Merge revisited labels back, replacing only the claims that were asked about.
+    IngestRevisit {
+        /// Steam app ID whose labels are being revised.
+        app_id: u32,
+        /// Directory holding the returned label files, one JSON array per batch.
+        #[arg(long)]
+        from: PathBuf,
+        /// The reference set. Defaults to reference/claims/<app id>.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+
     /// Merge returned claim labels into a reference set.
     IngestClaims {
         /// Steam app ID whose labels are being merged.
@@ -508,6 +542,8 @@ pub async fn run() -> Result<()> {
         // reference_work does not know about.
         Command::SampleClaims { .. }
         | Command::IngestClaims { .. }
+        | Command::Revisit { .. }
+        | Command::IngestRevisit { .. }
         | Command::MeasureClaims { .. }
         | Command::SecondOpinion { .. }
         | Command::CompareLabels { .. }
@@ -535,6 +571,15 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             to,
         } => run_sample_claims(app_ids, out, *reviews, *batch_size, *seed, *english, to),
         Command::IngestClaims { app_id, from, to } => run_ingest_claims(*app_id, from, to.clone()),
+        Command::Revisit {
+            words,
+            app_ids,
+            reference,
+            batch_size,
+        } => run_revisit(words, app_ids, reference, *batch_size),
+        Command::IngestRevisit { app_id, from, to } => {
+            run_ingest_revisit(*app_id, from, to.clone())
+        }
         Command::MeasureClaims {
             app_ids,
             out,
@@ -895,6 +940,69 @@ fn labelled_sets(reference: &std::path::Path) -> Result<Vec<u32>> {
         .collect();
     found.sort_unstable();
     Ok(found)
+}
+
+/// Draws the claims a revision puts back in question, one set per game.
+fn run_revisit(
+    words: &[String],
+    app_ids: &[u32],
+    reference: &std::path::Path,
+    batch_size: usize,
+) -> Result<()> {
+    let wanted = if app_ids.is_empty() {
+        labelled_sets(reference)?
+    } else {
+        app_ids.to_vec()
+    };
+    if wanted.is_empty() {
+        anyhow::bail!("no labelled sets under {}", reference.display());
+    }
+
+    let (mut reviews, mut claims, mut games) = (0, 0, 0);
+    for app_id in wanted {
+        let dir = reference.join(app_id.to_string());
+        let drawn = census_core::claimset::draw_revisit(&dir, words)?;
+        if drawn.is_empty() {
+            continue;
+        }
+        let report = census_core::claimset::write_set(&dir.join("revisit"), &drawn, batch_size)?;
+        println!(
+            "{:<10} {:>4} reviews {:>5} claims {:>3} batches",
+            app_id, report.reviews, report.claims, report.batches
+        );
+        reviews += report.reviews;
+        claims += report.claims;
+        games += 1;
+    }
+
+    if games == 0 {
+        anyhow::bail!("no labelled claim uses any of those words; nothing to revisit");
+    }
+    println!("\ndrawn      {reviews:>4} reviews {claims:>5} claims over {games} games");
+    println!(
+        "\nHand these to a labeller with the current sheet, exactly as a fresh set. Ingest\n\
+         each with `census ingest-revisit <app id> --from <dir>`, which replaces only the\n\
+         claims asked about and leaves every other label where it was."
+    );
+    Ok(())
+}
+
+/// Merges revisited labels back into a set.
+fn run_ingest_revisit(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -> Result<()> {
+    let dir = to.unwrap_or_else(|| census_core::claimset::default_reference_dir(app_id));
+    let report = census_core::claimset::ingest_revisit(&dir, from)?;
+    println!("app        {app_id}");
+    println!("revisited  {} claims", report.accepted);
+    println!("moved      {} of them to another subject", report.moved);
+    for (what, which) in [("unknown", &report.unknown), ("rejected", &report.rejected)] {
+        if !which.is_empty() {
+            println!("{what}    {} claims", which.len());
+            for one in which.iter().take(5) {
+                println!("  {one}");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run_second_opinion(
