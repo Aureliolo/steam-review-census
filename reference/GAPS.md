@@ -345,5 +345,16 @@ with the tags taken out.
 
 - A crash log or a poem cut line by line into fragments that say nothing alone.
 - One sentence carrying three subjects ("beautiful art and story", "runs well, isn't
-  misrepresented, just not for me"). Splitting on commas would shatter ordinary prose, so
-  these keep one subject and the model learns the rest from context.
+  misrepresented, just not for me"). The comma list in `claims-4` takes the ones written as a
+  list; a sentence that names three things in ordinary grammar keeps one subject and the model
+  learns the rest from context.
+
+### A review with no punctuation at all, reported on 553850 and 3551340
+
+"屎 闪退bug 各种奇怪bug 游戏内容太少 难度高无脑堆大怪", four complaints separated by spaces and
+nothing else, and the same shape in Turkish, Polish and Czech, plus three English rants of two
+hundred words with one full stop between them. The splitter has nothing to cut on: no
+terminator, no comma, no line break. Splitting on spaces would shatter every ordinary
+sentence, and splitting long runs at a word count would cut mid-thought at a place decided by
+arithmetic. This is the shape a splitter cannot reach, and the labellers who reported it
+labelled the whole run under its first subject, which is the honest reading.
