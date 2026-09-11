@@ -339,6 +339,9 @@ struct Measured {
     agreement: Option<f64>,
     low: Option<f64>,
     high: Option<f64>,
+    /// Labelled claims this build cuts differently from the build they were labelled under,
+    /// so the figure beside them is over fewer claims than the set holds.
+    unjoined: u64,
 }
 
 /// What reading a corpus found, ready for the window.
@@ -479,6 +482,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
             agreement: found.rate(),
             low: interval.map(|(low, _)| low),
             high: interval.map(|(_, high)| high),
+            unjoined: found.unjoined,
         }
     });
 

@@ -510,7 +510,14 @@ function drawTopics(counted) {
           `labeller did ${share.format(measured.agreement)} of the time on the ` +
           `${whole.format(measured.answered)} claims it answered, somewhere between ` +
           `${share.format(measured.low)} and ${share.format(measured.high)}. That is agreement ` +
-          `with another model, not accuracy.`;
+          `with another model, not accuracy.` +
+          /* A label names a span of a review, and a splitter that has since learned to cut
+             that review differently leaves the label naming nothing. */
+          (measured.unjoined > 0
+            ? ` A further ${whole.format(measured.unjoined)} labelled claims are left out ` +
+              `because this build takes their reviews apart differently from the build they ` +
+              `were labelled under.`
+            : ``);
 
   set(
     el('topics-footnote'),
