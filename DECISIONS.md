@@ -204,15 +204,46 @@ Then twenty-three games, 12,011 claims, five frozen (214490 joined them), 2,495 
 | Does the tool agree? | 1,070 answered at 0.807 across the five corpora, one claim from training's 1,071 at 0.808, which is the half-precision tie again |
 | Per game? | 76.3% on 1466860 to 87.0% on 1057090; declined 47% to 63% of labelled claims, and 57% is now the usual figure the reader carries |
 
-That is the installed reader. Five games earlier it answered 37%; the labels are still what
-moves it, and twelve games remain to be labelled.
+Five games earlier it answered 37%; the labels are still what moves it.
 
-The chain is verified end to end against that last row. Training measures the frozen games in
-Python, on the full-precision weights, from the claim text as labelled. The tool measures them
-in Rust, on the half-precision ONNX graph, over a corpus it split itself and joined back to the
-labels by review id and the span each label names. The two agree on **221 claims answered and 0.620
-agreement**, to the claim. That is the splitter, the export, the join and the reader all
-reproducing one number, which is the only way to know that none of them is quietly wrong.
+### The splitter changed under the labels, and the labels held
+
+`claims-4` shipped mid-run after all, which the plan above said not to do. What made it
+safe is that a label had been carrying the byte span of its claim since the reference sets
+were redrawn, so the join in `census measure-claims` could be moved from claim index to span:
+a label whose span the new splitter still cuts as one claim finds its reading wherever that
+claim now sits, and a label whose span it no longer cuts is counted as **unjoined** and said,
+on the terminal and on the report page, rather than scored against whatever sentence now has
+its old index. The span join reproduced the index join to the claim before the splitter
+moved, which is what licensed moving it.
+
+The rules, each from a labeller's report in `reference/GAPS.md`: three or more short
+comma-separated parts are that many claims; a short answer joins the question before it; a
+heading tag opened mid-sentence is emphasis; a line that ends on a comma continues on the
+next; an emoticon belongs to the sentence before it; "i.e." and "z.B." are abbreviations
+with their dots in; a bare `[list]` line is not a piece; a tagged heading weighs what its
+words weigh and keeps its colon.
+
+Measured with the wave5 reader on the same five frozen games: **1,003 claims answered at
+0.810** over the 2,361 labels the new splitter still cuts as labelled, against 1,070 at 0.807
+over 2,495 under `claims-3`. The 134 labels it no longer cuts, 5.4%, are the comma lists and
+the fragments the labellers reported, split or joined as they asked; the agreement on the
+rest did not move. So the splitter can improve between labelling runs without a relabel,
+at the price of the labels it improves past.
+
+A reading now records the splitter that cut it, and a reading cut by an older one is refused
+wherever a claim would be quoted or scored by its index, in the report, the measure and the
+window, with the counts themselves left standing, until the game is read again. Before this
+the measure would have joined a stale reading silently and reported a number that was wrong
+by however many indexes had shifted, which is how it was first run and why the guard exists.
+
+The chain was first verified end to end at eleven games, and is re-verified at every wave.
+Training measures the frozen games in Python, on the full-precision weights, from the claim
+text as labelled. The tool measures them in Rust, on the half-precision ONNX graph, over a
+corpus it split itself and joined back to the labels by review id and the span each label
+names. At eleven games the two agreed on **221 claims answered and 0.620 agreement**, to the
+claim. That is the splitter, the export, the join and the reader all reproducing one number,
+which is the only way to know that none of them is quietly wrong.
 
 So the model card and every report now quote the **frozen** games, never the validation ones.
 A card is read by somebody deciding whether to run this on a game of their own, and the
@@ -233,19 +264,23 @@ refused by this build, which is the guard working rather than failing.
 
 In the order they matter:
 
-1. **Labels.** Twenty-five games of the thirty-six are labelled. At 43% of claims answered
-   the model carries a report with a caveat over it rather than without one, and nothing else
-   on this list changes that: it is the one input every other number depends on.
-2. **Publishing.** The script and the pinned fetch path are built and the fourth wave is a
+1. **Labels.** Twenty-nine games of the thirty-six are labelled, 15,210 claims. At under half
+   of claims answered the model carries a report with a caveat over it rather than without
+   one, and nothing else on this list changes that: it is the one input every other number
+   depends on.
+2. **Publishing.** The script and the pinned fetch path are built and the sixth wave is a
    model worth publishing; the pin stays empty until `training/publish.py` is run against a
    Hugging Face account, which is the user's to name.
 3. **Induced per-game categories**, so a game's own subjects appear rather than only the
-   twenty-five every game shares. Run on one game; the other thirty-five each need one
+   twenty-five every game shares. Run on two games; the other thirty-four each need one
    agent call of about 70k tokens, so they go one at a time behind the labellers.
 4. **Second readings** for the games labelled since the tenth, so the reliability figure
    keeps describing the set it is quoted for.
+5. **`core-6`**, once the run is labelled: `reference/GAPS.md` holds the wording for every
+   rule the labellers asked for, and the sets are redrawn against it and `claims-4` together.
 
 Built since this list was first written: the report page on readings, the polarity split,
 corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
 words that stand out on each side of a subject, the paragraph, the bake-off, the timeline,
-languages and induced subjects in the window, the sweep, the language switch.
+languages and induced subjects in the window, the sweep, the language switch, `claims-4` and
+the span join that let it ship mid-run.
