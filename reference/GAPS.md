@@ -356,6 +356,27 @@ with the tags taken out.
   list; a sentence that names three things in ordinary grammar keeps one subject and the model
   learns the rest from context.
 
+### The ballot-box template, reported on 629730 and 690790
+
+The copypasta review: `{ Graphics }` and then a column of options, one ticked and the rest
+left blank. One on 690790 came back as **58 claims**, one on 629730 as 22, and both labellers
+flagged nearly every fragment. Across every drawn set it is 8 reviews of 5,760, one in
+seven hundred, but those eight hold 443 claims, and 346 of them are a box line: **1.8% of
+every drawn claim** in the whole reference set is a tick box. It is also what pushed 629730
+to a 40.7% mis-split rate, the worst of any game.
+
+It is mechanically recognisable, which the other noise shapes are not. A line whose first
+character is a ballot box (`☐` U+2610, `☑` U+2611, `☒` U+2612) is a template option, and the
+rule follows from what the reviewer did:
+
+- An **unticked** option is a line they did not choose. It says nothing and is not a claim.
+- A **ticked** option is the answer to the heading above it, so "{ Graphics } ☑ Beautiful" is
+  one claim about graphics rather than a heading and a word.
+- A run of them under one heading is one claim, not one per box.
+
+Goes in `claims-5`, with whatever the last labellers report, because the whole library has to
+be read again after a splitter changes and there is no sense doing that twice.
+
 ### A review with no punctuation at all, reported on 553850 and 3551340
 
 "屎 闪退bug 各种奇怪bug 游戏内容太少 难度高无脑堆大怪", four complaints separated by spaces and
