@@ -111,6 +111,12 @@ pub struct ClaimAgreement {
     pub app_id: u32,
     /// Labelled claims found in the readings at all.
     pub matched: u64,
+    /// Labelled claims the splitter in this build no longer produces as one claim, so no
+    /// reading corresponds to them. A label names a span of a review; a splitter that cuts
+    /// that review differently leaves the label pointing at nothing, and it is counted here
+    /// rather than at whatever now sits at its old index.
+    #[serde(default)]
+    pub unjoined: u64,
     /// Of those, the ones the model would put a subject on.
     pub answered: u64,
     pub agreed: u64,
@@ -208,6 +214,7 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
     let mut total = ClaimAgreement {
         app_id: 0,
         matched: 0,
+        unjoined: 0,
         answered: 0,
         agreed: 0,
         declined: 0,
@@ -233,6 +240,7 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
 
     for game in games {
         total.matched += game.matched;
+        total.unjoined += game.unjoined;
         total.answered += game.answered;
         total.agreed += game.agreed;
         total.declined += game.declined;
@@ -265,6 +273,78 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
     total
 }
 
+/// Where each labelled claim sits in the readings, by the span of text it names.
+///
+/// A label was made against a claim as some splitter cut it, and the readings were made
+/// against claims as this build's splitter cuts them. The two agree on an index only while
+/// the splitter is the same, and the splitter is meant to improve. What does not change is
+/// the text: a label names a span of its review, so the claim it belongs to is whichever
+/// claim of the current split covers exactly that span, wherever it now sits. A label whose
+/// span no claim covers any more is left out, and counted.
+fn join_by_span<'a>(
+    snapshot: &Path,
+    labels: &'a [ClaimLabel],
+) -> Result<HashMap<(&'a str, u16), u16>> {
+    let depth = std::fs::read(snapshot.join("reading.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<crate::read::ReadReport>(&bytes).ok())
+        .map_or(crate::read::Depth::Deep, |found| found.depth);
+    let ids: std::collections::HashSet<String> =
+        labels.iter().map(|label| label.review_id.clone()).collect();
+    let texts = crate::capture::texts_for(snapshot, &ids)?;
+
+    let mut spans: HashMap<&str, HashMap<(u32, u32), u16>> = HashMap::new();
+    for (id, text) in &texts {
+        let by_span = depth
+            .spans_of(text)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, span)| {
+                let index = u16::try_from(index).ok()?;
+                let (start, end) = (
+                    u32::try_from(span.start).ok()?,
+                    u32::try_from(span.end).ok()?,
+                );
+                Some(((start, end), index))
+            })
+            .collect();
+        spans.insert(id.as_str(), by_span);
+    }
+
+    Ok(labels
+        .iter()
+        .filter_map(|label| {
+            let now = spans
+                .get(label.review_id.as_str())?
+                .get(&(label.start, label.end))?;
+            Some(((label.review_id.as_str(), label.index), *now))
+        })
+        .collect())
+}
+
+/// What the model said of one claim: its subject, or none where it declined, and its polarity.
+type Said = (Option<String>, String);
+
+/// The stored reading of each wanted claim.
+fn readings_at(
+    snapshot: &Path,
+    wanted: &std::collections::HashSet<(&str, u16)>,
+) -> Result<HashMap<(String, u16), Said>> {
+    let mut read = HashMap::new();
+    crate::read::for_each_reading(
+        &snapshot.join("readings.parquet"),
+        |id, index, subject, _, polarity| {
+            if wanted.contains(&(id, index)) {
+                read.insert(
+                    (id.to_owned(), index),
+                    (subject.map(ToOwned::to_owned), polarity.to_owned()),
+                );
+            }
+        },
+    )?;
+    Ok(read)
+}
+
 /// Scores one game's stored readings against its claim labels.
 ///
 /// # Errors
@@ -279,23 +359,15 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
         })?)?;
 
     let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let wanted: HashMap<(&str, u16), &ClaimLabel> = labels
+    let joined = join_by_span(&snapshot, &labels)?;
+    let wanted: std::collections::HashSet<(&str, u16)> = labels
         .iter()
-        .map(|label| ((label.review_id.as_str(), label.index), label))
+        .filter_map(|label| {
+            let now = joined.get(&(label.review_id.as_str(), label.index))?;
+            Some((label.review_id.as_str(), *now))
+        })
         .collect();
-
-    let mut read: HashMap<(String, u16), (Option<String>, String)> = HashMap::new();
-    crate::read::for_each_reading(
-        &snapshot.join("readings.parquet"),
-        |id, index, subject, _, polarity| {
-            if wanted.contains_key(&(id, index)) {
-                read.insert(
-                    (id.to_owned(), index),
-                    (subject.map(ToOwned::to_owned), polarity.to_owned()),
-                );
-            }
-        },
-    )?;
+    let read = readings_at(&snapshot, &wanted)?;
 
     let position = |id: &str| CORE_SPINE.iter().position(|category| category.id == id);
     let mut labelled = vec![0_u64; CORE_SPINE.len()];
@@ -306,6 +378,7 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
     let mut found = ClaimAgreement {
         app_id,
         matched: 0,
+        unjoined: 0,
         answered: 0,
         agreed: 0,
         declined: 0,
@@ -319,7 +392,11 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
     };
 
     for label in &labels {
-        let Some((subject, polarity)) = read.get(&(label.review_id.clone(), label.index)) else {
+        let Some(&now) = joined.get(&(label.review_id.as_str(), label.index)) else {
+            found.unjoined += 1;
+            continue;
+        };
+        let Some((subject, polarity)) = read.get(&(label.review_id.clone(), now)) else {
             continue;
         };
         found.matched += 1;
@@ -462,6 +539,7 @@ mod tests {
         let found = ClaimAgreement {
             app_id: 1,
             matched: 100,
+            unjoined: 0,
             answered: 60,
             agreed: 45,
             declined: 40,
@@ -511,6 +589,7 @@ mod tests {
         let small = ClaimAgreement {
             app_id: 1,
             matched: 10,
+            unjoined: 0,
             answered: 10,
             agreed: 10,
             declined: 0,
@@ -525,6 +604,7 @@ mod tests {
         let large = ClaimAgreement {
             app_id: 2,
             matched: 990,
+            unjoined: 0,
             answered: 990,
             agreed: 495,
             declined: 0,
@@ -559,6 +639,7 @@ mod tests {
         let odd = ClaimAgreement {
             app_id: 3,
             matched: 4,
+            unjoined: 0,
             answered: 4,
             agreed: 3,
             declined: 0,

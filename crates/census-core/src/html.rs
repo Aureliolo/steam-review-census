@@ -1813,6 +1813,18 @@ fn agreement_note(out: &mut String, agreement: &crate::measure::ClaimAgreement) 
             percent(declined)
         );
     }
+    // A label names a span of a review, and a splitter that has since learned to cut that
+    // review differently leaves the label naming nothing. Those are left out and said, so
+    // the labelled count above is a count of what could be compared.
+    if agreement.unjoined > 0 {
+        let _ = writeln!(
+            out,
+            "<p class=\"note\">A further {} labelled claims were left out because this \
+             build takes their reviews apart differently from the build they were labelled \
+             under, so no reading corresponds to them.</p>",
+            thousands(agreement.unjoined)
+        );
+    }
 
     // One figure for a whole taxonomy hides the shape of the error: the same run finds nine
     // claims in ten of one subject and one in twenty of another.
@@ -2150,6 +2162,7 @@ mod tests {
         crate::measure::ClaimAgreement {
             app_id: 7,
             matched: answered,
+            unjoined: 0,
             answered,
             agreed,
             declined: 0,

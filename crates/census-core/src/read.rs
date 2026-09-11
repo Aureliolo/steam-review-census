@@ -100,6 +100,24 @@ impl Depth {
             }
         }
     }
+
+    /// The same points, as byte ranges into the review, in the same order and number as
+    /// [`Self::claims_of`] gives them.
+    #[must_use]
+    pub fn spans_of(self, text: &str) -> Vec<std::ops::Range<usize>> {
+        match self {
+            Self::Deep => crate::claims::spans(text),
+            Self::Shallow => {
+                let whole = text.trim();
+                if whole.is_empty() {
+                    Vec::new()
+                } else {
+                    let start = text.len() - text.trim_start().len();
+                    std::iter::once(start..start + whole.len()).collect()
+                }
+            }
+        }
+    }
 }
 
 impl Default for ReadOptions {

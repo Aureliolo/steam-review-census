@@ -1089,6 +1089,13 @@ fn run_measure_claims(
             thousands(found.declined),
             pct(found.declined_share())
         );
+        if found.unjoined > 0 {
+            println!(
+                "  {} labelled claims name a span this build's splitter no longer cuts, so no \
+                 reading corresponds to them",
+                thousands(found.unjoined)
+            );
+        }
         println!(
             "  {} agreement on what it answered, macro F1 {}",
             pct(found.rate()),
