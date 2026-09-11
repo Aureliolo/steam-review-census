@@ -494,6 +494,57 @@ pub fn labelling_brief(unit: Unit) -> String {
     brief
 }
 
+/// The sheet a model works from when asked what a game's players talk about that the spine
+/// has no row for.
+///
+/// Generated from the spine for the same reason the labelling sheet is: the reader has to know
+/// every fixed subject to know what is not one, and a hand-written list of them would drift
+/// the first time a subject was added.
+#[must_use]
+pub fn induction_brief() -> String {
+    use std::fmt::Write as _;
+
+    let mut brief = format!(
+        "You are reading reviews of one game, chosen to be as unlike each other as the corpus \
+         allows, and naming what its players talk about that no game shares.\n\n\
+         Every game's reviews are sorted into the same {} subjects (spine {CORE_SPINE_VERSION}), \
+         listed below. Those are the floor. What you are looking for is above it: a subject \
+         this game's players return to that is not one of them, or is one of them in a form \
+         so specific to this game that it deserves its own row. Mud physics in a truck \
+         simulator. Jump scares in a horror game. Deck archetypes in a card game. The AI \
+         opponent in a strategy game. Mods, where a game is played modded.\n\n\
+         You are not looking for what people think of the game. Praise and complaint are \
+         recorded elsewhere. You are looking for what they think about, and only what several \
+         of them think about: a subject one review raises is an anecdote, and a subject you \
+         cannot point at three reviews for does not exist.\n\n\
+         The fixed subjects, which you must not name again:\n\n",
+        CORE_SPINE.len()
+    );
+    for category in CORE_SPINE {
+        let _ = writeln!(brief, "  {} ({}): {}", category.label, category.id, category.description);
+    }
+    brief.push_str(
+        "\nReturn one JSON object and nothing else:\n\n\
+         {\n  \"app_id\": <the app id you were given>,\n  \"seed\": <the seed you were given>,\n  \
+         \"handout_size\": <how many reviews you read>,\n  \"induced_by\": \"<the model you \
+         are>\",\n  \"subjects\": [\n    {\n      \"id\": \"<short, lowercase, hyphens>\",\n      \
+         \"label\": \"<what the row is called>\",\n      \"description\": \"<one sentence: \
+         what belongs here and what does not>\",\n      \"refines\": \"<a fixed subject id, \
+         or null>\",\n      \"evidence\": [\"<review_id>\", \"<review_id>\", \"<review_id>\"]\n    \
+         }\n  ]\n}\n\n\
+         `refines` names the fixed subject this one is a specific form of, when it is one, \
+         and is null when it is not. `evidence` is review ids from the handout, as given, at \
+         least three and every one of them a review that raises the subject. A subject whose \
+         evidence names a review the handout did not hold is refused whole, and so is one \
+         with fewer than three. Better to return four subjects that survive than twelve that \
+         do not.\n\n\
+         Between five and twelve subjects is the usual shape. Zero is a legitimate answer for \
+         a game whose players talk about nothing the spine does not already name, and is \
+         better than an invented one.\n",
+    );
+    brief
+}
+
 /// The answers `confidence` may take.
 ///
 /// A judgement asked for as free text drifts: "Medium", "fairly", "8/10", nothing at all. The

@@ -11,6 +11,7 @@ pub mod crawl;
 pub mod diverse;
 pub mod embed;
 pub mod html;
+pub mod induced;
 pub mod measure;
 pub mod model;
 pub mod query;

@@ -270,6 +270,26 @@ enum Command {
         to: Option<PathBuf>,
     },
 
+    /// Check a returned list of induced subjects against the handout it came from, and keep
+    /// the ones that survive.
+    ///
+    /// A model asked for subjects will produce subjects. What makes them a finding rather
+    /// than a list is the reviews behind each one, so a subject naming reviews the handout
+    /// never held, or fewer than three, is refused and says why.
+    IngestInduced {
+        /// Steam app ID the subjects were induced for.
+        app_id: u32,
+        /// The returned JSON: an object with `induced_by` and a `subjects` array.
+        #[arg(long)]
+        from: PathBuf,
+        /// The handout the model read. Defaults to reference/distinct/<app id>.json.
+        #[arg(long)]
+        handout: Option<PathBuf>,
+        /// Where to write the surviving subjects. Defaults to reference/induced/<app id>.json.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+
     /// Compare two labellings of the same claims, field by field.
     CompareLabels {
         /// Steam app IDs to compare. Every set with a second opinion when none are named.
@@ -449,6 +469,7 @@ pub async fn run() -> Result<()> {
         | Command::SecondOpinion { .. }
         | Command::CompareLabels { .. }
         | Command::Distinct { .. }
+        | Command::IngestInduced { .. }
         | Command::Brief { .. } => unreachable!("reference_work answers every reference command"),
     }
 }
@@ -492,9 +513,77 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             seed,
             to,
         } => run_distinct(*app_id, out, *count, *seed, to.clone()),
+        Command::IngestInduced {
+            app_id,
+            from,
+            handout,
+            to,
+        } => run_ingest_induced(*app_id, from, handout.clone(), to.clone()),
         Command::Brief { to } => run_brief(to),
         _ => return None,
     })
+}
+
+fn run_ingest_induced(
+    app_id: u32,
+    from: &std::path::Path,
+    handout: Option<PathBuf>,
+    to: Option<PathBuf>,
+) -> Result<()> {
+    let handout = handout.unwrap_or_else(|| {
+        PathBuf::from("reference")
+            .join("distinct")
+            .join(format!("{app_id}.json"))
+    });
+    let drawn: Vec<census_core::diverse::Handout> =
+        serde_json::from_slice(&std::fs::read(&handout).map_err(|_| {
+            anyhow::anyhow!(
+                "no handout at {}; run `census distinct {app_id}` first",
+                handout.display()
+            )
+        })?)?;
+    let ids: Vec<String> = drawn.into_iter().map(|review| review.review_id).collect();
+
+    let returned: census_core::induced::InducedSet =
+        serde_json::from_slice(&std::fs::read(from)?)?;
+    if returned.app_id != app_id {
+        anyhow::bail!(
+            "the returned list says app {} but was ingested as {app_id}",
+            returned.app_id
+        );
+    }
+
+    let (kept, refused) = census_core::induced::check(&returned, &ids);
+    println!("app          {app_id}");
+    println!("induced by   {}", returned.induced_by);
+    println!("handout      {} reviews", ids.len());
+    println!("kept         {} of {} subjects", kept.len(), returned.subjects.len());
+    for subject in &kept {
+        println!(
+            "  {:<24} {:>3} reviews  {}",
+            subject.id,
+            subject.evidence.len(),
+            subject.label
+        );
+    }
+    if !refused.is_empty() {
+        println!("refused");
+        for why in &refused {
+            println!("  {:<24} {}", why.id, why.reason);
+        }
+    }
+
+    let path = to.unwrap_or_else(|| census_core::induced::default_path(app_id));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let survived = census_core::induced::InducedSet {
+        subjects: kept,
+        ..returned
+    };
+    std::fs::write(&path, serde_json::to_vec_pretty(&survived)?)?;
+    println!("written to   {}", path.display());
+    Ok(())
 }
 
 fn run_report(
@@ -1111,6 +1200,9 @@ fn run_brief(to: &std::path::Path) -> Result<()> {
         std::fs::write(&path, labelling_brief(unit))?;
         println!("brief    {}", path.display());
     }
+    let induction = to.join("induction-brief.txt");
+    std::fs::write(&induction, census_core::taxonomy::induction_brief())?;
+    println!("brief    {}", induction.display());
     Ok(())
 }
 

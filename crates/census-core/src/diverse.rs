@@ -57,7 +57,7 @@ pub fn draw(out_dir: &Path, app_id: u32, wanted: usize, seed: u64) -> Result<Vec
 }
 
 /// One drawn review with its text, ready to be read by whatever induces subjects from it.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Handout {
     pub review_id: String,
     pub language: String,
