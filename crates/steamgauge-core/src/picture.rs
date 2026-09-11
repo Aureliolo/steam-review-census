@@ -210,6 +210,7 @@ mod tests {
             depth: crate::read::Depth::Deep,
             splitter: String::new(),
             claims: 3_000,
+            forward_passes: 3_000,
             unclassified_claims: 0,
             silent_reviews: 0,
             positive: 700,

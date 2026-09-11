@@ -373,6 +373,14 @@ instructive ways.
    about a corpus. A few hundred drawn claims are distinct by construction, so they said
    deduplication was buying nothing. Over Cyberpunk's 1.55M English claims, 87% are distinct:
    real, but only an eighth of the forward passes.
+
+   Most of that eighth is bought back rather than lost. A claim read in context is a different
+   question in a different review, but the same question in every **copy** of the same review,
+   because the window is cut from the text: the same text at the same index gives the same
+   window and the same answer. So a context reading files its answers by the review's text
+   rather than by its id, and "Great game." written as a whole review a thousand times is one
+   forward pass again. Every reading records how many claims it counted and how many it
+   actually asked about, so the saving is a number in the file rather than an argument.
 2. **By token arithmetic, then on a CPU: "9x", then "7.8x".** A claim is 21 tokens and a claim
    with its review is 168, so the work must be eight times greater. On a CPU it is: 51.7
    claims a second against 6.6.

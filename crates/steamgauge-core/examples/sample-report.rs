@@ -100,6 +100,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             depth: Depth::Deep,
             splitter: steamgauge_core::claims::SPLITTER_VERSION.to_owned(),
             claims: reviews * 3,
+            forward_passes: reviews * 2,
             // Over half, as every real reading currently is, so the page renders the caveat
             // it puts above the table rather than the footnote it puts below.
             unclassified_claims: reviews * 3 * 3 / 5,

@@ -1101,6 +1101,18 @@ fn read_one(
         println!("counted      {} reviews", thousands(report.reviews));
     }
     println!("claims       {}", thousands(report.claims));
+    if report.forward_passes > 0 && report.claims > 0 {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a corpus is millions of claims, not 2^53 of them"
+        )]
+        let repeated = 1.0 - report.forward_passes as f64 / report.claims as f64;
+        println!(
+            "asked        {} of them ({:.0}% of the corpus was written before)",
+            thousands(report.forward_passes),
+            repeated * 100.0
+        );
+    }
     if let Some(share) = report.unclassified_share() {
         println!(
             "no subject   {} claims ({:.1}%), and {} reviews that name nothing at all",

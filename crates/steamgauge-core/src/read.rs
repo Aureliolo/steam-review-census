@@ -266,6 +266,12 @@ pub struct ReadReport {
     #[serde(default)]
     pub splitter: String,
     pub claims: u64,
+    /// How many claims the model was actually asked about. A claim written a thousand times
+    /// is one question, and this is what says how much of the corpus was repetition rather
+    /// than reading. The whole case for reading a library locally is what it costs, so what
+    /// it cost is recorded rather than argued.
+    #[serde(default)]
+    pub forward_passes: u64,
     /// Claims the model would not put a subject on. Reported rather than filed under
     /// whatever scored highest, which is the whole point of the rebuild.
     pub unclassified_claims: u64,
@@ -412,6 +418,7 @@ pub fn read_corpus(
 
     Ok(ReadReport {
         elapsed: started.elapsed(),
+        forward_passes: answers.len() as u64,
         device: model.device().to_owned(),
         threshold: model.provenance().threshold,
         model: model.provenance().trained_from.clone(),
@@ -427,17 +434,31 @@ pub fn read_corpus(
 
 /// Where a reading is filed.
 ///
-/// A claim read alone is the same question wherever it appears, so one answer serves every
-/// copy of it and a corpus of a million reviews is a few hundred thousand forward passes. A
-/// claim read with its review around it is a different question in every review, so it is
-/// filed by where it sits instead, and the saving goes. On a real corpus that saving was
-/// about an eighth of the passes, which is what buying it back costs.
-fn key(context: bool, review_id: &str, index: usize, claim: &str) -> [u8; 32] {
+/// A claim read alone is the same question wherever it appears, so one answer serves every copy
+/// of it and a corpus of a million reviews is a few hundred thousand forward passes.
+///
+/// A claim read with its review around it is a different question in a different review, but
+/// the same question in every copy of the same review: the window is cut from the text, so the
+/// same text at the same index gives the same window and the same answer. Filed by the text
+/// rather than by the review's id, which keeps the saving wherever a review was written twice
+/// and is where most of a corpus's repetition is: "Great game." is a whole review thousands of
+/// times over.
+fn key(context: bool, review: &[u8; 32], index: usize, claim: &str) -> [u8; 32] {
     if context {
-        crate::embed::sha256_bytes(&format!("{review_id}\u{0}{index}"))
+        use sha2::{Digest, Sha256};
+
+        let mut hasher = Sha256::new();
+        hasher.update(review);
+        hasher.update(index.to_le_bytes());
+        hasher.finalize().into()
     } else {
         crate::embed::sha256_bytes(claim)
     }
+}
+
+/// What two copies of one review have in common and two different reviews never do.
+fn review_key(review: &str) -> [u8; 32] {
+    crate::embed::sha256_bytes(review)
 }
 
 /// The claims of a review joined back together, which is what a labeller was shown.
@@ -469,7 +490,7 @@ fn read_distinct_claims(
     // One allocation for every review a model that reads claims alone will ever queue.
     let nothing: Arc<str> = Arc::from("");
 
-    crate::capture::for_each_body(snapshot, |review_id, language, text| {
+    crate::capture::for_each_body(snapshot, |_, language, text| {
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
         // where the named language is a third of the reviews it is most of the work.
         if options
@@ -485,11 +506,12 @@ fn read_distinct_claims(
         } else {
             Arc::clone(&nothing)
         };
+        let fingerprint = review_key(&review);
         let mut at = 0;
         for (index, claim) in claims.into_iter().enumerate() {
             let starts = at;
             at += claim.len() + 1;
-            let key = key(context, review_id, index, &claim);
+            let key = key(context, &fingerprint, index, &claim);
             if answers.contains_key(&key) {
                 continue;
             }
@@ -567,7 +589,7 @@ struct Verdict {
 
 fn judge(
     claims: &[std::borrow::Cow<'_, str>],
-    review_id: &str,
+    review: &[u8; 32],
     context: bool,
     answers: &HashMap<[u8; 32], Reading>,
 ) -> Verdict {
@@ -579,7 +601,7 @@ fn judge(
     let mut unclassified = 0;
 
     for (index, claim) in claims.iter().enumerate() {
-        let Some(reading) = answers.get(&key(context, review_id, index, claim)) else {
+        let Some(reading) = answers.get(&key(context, review, index, claim)) else {
             unclassified += 1;
             continue;
         };
@@ -668,7 +690,14 @@ fn count_reviews(
         // Split once. The verdict and the rows written beside it are two readings of the same
         // pieces, and this pass has no forward passes to hide the cost behind.
         let pieces = options.depth.claims_of(text);
-        let verdict = judge(&pieces, &row.recommendationid, context, answers);
+        // Only a context reading files by the text, and rejoining a review that nothing will
+        // hash is work on every review of the corpus.
+        let fingerprint = if context {
+            review_key(&rejoined(&pieces))
+        } else {
+            [0; 32]
+        };
+        let verdict = judge(&pieces, &fingerprint, context, answers);
         claims += verdict.claims as u64;
         unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
@@ -707,7 +736,7 @@ fn count_reviews(
             }
         }
         for (index, claim) in pieces.iter().enumerate() {
-            let reading = answers.get(&key(context, &row.recommendationid, index, claim));
+            let reading = answers.get(&key(context, &fingerprint, index, claim));
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
             {
@@ -760,6 +789,7 @@ fn count_reviews(
         depth: options.depth,
         splitter: crate::claims::SPLITTER_VERSION.to_owned(),
         claims,
+        forward_passes: 0,
         unclassified_claims: unclassified,
         silent_reviews: silent,
         positive,
@@ -970,25 +1000,31 @@ mod tests {
     }
 
     #[test]
-    fn the_same_claim_is_one_question_alone_and_two_in_context() {
+    fn the_same_claim_is_one_question_alone_and_one_per_review_in_context() {
+        let (short, long) = (review_key("Great game."), review_key("Great game. Buy it."));
         let (a, b) = (
-            key(false, "111", 0, "Great game."),
-            key(false, "222", 3, "Great game."),
+            key(false, &short, 0, "Great game."),
+            key(false, &long, 3, "Great game."),
         );
         assert_eq!(a, b, "read alone, a repeated claim is asked once");
 
         let (a, b) = (
-            key(true, "111", 0, "Great game."),
-            key(true, "222", 3, "Great game."),
+            key(true, &short, 0, "Great game."),
+            key(true, &long, 3, "Great game."),
         );
         assert_ne!(
             a, b,
-            "read in context, the same words in two reviews are two questions"
+            "read in context, the same words in two different reviews are two questions"
+        );
+        assert_eq!(
+            key(true, &short, 0, "Great game."),
+            key(true, &review_key("Great game."), 0, "Great game."),
+            "two copies of one review give one window, so they are one question"
         );
         assert_eq!(
             a,
-            key(true, "111", 0, "whatever the splitter now calls it"),
-            "filed by place rather than by text, so both passes agree however the claim reads"
+            key(true, &short, 0, "whatever the splitter now calls it"),
+            "filed by the review rather than the claim, so both passes agree however it reads"
         );
     }
 
@@ -1046,6 +1082,7 @@ mod tests {
             depth: Depth::Deep,
             splitter: String::new(),
             claims: 1_000,
+            forward_passes: 1_000,
             unclassified_claims: 900,
             silent_reviews: 0,
             positive: 50,

@@ -2136,6 +2136,7 @@ mod tests {
                     depth: crate::read::Depth::Deep,
                     splitter: crate::claims::SPLITTER_VERSION.to_owned(),
                     claims: 3_000,
+                    forward_passes: 3_000,
                     unclassified_claims: 300,
                     silent_reviews: 3,
                     positive: 700,
