@@ -384,9 +384,10 @@ nothing. Two are missing, and no amount of further labelling closes either.
    thousand from the frozen games, labelled blind, for an accuracy figure that means what it
    says; then the four hundred the two labellers split on, shown both answers, to settle the
    boundaries. After `core-6`, never before.
-2. **A comparison against the alternatives.** Nobody has shown this beats asking a frontier
-   model directly, or a trivial baseline. Both run over the same frozen claims, all three
-   figures reported together, whichever way it falls.
+2. **A comparison against the alternatives.** Half done: the trivial baselines run over the
+   same frozen claims and the same abstention protocol, in "What it has to beat" above. What
+   is missing is a frontier model asked the same question directly, on the same claims, with
+   all the figures reported together whichever way it falls.
 
 Then, in order:
 
