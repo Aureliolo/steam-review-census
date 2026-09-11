@@ -155,12 +155,18 @@ opposite ways at all.
 
 A census that cannot say how often it is wrong is just an opinion with decimal places.
 
-Every classifier here is measured against **reference sets**: reviews labelled one at a time,
-stored under `reference/<app id>/` with a manifest saying exactly what produced them. Each set
-is split at sampling time. A subset stratified by predicted category supplies the labelled
-examples categories are built from. A separate, randomly drawn subset is held back from that
-entirely and is the only part any figure is ever quoted from, because a stratified sample
-deliberately over-represents whatever the classifier rarely picks.
+The model is measured against **reference sets**: claims labelled one at a time, stored under
+`reference/claims/<app id>/` with the drawn sample beside them. Whole games are held out rather
+than whole claims, because two claims from one review are not independent evidence and a score
+that mixes them is a score for how well the model repeats itself.
+
+Three things are reported together, and separating them is what makes the number mean anything:
+
+- **Agreement**, over the claims the model was willing to answer for.
+- **Abstention**, the share it declined. A score that quietly drops those is a score for a
+  classifier nobody is running.
+- **Contest**, the share the labeller marked as genuinely ambiguous, reported apart from the
+  rest. Disagreement there says as much about the taxonomy as about the model.
 
 ### How the reference sets are made
 
@@ -175,38 +181,51 @@ Which model wrote them is recorded per set, in `produced_by`, and printed with e
 A set labelled by one model and a set labelled by another are not the same evidence and must
 not be pooled without saying so; the sets shipped here were written by Claude Fable 5.1.
 
-What the set spends its size on is games rather than depth. A hundred reviews of one title,
-labelled twice over, would say how consistent two labellers are and nothing about whether a
-category survives contact with a corpus it was not built from. So the set runs to thousands of
-labels spread across dozens of games of different genres and different overall sentiment, and
-the figure it exists to produce is the one measured on a game the anchors never saw.
+What the set spends its size on is games rather than depth. A hundred reviews of one title
+would say nothing about whether a category survives contact with a corpus it was not built
+from. So the set runs to thousands of labels spread across dozens of games of different genres
+and different overall sentiment, and the figure it exists to produce is the one measured on a
+game the model never saw. A tenth of it is labelled twice by different labellers, which is what
+lets the set report its own reliability rather than only its agreement with a classifier.
+
+The mix of languages is chosen rather than inherited. A corpus is whatever languages its
+players happen to write in, and drawing straight from it would train the model mostly on
+whichever one that is. Roughly seven claims in ten are English and the rest are drawn from
+everything else the corpus holds, so the model holds up in the languages the reports do not
+default to.
 
 The protocol is fixed so it can be repeated, and so a disagreement with it is about the method
 rather than about somebody's afternoon:
 
-- **The sample is drawn before anyone reads anything.** `census sample` takes a seed and draws
-  two subsets per game: a fixed number of reviews uniformly at random, and a stratified subset
-  filled category by category, pooled across every game in the run so that a category one game
-  never discusses is supplied by a game that does. The same seed against the same capture draws
-  the same reviews, so a set can be rebuilt without being stored.
-- **Labellers are shown the review text and nothing else.** Not the game, not whether the
-  reviewer recommended it, not what the classifier guessed. The prediction is withheld because
-  anyone shown a proposed answer agrees with it more than someone reading cold. The rating and
-  the game are withheld for a different reason: the classifier does not see them either, so a
-  label made from more than the tool can read would measure the gap in what the two were shown.
+- **The sample is drawn before anyone reads anything.** `census sample-claims` takes a seed and
+  draws reviews per game with a fixed share of English, then splits each into its claims. The
+  same seed against the same capture draws the same reviews, so a set can be rebuilt without
+  being stored.
+- **Every claim of a drawn review is labelled, never a subset of them.** A review labelled in
+  part cannot say what share of a corpus names no aspect at all, which is the first thing worth
+  knowing about one.
+- **Labellers are shown the claim inside the review it came from, and nothing else.** Not the
+  game, not whether the reviewer recommended it, not what the model guessed. The prediction is
+  withheld because anyone shown a proposed answer agrees with it more than someone reading
+  cold. The rating and the game are withheld for a different reason: the model does not see
+  them either, so a label made from more than the tool can read would measure the gap in what
+  the two were shown. The surrounding review is shown because a claim reading "it doesn't" is
+  not interpretable alone.
 - **The sheet every labeller works from is generated from the taxonomy**, so a boundary rule
-  exists in exactly one place and every labeller is given the same one.
+  exists in exactly one place and every labeller is given the same one. It is never changed
+  mid-run: half a set labelled against a revised sheet is half a set nobody can compare.
 - **Labelling runs in parallel, one labeller per game**, each working batch by batch and writing
   each batch out before opening the next.
-- **Every label carries five fields**: one primary category, any secondary categories the review
-  genuinely also covers, whether the text is ironic, how sure the labeller was, and whether the
-  call was genuinely contested. The last of those is the one read back, and agreement is
-  reported separately over the reviews marked with it.
-- **What comes back is checked rather than trusted.** `census ingest` refuses a set that does
-  not cover the drawn sample exactly: reviews nobody labelled, labels naming reviews nobody
-  drew, categories the taxonomy does not have, reviews labelled twice, and labels whose
-  judgements were never made. A judgement left out is dropped rather than defaulted, because a
-  `false` nobody wrote is a figure nobody stood behind.
+- **Every label carries six fields**: one subject, whether the claim is praise, a complaint or
+  neither, whether the text is ironic, how sure the labeller was, whether the call was genuinely
+  contested, and whether the claim was cut in the wrong place. The last two are read back:
+  agreement is reported separately over the contested claims, and the mis-split rate is what
+  drives the splitting rules. Three rounds of them came from labellers reporting it.
+- **What comes back is checked rather than trusted.** `census ingest-claims` refuses a set that
+  does not cover the drawn sample exactly: claims nobody labelled, labels naming claims nobody
+  drew, subjects the taxonomy does not have, claims labelled twice, and labels whose judgements
+  were never made. A judgement left out is dropped rather than defaulted, because a `false`
+  nobody wrote is a figure nobody stood behind.
 
 These rules keep those figures honest:
 
