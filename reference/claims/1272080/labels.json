@@ -3748,12 +3748,12 @@
     "start": 1356,
     "end": 1569,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
+    "taxonomy": "core-6",
     "subject": "policy",
     "polarity": "complaint",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": false,
+    "confidence": "low",
+    "ambiguous": true,
     "split_wrong": false
   },
   {

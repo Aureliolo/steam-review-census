@@ -2609,12 +2609,12 @@
     "start": 177,
     "end": 230,
     "splitter": "claims-4",
-    "taxonomy": "core-5",
-    "subject": "updates",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {

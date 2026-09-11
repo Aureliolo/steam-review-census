@@ -4564,12 +4564,12 @@
     "start": 245,
     "end": 329,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "content",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {
@@ -6995,12 +6995,12 @@
     "start": 294,
     "end": 387,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "content",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {
@@ -8185,12 +8185,12 @@
     "start": 0,
     "end": 72,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "gameplay",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
+    "confidence": "low",
     "ambiguous": true,
-    "split_wrong": true
+    "split_wrong": false
   }
 ]

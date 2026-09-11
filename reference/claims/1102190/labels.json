@@ -7777,12 +7777,12 @@
     "start": 865,
     "end": 957,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "community",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "complaint",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {

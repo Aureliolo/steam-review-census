@@ -8695,12 +8695,12 @@
     "start": 51,
     "end": 158,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
+    "taxonomy": "core-6",
     "subject": "vr",
     "polarity": "neutral",
     "ironic": false,
-    "confidence": "high",
-    "ambiguous": false,
+    "confidence": "medium",
+    "ambiguous": true,
     "split_wrong": false
   },
   {
@@ -10514,12 +10514,12 @@
     "start": 0,
     "end": 59,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
+    "taxonomy": "core-6",
     "subject": "vr",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "high",
-    "ambiguous": false,
+    "confidence": "medium",
+    "ambiguous": true,
     "split_wrong": false
   },
   {

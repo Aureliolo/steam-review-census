@@ -10327,12 +10327,12 @@
     "start": 1622,
     "end": 1663,
     "splitter": "claims-4",
-    "taxonomy": "core-5",
-    "subject": "offtopic",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "neutral",
     "ironic": false,
-    "confidence": "high",
-    "ambiguous": false,
+    "confidence": "low",
+    "ambiguous": true,
     "split_wrong": false
   },
   {

@@ -381,6 +381,11 @@ enum Command {
         /// Directory holding the returned label files, one JSON array per batch.
         #[arg(long)]
         from: PathBuf,
+        /// Which version of the category sheet the labeller was working from. Defaults to
+        /// this build's. Name the older one when a revision landed while they were labelling:
+        /// a label answers the sheet its labeller read, and no other.
+        #[arg(long)]
+        sheet: Option<String>,
         /// The reference set. Defaults to reference/claims/<app id>.
         #[arg(long)]
         to: Option<PathBuf>,
@@ -570,7 +575,12 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             english,
             to,
         } => run_sample_claims(app_ids, out, *reviews, *batch_size, *seed, *english, to),
-        Command::IngestClaims { app_id, from, to } => run_ingest_claims(*app_id, from, to.clone()),
+        Command::IngestClaims {
+            app_id,
+            from,
+            sheet,
+            to,
+        } => run_ingest_claims(*app_id, from, sheet.as_deref(), to.clone()),
         Command::Revisit {
             words,
             app_ids,
@@ -1430,13 +1440,25 @@ fn run_measure_claims(
     Ok(())
 }
 
-fn run_ingest_claims(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -> Result<()> {
+fn run_ingest_claims(
+    app_id: u32,
+    from: &std::path::Path,
+    sheet: Option<&str>,
+    to: Option<PathBuf>,
+) -> Result<()> {
     let dir = to.unwrap_or_else(|| {
         PathBuf::from("reference")
             .join("claims")
             .join(app_id.to_string())
     });
-    let (labels, report) = census_core::claimset::ingest(&dir, from)?;
+    let sheet = census_core::claimset::Sheet {
+        taxonomy: sheet.map_or_else(
+            || census_core::CORE_SPINE_VERSION.to_owned(),
+            ToOwned::to_owned,
+        ),
+        ..Default::default()
+    };
+    let (labels, report) = census_core::claimset::ingest(&dir, from, &sheet)?;
 
     let mut subjects: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     let mut polarity: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();

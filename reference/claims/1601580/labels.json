@@ -6434,12 +6434,12 @@
     "start": 18,
     "end": 49,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "updates",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {

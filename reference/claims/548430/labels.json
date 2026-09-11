@@ -773,7 +773,7 @@
     "start": 1655,
     "end": 1792,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
+    "taxonomy": "core-6",
     "subject": "gameplay",
     "polarity": "praise",
     "ironic": false,
@@ -4139,13 +4139,13 @@
     "start": 163,
     "end": 366,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
+    "taxonomy": "core-6",
     "subject": "gameplay",
     "polarity": "praise",
     "ironic": false,
     "confidence": "medium",
-    "ambiguous": true,
-    "split_wrong": true
+    "ambiguous": false,
+    "split_wrong": false
   },
   {
     "review_id": "152336131",
@@ -4224,12 +4224,12 @@
     "start": 1061,
     "end": 1526,
     "splitter": "claims-3",
-    "taxonomy": "core-5",
-    "subject": "updates",
+    "taxonomy": "core-6",
+    "subject": "mods",
     "polarity": "praise",
     "ironic": false,
-    "confidence": "medium",
-    "ambiguous": true,
+    "confidence": "high",
+    "ambiguous": false,
     "split_wrong": false
   },
   {

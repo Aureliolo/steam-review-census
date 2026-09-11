@@ -230,6 +230,29 @@ fn rejoined(review: &DrawnReview) -> String {
         .join(" ")
 }
 
+/// Which sheet a labeller was working from, and which cut of the claims they were shown.
+///
+/// Not the versions this build holds. A labeller handed a set on Monday answers Monday's
+/// sheet however long they take, and a revision that lands while they work does not reach
+/// back and change what they were asked. Stamping the build's version at ingest is how a
+/// set comes to claim it was labelled against rules its labeller never saw.
+#[derive(Debug, Clone)]
+pub struct Sheet {
+    pub splitter: String,
+    pub taxonomy: String,
+}
+
+impl Default for Sheet {
+    /// What this build would hand out now, which is right for a set drawn and labelled
+    /// without a revision in between.
+    fn default() -> Self {
+        Self {
+            splitter: crate::claims::SPLITTER_VERSION.to_owned(),
+            taxonomy: crate::CORE_SPINE_VERSION.to_owned(),
+        }
+    }
+}
+
 /// One returned label, as a labeller writes it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReturnedClaimLabel {
@@ -493,7 +516,7 @@ pub fn default_reference_dir(app_id: u32) -> std::path::PathBuf {
 /// # Errors
 ///
 /// Fails if the sample or the returned files cannot be read.
-pub fn ingest(dir: &Path, from: &Path) -> Result<(Vec<ClaimLabel>, ClaimIngest)> {
+pub fn ingest(dir: &Path, from: &Path, sheet: &Sheet) -> Result<(Vec<ClaimLabel>, ClaimIngest)> {
     let drawn: Vec<DrawnReview> =
         serde_json::from_slice(&std::fs::read(dir.join("sample.json")).map_err(|_| {
             crate::Error::NoReferenceSet {
@@ -553,8 +576,8 @@ pub fn ingest(dir: &Path, from: &Path) -> Result<(Vec<ClaimLabel>, ClaimIngest)>
                 subset: review.subset.clone(),
                 start: claim.start,
                 end: claim.end,
-                splitter: crate::claims::SPLITTER_VERSION.to_owned(),
-                taxonomy: crate::CORE_SPINE_VERSION.to_owned(),
+                splitter: sheet.splitter.clone(),
+                taxonomy: sheet.taxonomy.clone(),
                 subject: label.subject,
                 polarity: label.polarity,
                 ironic: label.ironic,
