@@ -443,24 +443,38 @@ how much of the set each subject has:
 | mods | 152 | 95% | 80% | 15% |
 | audio | 226 | 100% | 90% | 5% |
 
-Three things fall out of this, and only the first was expected.
-
 **The failure is abstention, not error.** On the rows it loses, the reader is not answering
 wrongly; it is declining 44 to 71% of the claims. That is the design working: it knows it does
 not know. It also means the coverage figure, not the accuracy figure, is what more labels buy.
 
-**A lexically distinctive subject needs almost no labels.** `language` scores 83% on 64
-labels and `mods` 80% on 152, because a claim about either nearly always says "translation" or
-"mod". `licensing` has 32 and scores zero. Label count alone does not predict this; how much
-the subject announces itself does.
+Twenty claims a subject is too few to say anything about a subject, though, and reading that
+table as if it could was a mistake made first: it said `atmosphere` was broken. Over all 3,769
+frozen claims, where `atmosphere` has 205 of them, it scores F1 0.55, which is the middle of
+the pack. The per-subject picture from that larger set is the one to trust:
 
-**`atmosphere` is the exception that matters: 579 labels, 3% of the set, and it scores 5%.**
-It is not starved. Opus 5 reads it at 85% from the same sheet, so the category is learnable
-and the sheet defines it well enough. What the small model cannot do is separate a diffuse
-subject from its neighbours: atmosphere claims are read as `audio`, `graphics` or `verdict`,
-and it declines seven in ten. More labels of the kind already collected have not fixed it and
-there is no reason to think more will. That is a different problem from `licensing`, and
-spending the same remedy on both would waste the effort.
+| | labels | frozen claims | F1 |
+|---|---|---|---|
+| licensing | 32 | 24 | **0.00** |
+| accessibility | 62 | 17 | 0.08 |
+| community | 98 | 5 | 0.09 |
+| vr | 57 | 17 | 0.25 |
+| language | 64 | 6 | 0.37 |
+| **mods** | **152** | 35 | **0.92** |
+| atmosphere | 579 | 205 | 0.55 |
+| gameplay | 3,162 | 608 | 0.55 |
+| price | 422 | 67 | 0.77 |
+| verdict | 4,114 | 910 | 0.70 |
+
+**Label count predicts the bottom of that table and nothing above it.** Every subject under
+about 150 labels is broken, and every one of them is a row the fifteen new games were chosen
+to feed. Above 150 the count stops mattering: `mods` scores 0.92 on 152 labels while
+`gameplay` scores 0.55 on 3,162, because `mods` announces itself and `gameplay` is where
+everything lands that is not something else. `price` on 422 beats `verdict` on 4,114.
+
+So there are two different problems wearing the same face. Starved rows are fixed by labelling
+the games that raise them, which is in progress. Diffuse rows are not fixed by labels at all,
+and `gameplay` at 0.55 on the largest pile in the set is the evidence: what those need is
+boundary text that says what they are not.
 
 ## The corpus stopped being a corpus of games people like
 

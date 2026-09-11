@@ -167,19 +167,13 @@ Related to the atmosphere and fear gap the review-level labellers reported six t
 two horror games. Both are about what a game makes a player feel rather than about any part
 that produces it. One category might take both.
 
-**`atmosphere` was added for this in `core-5`, and measuring it 2026-09-11 says the category
-did not solve the problem.** It has 579 labels, three per cent of the whole set, and on a
-stratified sample of frozen claims the reader scores **5%** on it and declines seven in ten.
-That is not starvation: `mods` scores 80% on 152 labels and `language` 83% on 64. Nor is it a
-bad definition, because Opus 5 reads the same claims against the same sheet at 85%. What the
-reader cannot do is separate a subject defined by what a game makes you feel from the parts
-that produce the feeling: its atmosphere mistakes are `audio`, `graphics` and `verdict`.
-
-So the next revision has a choice to make rather than a rule to write. Either `atmosphere`
-needs boundary text that names the parts it is not (the way `price` now takes "worth every
-penny" from `verdict`), or the category is asking for a distinction a small model cannot draw
-and should be folded back. Adding more labels of the kind already collected is the one option
-the evidence rules out.
+**`atmosphere` was added for this in `core-5` and is holding up.** Measured 2026-09-11 over
+the 205 atmosphere claims in the frozen games, the reader scores F1 0.55 on it, which is the
+middle of the table and the same as `gameplay` scores on twenty times the labels. It is not
+one of the broken rows; those are all under about 150 labels. The claims it does miss go to
+`audio`, `graphics` and `verdict`, which is the boundary this entry was always about, so
+boundary text naming what atmosphere is not would still be worth writing. It is a refinement
+rather than a rescue.
 
 ### Mods and user content: the most-reported gap there is
 
