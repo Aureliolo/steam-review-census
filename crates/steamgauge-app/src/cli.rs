@@ -404,6 +404,44 @@ enum Command {
         to: Option<PathBuf>,
     },
 
+    /// Write the page a person adjudicates claims on, from the frozen games.
+    ///
+    /// Everything measured so far is a model agreeing with a model, which the README says and
+    /// which no citation can rest on. This draws two kinds of claim: a random sample with no
+    /// answer shown, which is the only reading that produces an accuracy figure rather than a
+    /// ratification, and the claims two labellers answered differently, with both answers
+    /// shown, which settles a boundary rather than measuring one.
+    Gold {
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+        /// Where to write the page. It holds review text, so never inside the repository.
+        #[arg(long, default_value = "gold.html")]
+        to: PathBuf,
+        /// How many claims to draw blind.
+        #[arg(long, default_value_t = 1000)]
+        blind: usize,
+        /// Leave out the claims the two labellers split on.
+        #[arg(long)]
+        no_splits: bool,
+        /// Changing this draws a different blind sample. The same seed draws the same one.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+
+    /// Merge adjudicated answers back, as the only labels in the set written by a person.
+    IngestGold {
+        /// The file the adjudication page exported.
+        #[arg(long)]
+        from: PathBuf,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+        /// Who adjudicated. Recorded per label, like every other labeller.
+        #[arg(long, default_value = "a person")]
+        by: String,
+    },
+
     /// Write every labelled claim, with its text, as JSONL for training.
     ///
     /// The file holds review text and is not for publishing. What gets published is the
@@ -562,6 +600,8 @@ pub async fn run() -> Result<()> {
         | Command::IngestClaims { .. }
         | Command::Revisit { .. }
         | Command::IngestRevisit { .. }
+        | Command::Gold { .. }
+        | Command::IngestGold { .. }
         | Command::MeasureClaims { .. }
         | Command::SecondOpinion { .. }
         | Command::CompareLabels { .. }
@@ -608,6 +648,18 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             by,
             to,
         } => run_ingest_revisit(*app_id, from, by, to.clone()),
+        Command::Gold {
+            reference,
+            to,
+            blind,
+            no_splits,
+            seed,
+        } => run_gold(reference, to, *blind, !*no_splits, *seed),
+        Command::IngestGold {
+            from,
+            reference,
+            by,
+        } => run_ingest_gold(from, reference, by),
         Command::MeasureClaims {
             app_ids,
             out,
@@ -1020,6 +1072,122 @@ fn run_revisit(
 }
 
 /// Merges revisited labels back into a set.
+fn run_gold(
+    reference: &std::path::Path,
+    to: &std::path::Path,
+    blind: usize,
+    splits: bool,
+    seed: u64,
+) -> Result<()> {
+    let (questions, found) = steamgauge_core::gold::draw(reference, blind, splits, seed)?;
+    if questions.is_empty() {
+        anyhow::bail!(
+            "no frozen game under {} has both a drawn sample and labels; nothing to adjudicate",
+            reference.display()
+        );
+    }
+    std::fs::write(to, steamgauge_core::gold::render(&questions, found))?;
+
+    println!("games      {} frozen", found.games);
+    println!("blind      {} claims, no answer shown", found.blind);
+    println!(
+        "split      {} claims two labellers answered differently",
+        found.split
+    );
+    println!(
+        "agreed     {} claims both labellers already answered the same way",
+        found.agreed
+    );
+    println!("page       {}", to.display());
+    println!(
+        "\nOpen it, answer, export, then `steamgauge ingest-gold --from <the file>`.\nThe page \
+         holds review text: it fetches nothing, sends nothing, and belongs outside the \
+         repository."
+    );
+    Ok(())
+}
+
+fn run_ingest_gold(from: &std::path::Path, reference: &std::path::Path, by: &str) -> Result<()> {
+    #[derive(serde::Deserialize)]
+    struct Adjudicated {
+        app_id: u32,
+        review_id: String,
+        index: u16,
+        subject: String,
+        polarity: String,
+        #[serde(default)]
+        ambiguous: bool,
+        #[serde(default)]
+        split_wrong: bool,
+    }
+
+    let answers: Vec<Adjudicated> = serde_json::from_slice(&std::fs::read(from)?)?;
+    let mut by_game: std::collections::BTreeMap<u32, Vec<&Adjudicated>> =
+        std::collections::BTreeMap::new();
+    for answer in &answers {
+        by_game.entry(answer.app_id).or_default().push(answer);
+    }
+
+    let mut written = 0;
+    let mut agreed = 0;
+    for (app_id, rows) in by_game {
+        let dir = reference.join(app_id.to_string());
+        let existing: Vec<steamgauge_core::claimset::ClaimLabel> =
+            serde_json::from_slice(&std::fs::read(dir.join("labels.json"))?)?;
+        let silver: std::collections::HashMap<(&str, u16), &str> = existing
+            .iter()
+            .map(|label| {
+                (
+                    (label.review_id.as_str(), label.index),
+                    label.subject.as_str(),
+                )
+            })
+            .collect();
+
+        let gold: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|answer| {
+                let same = silver
+                    .get(&(answer.review_id.as_str(), answer.index))
+                    .is_some_and(|subject| *subject == answer.subject);
+                agreed += usize::from(same);
+                serde_json::json!({
+                    "review_id": answer.review_id,
+                    "index": answer.index,
+                    "app_id": answer.app_id,
+                    "subject": answer.subject,
+                    "polarity": answer.polarity,
+                    "ambiguous": answer.ambiguous,
+                    "split_wrong": answer.split_wrong,
+                    "produced_by": by,
+                })
+            })
+            .collect();
+
+        let out = dir.join("gold");
+        std::fs::create_dir_all(&out)?;
+        std::fs::write(out.join("labels.json"), serde_json::to_vec_pretty(&gold)?)?;
+        written += gold.len();
+        println!("{app_id:>9}  {} adjudicated", gold.len());
+    }
+
+    println!("\ngold       {written} claims by {by}");
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "an adjudicated set is thousands of claims at most"
+    )]
+    let share = agreed as f64 / written.max(1) as f64;
+    println!(
+        "agreement  {agreed} of them ({:.1}%) match the labeller already on record",
+        share * 100.0
+    );
+    println!(
+        "\nThat share is the first honest accuracy figure this project has: everything else is\n\
+         a model agreeing with a model."
+    );
+    Ok(())
+}
+
 fn run_ingest_revisit(
     app_id: u32,
     from: &std::path::Path,

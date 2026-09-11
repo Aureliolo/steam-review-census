@@ -16,6 +16,10 @@ raw/
 # Rendered reports quote review text, which is the same reason the captures are not here.
 steamgauge-report.html
 *-report.html
+# The adjudication page carries the review around every claim, for the same reason.
+gold.html
+*-gold.html
+gold-answers.json
 analysis/
 output/
 *.db

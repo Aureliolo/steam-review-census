@@ -10,6 +10,7 @@ pub mod claimset;
 pub mod crawl;
 pub mod diverse;
 pub mod embed;
+pub mod gold;
 pub mod html;
 pub mod induced;
 pub mod measure;
