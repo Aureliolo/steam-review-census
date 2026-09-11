@@ -74,6 +74,12 @@ pub struct Provenance {
     /// nothing about the output would look wrong, so the graph carries the answer.
     #[serde(default)]
     pub context: bool,
+    /// Whether the claim is marked where it sits inside the window, as well as being given as
+    /// the first sequence. Travels with the graph for the same reason `context` does: a model
+    /// trained to look for the marks and read without them is answering a question in a form
+    /// it has never seen, and every answer still looks plausible.
+    #[serde(default)]
+    pub mark: bool,
     #[serde(default)]
     pub trained_from: String,
     #[serde(default)]
@@ -341,13 +347,28 @@ impl ClaimReader {
             asked.claim.len(),
             self.provenance.max_tokens,
         );
-        asked
-            .review
-            .get(opens..closes)
-            .unwrap_or(asked.review)
-            .to_owned()
+        let kept = asked.review.get(opens..closes).unwrap_or(asked.review);
+        if !self.provenance.mark {
+            return kept.to_owned();
+        }
+        let ends = asked.at + asked.claim.len();
+        let (Some(before), Some(claim), Some(after)) = (
+            asked.review.get(opens..asked.at),
+            asked.review.get(asked.at..ends),
+            asked.review.get(ends..closes),
+        ) else {
+            return kept.to_owned();
+        };
+        format!("{before}{MARK} {claim} {MARK}{after}")
     }
 }
+
+/// What marks the claim inside its window, matching `training/train.py`.
+///
+/// Two characters no reviewer writes and the tokenizer already knows: a token added to the
+/// vocabulary starts from noise, and this one has to mean something after four thousand
+/// training claims rather than four hundred thousand.
+const MARK: &str = "**";
 
 /// The bytes of a review to keep, given where its tokens fall and where the claim sits.
 fn centred(offsets: &[(usize, usize)], at: usize, length: usize, budget: usize) -> (usize, usize) {
@@ -477,6 +498,22 @@ mod tests {
             !kept.contains("w0 ") && !kept.contains("w39"),
             "the window must not run to the ends of the review, got {kept:?}"
         );
+    }
+
+    #[test]
+    fn the_mark_goes_round_the_claim_and_nothing_else() {
+        // Written out rather than computed, because the one thing this has to match is a
+        // string built by `training/train.py`, and a test that computes it the same way the
+        // code does would agree with a mistake.
+        let review = "before it. the claim itself. after it.";
+        let at = review.find("the claim").unwrap();
+        let claim = "the claim itself.";
+        let marked = format!(
+            "{}{MARK} {claim} {MARK}{}",
+            &review[..at],
+            &review[at + claim.len()..]
+        );
+        assert_eq!(marked, "before it. ** the claim itself. ** after it.");
     }
 
     #[test]

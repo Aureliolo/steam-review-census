@@ -245,6 +245,7 @@ def main():
                 "threshold": threshold,
                 "max_tokens": record["max_length"],
                 "context": record.get("context", False),
+                "mark": record.get("mark", False),
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
                 "usual_declined": usual_declined,
