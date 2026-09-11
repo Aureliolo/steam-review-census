@@ -73,9 +73,9 @@ State means: **done** is built and in use; **partial** is built for one case and
 
 | Decided | State |
 |---|---|
-| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 12 of 36 games, one labeller at a time on the user's instruction |
+| Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 16 of 36 games, one labeller at a time on the user's instruction |
 | **Opus spot-checks the labels** | done as a blind second reading of a tenth: 456 claims over ten games, subject kappa 0.85 |
-| Roughly 400 labels to start | 6,150 claims and counting, target 20,000 |
+| Roughly 400 labels to start | 8,608 claims and counting, target 20,000 |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
 | Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
 | Measured error **corrects the reported prevalence** | done, on the report page, per subject where the model finds it better than chance |
@@ -93,15 +93,15 @@ removed.
 | A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | built, training on each new wave of labels |
 | The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | to build; judged on area under the risk-coverage curve as well, since a backbone that knows when it does not know is worth more here than one point of accuracy |
 | **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | built, and the threshold is chosen by **the most coverage available at a promised accuracy**, never by maximising accuracy times coverage, which collapses to answering everything |
-| **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | to build |
+| **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | done: a second head on the same trunk, and the report counts praise, complaint and mixed per subject |
 | **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
-| Model is **multilingual**, reports default to **English** with a working language switch | to build |
-| Labelling is **cluster-stratified in round one**, then **active learning** (uncertainty crossed with diversity) | to build |
-| **One game first**, about 2,000 claims, then decide whether to commit the rest | to build |
-| The 26 games already labelled at review level get **re-labelled at claim level**, so old and new are the same sample | to build |
-| Full MLOps, **reproducible in this repository**: soft targets from labeller confidence, automated label auditing, frozen test set, per-language and per-length slice metrics, calibration, ONNX parity assertion, a CI gate that fails on F1 regression, hash-versioned label sets, plus self-training and multi-seed ensemble as measured experiments | to build |
-| Run tracking is a local JSON log carrying git sha, data hash, config and metrics. No external service | to build |
-| Model and dataset published to **Hugging Face**. The dataset is review ids, claim offsets and labels, **never review text**, because this repository holds no review data | to build |
+| Model is **multilingual**, reports default to **English** with a working language switch | the model reads every language the labels cover; the language switch is **not built** |
+| Labelling is **cluster-stratified in round one**, then **active learning** (uncertainty crossed with diversity) | round one is stratified and running; active learning waits on the first full pass |
+| **One game first**, about 2,000 claims, then decide whether to commit the rest | done, the Frostpunk 2 pilot below, and the rest was committed |
+| The 26 games already labelled at review level get **re-labelled at claim level**, so old and new are the same sample | in progress: they are among the 36 in the claim-level run |
+| Full MLOps, **reproducible in this repository**: soft targets from labeller confidence, automated label auditing, frozen test set, per-language and per-length slice metrics, calibration, ONNX parity assertion, a CI gate that fails on F1 regression, hash-versioned label sets, plus self-training and multi-seed ensemble as measured experiments | frozen set, calibration, parity assertion and the second-reading audit are done; slice metrics, the CI gate, soft targets and the experiments are **not built** |
+| Run tracking is a local JSON log carrying git sha, data hash, config and metrics. No external service | done, `run.json` in every training run |
+| Model and dataset published to **Hugging Face**. The dataset is review ids, claim offsets and labels, **never review text**, because this repository holds no review data | script and fetch path built; nothing published yet, so the pin in `reader.rs` is empty |
 
 ## What the pilot found
 
@@ -192,7 +192,7 @@ refused by this build, which is the guard working rather than failing.
 
 In the order they matter:
 
-1. **Labels.** Twelve games of the thirty-six are labelled. At an eighth of claims answered
+1. **Labels.** Sixteen games of the thirty-six are labelled. At a quarter of claims answered
    the model cannot carry a report yet, and nothing else on this list changes that: it is the
    one input every other number depends on.
 2. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
