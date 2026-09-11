@@ -426,6 +426,30 @@ it gets most of the way there at four orders of magnitude less cost, offline, an
 say how far short it falls, because it measured it. The gap, twelve points of accuracy and
 thirty-nine of coverage, is the number to close.
 
+## The corpus stopped being a corpus of games people like
+
+Measured 2026-09-11 over all 51 captures, 7.5M reviews. Before the fifteen chosen games
+landed, 24 of 36 were Very or Overwhelmingly Positive, the median was 86%, and **nothing in
+the set was Overwhelmingly Negative**. A classifier trained on that has never read a corpus
+where the complaint is the point.
+
+| positive share | games |
+|---|---|
+| below 40% | 4 |
+| 40 to 69% | 10 |
+| 70 to 84% | 11 |
+| 85% and up | 26 |
+
+The median is still 85%, which is what Steam is: a store where most reviewed games are liked.
+What changed is the tail. Fourteen games now sit below 70% and seven below 50%, against
+almost none before, and the floor is The Day Before at **15.7%** across 23,177 reviews, which
+is the only Overwhelmingly Negative corpus of any size on the platform.
+
+That matters for two different reasons and they are worth keeping apart. A model that has
+only read praise has never learned what a complaint about `story` looks like as against a
+complaint about `bugs`. And a tool that reports a mention rate has to work on the game that is
+one long argument, not only on the game everyone agrees about.
+
 ## Where this is going
 
 Settled 2026-09-11: **the dataset is the thing, and the benchmark comes before the polish.**
