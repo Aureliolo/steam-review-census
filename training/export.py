@@ -70,10 +70,24 @@ def wilson_note(at_threshold: dict) -> str:
     return f", somewhere in [{low:.3f}, {high:.3f}] over {answered} claims"
 
 
-def sample_claims(path: Path, count: int) -> list[str]:
+def sample_claims(path: Path, count: int, record: dict, tokenizer) -> list:
+    """Claims to check the exported graph on, in the form the reader will send them.
+
+    A model trained on the claim inside its review is asked about pairs for the rest of its
+    life, and a parity check on bare claims measures drift on input it will never see. The
+    sequences are also four times shorter, which is exactly where a half-precision graph is
+    least likely to drift.
+    """
     claims = claimdata.load(path)
     step = max(1, len(claims) // count)
-    return [claim.text for claim in claims[::step]][:count]
+    drawn = claims[::step][:count]
+    if not record.get("context"):
+        return [claim.text for claim in drawn]
+
+    from train import Claims
+
+    cut = Claims(drawn, tokenizer, record["subjects"], record["max_length"], True, mark=record.get("mark", False))
+    return [(claim.text, cut.windows[at]) for at, claim in enumerate(drawn)]
 
 
 def main():
@@ -100,9 +114,14 @@ def main():
     model.load_state_dict(torch.load(run / "model.bin", map_location="cpu"))
     model.eval()
 
-    texts = sample_claims(Path(args.data), args.check)
+    texts = sample_claims(Path(args.data), args.check, record, tokenizer)
     encoded = tokenizer(
-        texts, truncation=True, max_length=record["max_length"], padding=True, return_tensors="pt"
+        [pair[0] for pair in texts] if record.get("context") else texts,
+        [pair[1] for pair in texts] if record.get("context") else None,
+        truncation=True,
+        max_length=record["max_length"],
+        padding=True,
+        return_tensors="pt",
     )
 
     # The reference answers come from the full-precision model whatever is exported, so a
