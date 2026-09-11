@@ -370,6 +370,11 @@ struct Reading {
     older_splitter: bool,
     subjects: Vec<Subject>,
     measured: Option<Measured>,
+    /// What the reader scored on games it had never seen. The window says this where the game
+    /// on screen has no labels of its own, which is most games anybody will ever open: telling
+    /// them only that nothing is measured invites them to distrust everything or to trust
+    /// everything, and the model does have a measurement.
+    frozen: Option<steamgauge_core::reader::Frozen>,
     /// Oldest first. Fewer than two and there is no line to draw.
     months: Vec<MonthOut>,
     /// Commonest first, over the whole capture rather than the counted language.
@@ -506,6 +511,7 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         older_splitter: found.cut_as_this_build().is_err(),
         subjects,
         measured,
+        frozen: found.frozen,
         months: found
             .months
             .iter()

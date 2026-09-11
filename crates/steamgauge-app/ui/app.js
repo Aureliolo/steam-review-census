@@ -500,10 +500,23 @@ function drawTopics(counted) {
      opinion with decimal places, and a game nobody has labelled is told so rather than
      shown the same table with nothing missing from it. */
   const measured = counted.measured;
+  const frozen = counted.frozen;
   const trust =
     measured === null
-      ? `Nobody has labelled this game's claims, so how often the model is wrong here has ` +
-        `not been measured. Treat every rate as provisional.`
+      ? frozen
+        ? /* Most games anyone opens are in exactly this position, and saying only that
+             nothing is measured invites the reader to distrust everything or to trust
+             everything. The model does have a measurement; it is about other games, and the
+             wording has to say so. */
+          `Nobody has labelled this game's claims, so how often the model is wrong here has ` +
+          `not been measured. What is measured is ${frozen.games} games it had never seen, ` +
+          `over ${whole.format(frozen.claims)} labelled claims: it answers ` +
+          `${share.format(frozen.coverage)} of them and names the same subject a separate ` +
+          `labeller did ${share.format(frozen.accuracy)} of the time when it does. Expect ` +
+          `this game to be near that, and treat every rate as provisional until it is ` +
+          `labelled too.`
+        : `Nobody has labelled this game's claims, so how often the model is wrong here has ` +
+          `not been measured. Treat every rate as provisional.`
       : measured.agreement === null
         ? `The model declined every labelled claim on this game, so nothing here is measured.`
         : `Where this game has been labelled, the model named the same subject a separate ` +
