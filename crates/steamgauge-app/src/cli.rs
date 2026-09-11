@@ -95,6 +95,29 @@ impl From<Reading> for steamgauge_core::read::Depth {
     }
 }
 
+/// Which games' disagreements go in front of an adjudicator.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum SplitsFrom {
+    /// None: the blind sample only.
+    None,
+    /// The games the model never saw, which is also where the blind sample comes from.
+    Frozen,
+    /// Every labelled game. Seven times the evidence about the sheet, and none about the
+    /// model either way, which is why it is the default.
+    #[default]
+    Everywhere,
+}
+
+impl From<SplitsFrom> for steamgauge_core::gold::Splits {
+    fn from(value: SplitsFrom) -> Self {
+        match value {
+            SplitsFrom::None => Self::None,
+            SplitsFrom::Frozen => Self::Frozen,
+            SplitsFrom::Everywhere => Self::Everywhere,
+        }
+    }
+}
+
 const PROGRESS_EVERY_SHARDS: usize = 5;
 const PROGRESS_EVERY_TEXTS: u64 = 5_000;
 
@@ -426,9 +449,11 @@ enum Command {
         /// How many claims to draw blind.
         #[arg(long, default_value_t = 1000)]
         blind: usize,
-        /// Leave out the claims the two labellers split on.
-        #[arg(long)]
-        no_splits: bool,
+        /// Which games' disagreements to include. The blind sample is always frozen, because
+        /// that is what makes it a measurement; a disagreement measures nothing and settles a
+        /// boundary, and a boundary settled on one game is settled for every game.
+        #[arg(long, default_value = "everywhere")]
+        splits: SplitsFrom,
         /// Changing this draws a different blind sample. The same seed draws the same one.
         #[arg(long, default_value_t = 1)]
         seed: u64,
@@ -657,9 +682,9 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             reference,
             to,
             blind,
-            no_splits,
+            splits,
             seed,
-        } => run_gold(reference, to, *blind, !*no_splits, *seed),
+        } => run_gold(reference, to, *blind, (*splits).into(), *seed),
         Command::IngestGold {
             from,
             reference,
@@ -1082,7 +1107,7 @@ fn run_gold(
     reference: &std::path::Path,
     to: &std::path::Path,
     blind: usize,
-    splits: bool,
+    splits: steamgauge_core::gold::Splits,
     seed: u64,
 ) -> Result<()> {
     let (questions, found) = steamgauge_core::gold::draw(reference, blind, splits, seed)?;

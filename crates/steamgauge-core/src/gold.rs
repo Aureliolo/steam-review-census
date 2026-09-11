@@ -64,7 +64,19 @@ pub struct GoldDraw {
     pub agreed: usize,
 }
 
-/// Draws the claims a person should read, from the frozen games only.
+/// Which games' disagreements to put in front of a person.
+///
+/// The blind sample is always frozen, because that is what makes it a measurement. The splits
+/// measure nothing: they settle a boundary, and a boundary settled on one game is settled for
+/// every game, so they may be drawn from anywhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Splits {
+    None,
+    Frozen,
+    Everywhere,
+}
+
+/// Draws the claims a person should read.
 ///
 /// Frozen because a gold figure has to be about games that chose nothing: a person adjudicating
 /// the games the model trained on would produce a number that flatters every part of the chain
@@ -76,7 +88,7 @@ pub struct GoldDraw {
 pub fn draw(
     reference: &Path,
     blind_wanted: usize,
-    splits: bool,
+    splits: Splits,
     seed: u64,
 ) -> Result<(Vec<Question>, GoldDraw)> {
     let mut blind: Vec<([u8; 32], Question)> = Vec::new();
@@ -92,7 +104,8 @@ pub fn draw(
         else {
             continue;
         };
-        if role(app_id, SPLIT_SEED) != Role::Frozen {
+        let frozen = role(app_id, SPLIT_SEED) == Role::Frozen;
+        if !frozen && splits != Splits::Everywhere {
             continue;
         }
         let Ok(sample) = std::fs::read(dir.join("sample.json")) else {
@@ -107,7 +120,7 @@ pub fn draw(
             .ok()
             .and_then(|raw| serde_json::from_slice(&raw).ok())
             .unwrap_or_default();
-        found.games += 1;
+        found.games += usize::from(frozen);
 
         let around: std::collections::HashMap<&str, Rejoined<'_>> = drawn
             .iter()
@@ -140,7 +153,7 @@ pub fn draw(
             if let Some(other) = twice.get(&(label.review_id.as_str(), label.index)) {
                 if other.subject == label.subject {
                     found.agreed += 1;
-                } else if splits {
+                } else if splits != Splits::None {
                     split.push(Question {
                         shown: Some(vec![answered(label), answered(other)]),
                         ..question
@@ -149,6 +162,11 @@ pub fn draw(
                 continue;
             }
 
+            // A blind question is a measurement, and a measurement on a game the model trained
+            // on measures nothing.
+            if !frozen {
+                continue;
+            }
             blind.push((
                 crate::bounded::rank(seed, "gold-blind", &format!("{app_id}#{}", label.review_id)),
                 question,
