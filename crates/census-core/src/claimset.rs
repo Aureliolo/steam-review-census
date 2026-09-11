@@ -645,10 +645,16 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
 
         let mut text: std::collections::HashMap<(&str, u16), &str> =
             std::collections::HashMap::new();
+        // The review around each claim, rebuilt exactly as the labeller was shown it. A
+        // labeller reads "it doesn't" with the sentence before it; a model given the claim
+        // alone is being asked a question nobody could answer, and the gap between what the
+        // two saw is measurable error attributed to the model.
+        let mut around: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
         for review in &drawn {
             for claim in &review.claims {
                 text.insert((review.id.as_str(), claim.index), claim.text.as_str());
             }
+            around.insert(review.id.as_str(), rejoined(review));
         }
 
         for label in &labels {
@@ -657,6 +663,7 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
             };
             let row = serde_json::json!({
                 "text": claim,
+                "review": around.get(label.review_id.as_str()),
                 "subject": label.subject,
                 "polarity": label.polarity,
                 "confidence": label.confidence,

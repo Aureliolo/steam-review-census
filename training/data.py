@@ -30,6 +30,7 @@ CONFIDENCE_WEIGHT = {"high": 1.0, "medium": 0.7, "low": 0.4}
 @dataclass(frozen=True)
 class Claim:
     text: str
+    review: str
     subject: str
     polarity: str
     confidence: str
@@ -64,6 +65,7 @@ def load(path: str | Path) -> list[Claim]:
             claims.append(
                 Claim(
                     text=row["text"],
+                    review=row.get("review") or row["text"],
                     subject=row["subject"],
                     polarity=row.get("polarity", "neutral"),
                     confidence=row.get("confidence", "medium"),

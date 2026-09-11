@@ -35,12 +35,16 @@ POLARITIES = claimdata.POLARITIES
 
 
 class Claims(Dataset):
-    def __init__(self, claims, tokenizer, subjects, max_length):
+    def __init__(self, claims, tokenizer, subjects, max_length, context=False):
         self.claims = claims
         self.tokenizer = tokenizer
         self.subjects = {name: index for index, name in enumerate(subjects)}
         self.polarities = {name: index for index, name in enumerate(POLARITIES)}
         self.max_length = max_length
+        # Whether the model reads the claim with the review around it, as the labeller did.
+        # "it doesn't" and "same here" are unanswerable alone, and every one of them in the
+        # training set is a label the model is asked to reach from text that cannot reach it.
+        self.context = context
 
     def __len__(self):
         return len(self.claims)
@@ -49,6 +53,7 @@ class Claims(Dataset):
         claim = self.claims[at]
         encoded = self.tokenizer(
             claim.text,
+            *([claim.review] if self.context else []),
             truncation=True,
             max_length=self.max_length,
             padding="max_length",
@@ -306,7 +311,7 @@ def run(args) -> dict:
 
     loaders = {
         name: DataLoader(
-            Claims(part, tokenizer, subjects, args.max_length),
+            Claims(part, tokenizer, subjects, args.max_length, args.context),
             batch_size=args.batch_size,
             shuffle=name == "train",
             num_workers=0,
@@ -466,6 +471,13 @@ def parse():
         help="how often the model must be right on the claims it does answer. The abstention "
         "threshold is the one giving the most coverage at this accuracy; if none reaches it, "
         "that is recorded rather than lowered to whatever the model can manage.",
+    )
+    parser.add_argument(
+        "--context",
+        action="store_true",
+        help="read each claim with the review around it, as the labeller did, rather than "
+        "the claim alone. Costs tokens per claim and therefore throughput; the question is "
+        "whether a claim that cannot be answered alone stops being one.",
     )
     parser.add_argument(
         "--train-games",
