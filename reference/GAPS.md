@@ -46,11 +46,37 @@ A one-line RULE on `genre` would absorb most of it: a comparison with the game's
 predecessor is `genre` when the difference itself is the point, and `verdict` when it is only
 better or worse.
 
-### Praise or blame for the studio that is not about patches: three reports
+### Praise or blame for the studio that is not about patches: five reports
 
 "Applaud the devs for taking a risk", "hope Bandai sells the IP", "director replacement is
-urgent", "fix this 11 bit". `updates` is written around post-release patching and `policy`
-around the publisher and the platform, so a judgement of the studio itself lands in neither.
+urgent", "fix this 11 bit", and on 2357570 and 2669320 a wall of bare insults at Blizzard and
+EA. `updates` is written around post-release patching and `policy` around the publisher and
+the platform, so a judgement of the studio itself lands in neither, and both labellers filed
+it under `updates` and flagged every one. The revision gives `updates` a second sentence:
+praise or blame aimed at the studio as a whole, with no patch, decision or term named, is
+`updates`; a named decision is `policy`.
+
+### A patch that removed content: one report, and it was most of that game
+
+Skullgirls' 2023 censorship patch (245170) is the bulk of its set: "not what I paid for",
+"content removed", "woke devs". `updates` (a patch changed the game) against `policy` ("terms
+that changed after people had bought it"), and the labeller flagged every one that framed it
+as the owner's decision. The RULE proposed above for the studio settles this the same way: a
+patch is `updates`; the decision behind it, where the claim names it, is `policy`.
+
+### Cannot log in: one report
+
+"Can't log in", "needs a phone number to play", on 2357570. `bugs` when the login is broken,
+`policy` when the requirement is the complaint, and the labeller could not always tell which
+the reviewer meant. Related to the "will not start" gap below and settled by the same rule.
+
+### Luck that is sold: one report
+
+FC 25's pack luck (2669320) is `monetisation` (loot boxes) and `difficulty` (luck deciding the
+outcome) at once, and "scripting" (the game decides you lose) is `difficulty` by the
+fairness clause and reads as a `bugs` accusation. The labeller filed both under `difficulty`
+and flagged them. A RULE on `monetisation`: what a purchase gives you is `monetisation`, how
+it plays once you have it is whatever it is about.
 
 ### A balance change blamed on a patch: one report, and it dominated that game
 
