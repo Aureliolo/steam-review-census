@@ -187,7 +187,15 @@ def score_reader(model_dir: Path, key: Path, data: str):
     tokenizer.no_padding()
     tokenizer.no_truncation()
     cut = Claims(
-        claims, None, subjects, provenance["max_tokens"], provenance.get("context", False)
+        claims,
+        None,
+        subjects,
+        provenance["max_tokens"],
+        provenance.get("context", False),
+        # A model trained to look for the marks and scored without them is scored on input it
+        # has never seen, which understates it and looks like a worse model rather than a
+        # worse measurement.
+        mark=provenance.get("mark", False),
     )
     cut.tokenizer = _HuggingFaceShim(tokenizer)
     cut.windows = [cut.window(claim) for claim in claims] if cut.context else []

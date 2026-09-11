@@ -44,7 +44,14 @@ def logits_of(model_dir: Path, claims, provenance):
 
     budget = provenance["max_tokens"]
     context = provenance.get("context", False)
-    cut = Claims(claims, None, provenance["subjects"], budget, context)
+    cut = Claims(
+        claims,
+        None,
+        provenance["subjects"],
+        budget,
+        context,
+        mark=provenance.get("mark", False),
+    )
     cut.tokenizer = _Shim(tokenizer)
     cut.windows = [cut.window(claim) for claim in claims] if context else []
 
