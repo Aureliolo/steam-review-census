@@ -77,6 +77,12 @@ labeller called modding "the game's dominant theme" and had to file it under `co
 confidence with every claim marked contested. Falls between `content`, `updates` and
 `community` with no rule choosing.
 
+The model agrees, without having been asked. Of the three frozen games under the fifteen-game
+reader, 1466860 is the one it declines most of, 80% against 61% on the least, and it is the
+one where modding is the dominant theme. A subject the spine lacks is a subject the model
+cannot commit to, so the abstention rate carries the gap through to every report of that
+game. That is two independent measurements pointing at one missing row.
+
 Eight games is not a boundary dispute, it is a subject. The revision adds `mods`: "Mods and
 user-made content. Whether the game supports them, how easy they are to install, what the
 community has made, and whether the game is worth playing without them. A game that is
