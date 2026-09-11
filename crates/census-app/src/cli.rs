@@ -246,6 +246,30 @@ enum Command {
         seed: u64,
     },
 
+    /// Draw the reviews of a corpus that are least like each other, for finding what this
+    /// game's players talk about that the fixed taxonomy has no row for.
+    ///
+    /// A random sample is mostly "great game", because that is what a corpus mostly is. This
+    /// draws by farthest-point traversal over the stored vectors instead, so each review says
+    /// something the others do not. What reads the handout and names the subjects is a
+    /// separate step; this is the sample it reads.
+    Distinct {
+        /// Steam app ID whose most recent capture to draw from.
+        app_id: u32,
+        /// Directory holding the capture and its embeddings.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// How many reviews to draw.
+        #[arg(long, default_value_t = 120)]
+        count: usize,
+        /// Changing this draws a different pool. The same seed draws the same reviews.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Where to write the handout. Defaults to reference/distinct/<app id>.json.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
+
     /// Compare two labellings of the same claims, field by field.
     CompareLabels {
         /// Steam app IDs to compare. Every set with a second opinion when none are named.
@@ -341,7 +365,11 @@ enum Command {
 }
 
 pub async fn run() -> Result<()> {
-    match Cli::parse().command {
+    let command = Cli::parse().command;
+    if let Some(done) = reference_work(&command) {
+        return done;
+    }
+    match command {
         Command::Crawl {
             app_id,
             out,
@@ -361,29 +389,6 @@ pub async fn run() -> Result<()> {
             run_crawl(app_id, &options, Duration::from_millis(pace_ms)).await
         }
         Command::Claims { app_id, out } => run_claims(app_id, &out),
-        Command::SampleClaims {
-            app_ids,
-            out,
-            reviews,
-            batch_size,
-            seed,
-            english,
-            to,
-        } => run_sample_claims(&app_ids, &out, reviews, batch_size, seed, english, &to),
-        Command::IngestClaims { app_id, from, to } => run_ingest_claims(app_id, &from, to),
-        Command::MeasureClaims {
-            app_ids,
-            out,
-            reference,
-        } => run_measure_claims(&app_ids, &out, &reference),
-        Command::SecondOpinion {
-            app_ids,
-            reference,
-            share,
-            batch_size,
-            seed,
-        } => run_second_opinion(&app_ids, &reference, share, batch_size, seed),
-        Command::CompareLabels { app_ids, reference } => run_compare_labels(&app_ids, &reference),
         Command::Read {
             app_ids,
             out,
@@ -429,7 +434,6 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::Brief { to } => run_brief(&to),
         Command::Report {
             app_ids,
             out,
@@ -437,7 +441,60 @@ pub async fn run() -> Result<()> {
             examples,
             seed,
         } => run_report(&app_ids, &out, &to, examples, seed),
+        // Every reference-set command was answered above; a fresh arm here is one that
+        // reference_work does not know about.
+        Command::SampleClaims { .. }
+        | Command::IngestClaims { .. }
+        | Command::MeasureClaims { .. }
+        | Command::SecondOpinion { .. }
+        | Command::CompareLabels { .. }
+        | Command::Distinct { .. }
+        | Command::Brief { .. } => unreachable!("reference_work answers every reference command"),
     }
+}
+
+/// The commands that build and check reference sets, none of which touch the network.
+///
+/// Kept apart from the crawling and reading commands because there are many of them, they
+/// share nothing with the others, and a dispatcher that grows one arm per command stops
+/// being readable at about this many.
+fn reference_work(command: &Command) -> Option<Result<()>> {
+    Some(match command {
+        Command::SampleClaims {
+            app_ids,
+            out,
+            reviews,
+            batch_size,
+            seed,
+            english,
+            to,
+        } => run_sample_claims(app_ids, out, *reviews, *batch_size, *seed, *english, to),
+        Command::IngestClaims { app_id, from, to } => {
+            run_ingest_claims(*app_id, from, to.clone())
+        }
+        Command::MeasureClaims {
+            app_ids,
+            out,
+            reference,
+        } => run_measure_claims(app_ids, out, reference),
+        Command::SecondOpinion {
+            app_ids,
+            reference,
+            share,
+            batch_size,
+            seed,
+        } => run_second_opinion(app_ids, reference, *share, *batch_size, *seed),
+        Command::CompareLabels { app_ids, reference } => run_compare_labels(app_ids, reference),
+        Command::Distinct {
+            app_id,
+            out,
+            count,
+            seed,
+            to,
+        } => run_distinct(*app_id, out, *count, *seed, to.clone()),
+        Command::Brief { to } => run_brief(to),
+        _ => return None,
+    })
 }
 
 fn run_report(
@@ -723,6 +780,57 @@ fn run_second_opinion(
         "\nHand these to a different labeller from the one that did the first pass, and give \
          it\nthe same sheet and nothing else. A second opinion that can see the first is not a\n\
          second opinion. Ingest with --to <set>/second, then `census compare-labels`."
+    );
+    Ok(())
+}
+
+fn run_distinct(
+    app_id: u32,
+    out: &std::path::Path,
+    count: usize,
+    seed: u64,
+    to: Option<PathBuf>,
+) -> Result<()> {
+    let drawn = census_core::diverse::handout(out, app_id, count, seed)?;
+    let path = to.unwrap_or_else(|| {
+        PathBuf::from("reference")
+            .join("distinct")
+            .join(format!("{app_id}.json"))
+    });
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, serde_json::to_vec_pretty(&drawn)?)?;
+
+    let mut languages: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for review in &drawn {
+        *languages.entry(review.language.as_str()).or_default() += 1;
+    }
+    let mut ranked: Vec<(&str, usize)> = languages.into_iter().collect();
+    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+
+    println!("app          {app_id}");
+    println!("drawn        {} reviews, least alike first", drawn.len());
+    if let (Some(first), Some(last)) = (drawn.first(), drawn.last()) {
+        println!(
+            "novelty      {:.2} down to {:.2}",
+            first.novelty.min(2.0),
+            last.novelty
+        );
+    }
+    println!(
+        "languages    {}",
+        ranked
+            .iter()
+            .take(6)
+            .map(|(name, count)| format!("{name} {count}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!("written to   {}", path.display());
+    println!(
+        "\nThe handout holds review text and is not committed. What is induced from it is a \
+         list of\nsubjects with a sentence each, which is."
     );
     Ok(())
 }

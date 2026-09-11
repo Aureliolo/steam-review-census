@@ -8,6 +8,8 @@ data/
 # the seed recorded in the manifest, so nothing is lost by keeping them out.
 reference/**/sample.json
 reference/**/batches/
+# The diverse handouts carry review text too; the subjects induced from them do not.
+reference/distinct/*.json
 corpus/
 raw/
 

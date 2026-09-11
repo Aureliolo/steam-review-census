@@ -8,6 +8,7 @@ pub mod capture;
 pub mod claims;
 pub mod claimset;
 pub mod crawl;
+pub mod diverse;
 pub mod embed;
 pub mod html;
 pub mod measure;
