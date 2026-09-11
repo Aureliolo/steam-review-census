@@ -47,7 +47,7 @@ pub struct Category {
 
 /// Version of the core spine. Any change to the categories or their descriptions changes
 /// what the numbers mean, so this is recorded alongside every classification.
-pub const CORE_SPINE_VERSION: &str = "core-5";
+pub const CORE_SPINE_VERSION: &str = "core-6";
 
 pub const CORE_SPINE: &[Category] = &[
     Category {
@@ -66,7 +66,12 @@ pub const CORE_SPINE: &[Category] = &[
         label: "Bugs and crashes",
         description: "The game is broken and buggy. It crashes to desktop, freezes, corrupts \
                       or loses save files, and is full of glitches that block progress.",
-        boundary: None,
+        boundary: Some(
+            "Something that worked and now does not belongs here. Being unable to log in is \
+             here when the login itself is broken and policy when needing an account at all \
+             is the complaint. A game that never starts, with no reason given, is \
+             compatibility.",
+        ),
         alone: false,
     },
     // Narrow on purpose. Phrased as "how the game plays and whether it is fun" this became
@@ -80,9 +85,11 @@ pub const CORE_SPINE: &[Category] = &[
                       are deep or shallow.",
         boundary: Some(
             "Naming the genre or comparing the game to another one belongs to genre. Whether \
-             options are balanced against each other belongs to difficulty. How much game \
-             there is belongs to content. A system the game never explains belongs to \
-             tutorial, however good the system itself is.",
+             options are balanced against each other belongs to difficulty, and so does how \
+             hard an enemy is to beat; how that enemy behaves and what it does is a mechanic \
+             and belongs here. How much game there is belongs to content, and anything \
+             user-made belongs to mods. A system the game never explains belongs to tutorial, \
+             however good the system itself is.",
         ),
         alone: false,
     },
@@ -112,14 +119,17 @@ pub const CORE_SPINE: &[Category] = &[
         id: "verdict",
         label: "Overall verdict only",
         description: "A verdict with no specific reason given. Great game, terrible game, \
-                      ten out of ten, would recommend, worth every penny, do not buy, \
-                      waste of money, best game ever, I find this game childish, please \
-                      make a sequel.",
+                      ten out of ten, would recommend, do not buy, best game ever, an \
+                      excellent city builder, I find this game childish, please make a \
+                      sequel.",
         boundary: Some(
             "Only when no aspect is named at all. A review that gives a verdict and then \
-             names one specific thing belongs to that thing: \"super fun, worth every penny\" \
-             is price. Asking for a sequel belongs here; asking for a port belongs to \
-             compatibility.",
+             names one specific thing belongs to that thing: \"super fun, and the story is \
+             great\" is story. A judgement with only the kind of game attached, \"excellent \
+             city builder\", is a verdict; genre is for when what kind of game it is, or \
+             which game it resembles, is the point being made. A community's own catchphrase \
+             used as a salute, \"Rock and Stone\", is a verdict and it is praise. Asking for \
+             a sequel belongs here; asking for a port belongs to compatibility.",
         ),
         alone: true,
     },
@@ -172,10 +182,13 @@ pub const CORE_SPINE: &[Category] = &[
                       people are just numbers to you now, you never really feel it.",
         boundary: Some(
             "This is the feeling itself, for reviews that name nothing that produces it. \
-             Where a review says what creates the mood, that part belongs to what creates \
-             it: a frightening creature design is graphics, a soundtrack that unsettles is \
-             audio, a mechanic that keeps you on edge is gameplay, and immersion broken by a \
-             crash is bugs.",
+             Being unable to stop playing, losing whole evenings and calling it addictive are \
+             here, and so is a reaction with nothing named behind it: it made me cry, the \
+             feels, I was terrified. Where a review says what creates the mood, that part \
+             belongs to what creates it: a frightening creature design is graphics, a \
+             soundtrack that unsettles is audio, a mechanic that keeps you on edge is \
+             gameplay, faithfulness to the film or book it adapts is licensing, and immersion \
+             broken by a crash is bugs.",
         ),
         alone: false,
     },
@@ -206,8 +219,10 @@ pub const CORE_SPINE: &[Category] = &[
                       keybindings, controller support, menus, the HUD, the inventory screens, \
                       and how many clicks it takes to do anything.",
         boundary: Some(
-            "Whether a controller is supported belongs here. Whether the game runs on a given \
-             device belongs to compatibility.",
+            "Whether a controller is supported belongs here, and so does anything the game \
+             makes you sit through or click past: a cutscene that cannot be skipped is a \
+             question of how many clicks it takes to do anything. Whether the game runs on a \
+             given device belongs to compatibility.",
         ),
         alone: false,
     },
@@ -219,8 +234,12 @@ pub const CORE_SPINE: &[Category] = &[
                       randomness deciding the outcome, and whether it is too easy or punishing.",
         boundary: Some(
             "Balance complaints belong here rather than to gameplay, including when they name \
-             a specific mechanic as overpowered or useless. Being lost because nothing was \
-             explained belongs to tutorial.",
+             a specific mechanic as overpowered or useless. How hard an enemy is to beat is \
+             here; how it is designed and what it does is gameplay. A complaint about what a \
+             patch changed is about the change and belongs here where the change was to \
+             balance, with updates for the patching itself. Being lost because nothing was \
+             explained belongs to tutorial. What a purchase gives you is monetisation, and \
+             how it plays once you have it is here.",
         ),
         alone: false,
     },
@@ -232,18 +251,42 @@ pub const CORE_SPINE: &[Category] = &[
                       whether it feels finished or thin and runs out of things to do.",
         boundary: Some(
             "Replayability and repetitiveness are two ends of one axis and both belong here, \
-             never to gameplay.",
+             never to gameplay. What the players made rather than the developers belongs to \
+             mods, however much of the game it accounts for.",
+        ),
+        alone: false,
+    },
+    // The most-reported gap in this taxonomy's history: five games at review level, three more
+    // at claim level, and one labeller calling modding a game's dominant theme while filing it
+    // under `content` at low confidence with every claim marked contested. The model said the
+    // same thing independently: the game it declined most of, 80% against 61% on the least, was
+    // that one. Across the labelled sets a claim naming mods lands in ten different rows.
+    Category {
+        id: "mods",
+        label: "Mods and user content",
+        description: "Mods and what players have made. Whether the game supports modding, how \
+                      easy mods are to install, the workshop, what the community has built, \
+                      whether the game is worth playing unmodded, and mods breaking when the \
+                      game updates.",
+        boundary: Some(
+            "Anything made by players rather than by the developers belongs here, including \
+             how much of the game's life it accounts for. Whether the developers support \
+             modding is here; whether a patch broke the mods is here too, because the subject \
+             is the mods. Paid mods and creator programmes are monetisation, and what the \
+             people who make them are like is community.",
         ),
         alone: false,
     },
     Category {
         id: "price",
         label: "Price and value",
-        description: "What it costs and whether it is worth the money. Full price versus sale, \
-                      value for money, refunds, and whether to wait for a discount.",
+        description: "What it costs and whether it is worth the money. Worth every penny, a \
+                      waste of money, I refunded it, full price versus sale, value for money, \
+                      and whether to wait for a discount.",
         boundary: Some(
-            "What the base game costs belongs here. What is sold on top of it belongs to \
-             monetisation.",
+            "What the base game costs belongs here, and so does judging its value in money: \
+             worth every penny and waste of money are both about what it was worth paying. \
+             What is sold on top of it belongs to monetisation.",
         ),
         alone: false,
     },
@@ -253,9 +296,11 @@ pub const CORE_SPINE: &[Category] = &[
         description: "Paid extras and how they are sold. Microtransactions, battle passes, \
                       loot boxes, paywalls, season passes and content cut out to sell as DLC.",
         boundary: Some(
-            "What is sold on top of the game, and how, belongs here. Wanting more of the game \
-             belongs to content even when the review asks for it as DLC: that is a review \
-             saying it ran out, not one about how the game is sold.",
+            "What is sold on top of the game, and how, belongs here, including what a purchase \
+             gives you: a pack whose contents are decided by chance is sold here, and whether \
+             luck then decides the match is difficulty. Wanting more of the game belongs to \
+             content even when the review asks for it as DLC: that is a review saying it ran \
+             out, not one about how the game is sold.",
         ),
         alone: false,
     },
@@ -265,9 +310,11 @@ pub const CORE_SPINE: &[Category] = &[
         description: "Playing with or against other people. Matchmaking, servers, lag and ping, \
                       co-op, player counts, whether lobbies are dead and whether cheaters ruin it.",
         boundary: Some(
-            "Servers, matchmaking and connection quality belong here. What the other players \
-             are like belongs to community, and calling the game co-op as a kind of game \
-             belongs to genre.",
+            "Servers, matchmaking and connection quality belong here, and so does what playing \
+             with other people is like: better with friends, dull on your own, worth it only \
+             in a group. What the other players are like belongs to community, and calling \
+             the game co-op as a kind of game belongs to genre. \"The game is dead\" is here \
+             when nobody is playing it and updates when nobody is developing it.",
         ),
         alone: false,
     },
@@ -276,7 +323,10 @@ pub const CORE_SPINE: &[Category] = &[
         label: "Community and players",
         description: "The people who play it. Whether the community is welcoming or toxic, \
                       griefing and harassment, and what the playerbase is like.",
-        boundary: None,
+        boundary: Some(
+            "What the people are like belongs here. What they have made belongs to mods, and \
+             whether there are enough of them online belongs to multiplayer.",
+        ),
         alone: false,
     },
     Category {
@@ -288,7 +338,11 @@ pub const CORE_SPINE: &[Category] = &[
         boundary: Some(
             "What the developers do to the game belongs here, and so does praise or blame \
              aimed at the studio itself, including thanking them and telling them to fix it. \
-             What the publisher or the platform requires of the player belongs to policy.",
+             A complaint about what a patch changed is about the change: balance to \
+             difficulty, a mechanic to gameplay, content removed to content. This is for the \
+             patching itself, its pace, and whether they listen. \"The game is dead\" is here \
+             when nobody is developing it and multiplayer when nobody is playing it. What the \
+             publisher or the platform requires of the player belongs to policy.",
         ),
         alone: false,
     },
@@ -305,7 +359,11 @@ pub const CORE_SPINE: &[Category] = &[
                       and terms that changed after people had bought it.",
         boundary: Some(
             "Anything the publisher or the platform decided belongs here, including a protest \
-             that is angry and brief and names no particular term. Only a protest about \
+             that is angry and brief and names no particular term, and including celebrating \
+             one that was reversed: \"we won\" about a withdrawn account requirement is this, \
+             and it is praise. What a decision is belongs here; what it does while playing \
+             belongs where it happens, so a launcher that will not sign you in is here and an \
+             anti-cheat that keeps you out of a match is multiplayer. Only a protest about \
              something with no connection to this game at all belongs to offtopic.",
         ),
         alone: false,

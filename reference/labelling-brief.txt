@@ -1,4 +1,4 @@
-Categories (spine core-5). Each review gets exactly one primary category, plus any others it genuinely also covers.
+Categories (spine core-6). Each review gets exactly one primary category, plus any others it genuinely also covers.
 
 You are shown the text of a review and nothing else: not which game it is, not whether the reviewer recommended it, not what the classifier guessed. The tool being measured sorts reviews from their text alone, so a label made from more than that would measure what you were told rather than how well it reads.
 
@@ -8,18 +8,19 @@ Performance (performance)
 
 Bugs and crashes (bugs)
   The game is broken and buggy. It crashes to desktop, freezes, corrupts or loses save files, and is full of glitches that block progress.
+  RULE: Something that worked and now does not belongs here. Being unable to log in is here when the login itself is broken and policy when needing an account at all is the complaint. A game that never starts, with no reason given, is compatibility.
 
 Gameplay and mechanics (gameplay)
   The systems and mechanics themselves. Combat, movement, crafting, building, exploration, progression systems, and whether the mechanics are deep or shallow.
-  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty. How much game there is belongs to content. A system the game never explains belongs to tutorial, however good the system itself is.
+  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty, and so does how hard an enemy is to beat; how that enemy behaves and what it does is a mechanic and belongs here. How much game there is belongs to content, and anything user-made belongs to mods. A system the game never explains belongs to tutorial, however good the system itself is.
 
 Genre and comparisons (genre)
   What kind of game this is. A roguelike, turn-based tactics, a management sim, a deckbuilder, a soulslike. It plays like FTL, it is XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like this, it reminds me of the old games in the genre.
   RULE: Naming what kind of game it is, or which games it resembles, belongs here, and that includes calling it a co-op game or comparing it to other co-op games. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay, and whether the co-op itself works is multiplayer. A comparison with this game's own predecessor belongs here when the difference itself is the point, and to verdict when it is only better or worse.
 
 Overall verdict only (verdict)
-  A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, worth every penny, do not buy, waste of money, best game ever, I find this game childish, please make a sequel.
-  RULE: Only when no aspect is named at all. A review that gives a verdict and then names one specific thing belongs to that thing: "super fun, worth every penny" is price. Asking for a sequel belongs here; asking for a port belongs to compatibility.
+  A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, do not buy, best game ever, an excellent city builder, I find this game childish, please make a sequel.
+  RULE: Only when no aspect is named at all. A review that gives a verdict and then names one specific thing belongs to that thing: "super fun, and the story is great" is story. A judgement with only the kind of game attached, "excellent city builder", is a verdict; genre is for when what kind of game it is, or which game it resembles, is the point being made. A community's own catchphrase used as a salute, "Rock and Stone", is a verdict and it is praise. Asking for a sequel belongs here; asking for a port belongs to compatibility.
   ONLY: this is the whole label. A review here covers nothing else, so it never takes a second category.
 
 Says nothing about the game (offtopic)
@@ -33,7 +34,7 @@ Story and writing (story)
 
 Atmosphere and feel (atmosphere)
   What the game makes you feel while you are playing it. Genuinely terrifying, the tension never lets up, put headphones on and turn the lights off, it pulls you in and you lose whole evenings, the mood is oppressive and lonely, it has lost the soul the first one had, the people are just numbers to you now, you never really feel it.
-  RULE: This is the feeling itself, for reviews that name nothing that produces it. Where a review says what creates the mood, that part belongs to what creates it: a frightening creature design is graphics, a soundtrack that unsettles is audio, a mechanic that keeps you on edge is gameplay, and immersion broken by a crash is bugs.
+  RULE: This is the feeling itself, for reviews that name nothing that produces it. Being unable to stop playing, losing whole evenings and calling it addictive are here, and so is a reaction with nothing named behind it: it made me cry, the feels, I was terrified. Where a review says what creates the mood, that part belongs to what creates it: a frightening creature design is graphics, a soundtrack that unsettles is audio, a mechanic that keeps you on edge is gameplay, faithfulness to the film or book it adapts is licensing, and immersion broken by a crash is bugs.
 
 Graphics and art (graphics)
   How the game looks. The visuals, the art style, the animation and how quickly it plays out, the environments and character models, whether it is beautiful or ugly or charming.
@@ -44,38 +45,43 @@ Audio and music (audio)
 
 Controls and interface (controls)
   The controls and the user interface. Clunky or responsive controls, keybindings, controller support, menus, the HUD, the inventory screens, and how many clicks it takes to do anything.
-  RULE: Whether a controller is supported belongs here. Whether the game runs on a given device belongs to compatibility.
+  RULE: Whether a controller is supported belongs here, and so does anything the game makes you sit through or click past: a cutscene that cannot be skipped is a question of how many clicks it takes to do anything. Whether the game runs on a given device belongs to compatibility.
 
 Difficulty and balance (difficulty)
   How hard the game is and whether it is fair. Difficulty spikes, grinding, whether the options are balanced against each other, luck and randomness deciding the outcome, and whether it is too easy or punishing.
-  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless. Being lost because nothing was explained belongs to tutorial.
+  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless. How hard an enemy is to beat is here; how it is designed and what it does is gameplay. A complaint about what a patch changed is about the change and belongs here where the change was to balance, with updates for the patching itself. Being lost because nothing was explained belongs to tutorial. What a purchase gives you is monetisation, and how it plays once you have it is here.
 
 Amount of content (content)
   How much game there is. Length, how many hours it lasts, replay value, whether runs differ from one another, whether it gets repetitive, and whether it feels finished or thin and runs out of things to do.
-  RULE: Replayability and repetitiveness are two ends of one axis and both belong here, never to gameplay.
+  RULE: Replayability and repetitiveness are two ends of one axis and both belong here, never to gameplay. What the players made rather than the developers belongs to mods, however much of the game it accounts for.
+
+Mods and user content (mods)
+  Mods and what players have made. Whether the game supports modding, how easy mods are to install, the workshop, what the community has built, whether the game is worth playing unmodded, and mods breaking when the game updates.
+  RULE: Anything made by players rather than by the developers belongs here, including how much of the game's life it accounts for. Whether the developers support modding is here; whether a patch broke the mods is here too, because the subject is the mods. Paid mods and creator programmes are monetisation, and what the people who make them are like is community.
 
 Price and value (price)
-  What it costs and whether it is worth the money. Full price versus sale, value for money, refunds, and whether to wait for a discount.
-  RULE: What the base game costs belongs here. What is sold on top of it belongs to monetisation.
+  What it costs and whether it is worth the money. Worth every penny, a waste of money, I refunded it, full price versus sale, value for money, and whether to wait for a discount.
+  RULE: What the base game costs belongs here, and so does judging its value in money: worth every penny and waste of money are both about what it was worth paying. What is sold on top of it belongs to monetisation.
 
 Monetisation and DLC (monetisation)
   Paid extras and how they are sold. Microtransactions, battle passes, loot boxes, paywalls, season passes and content cut out to sell as DLC.
-  RULE: What is sold on top of the game, and how, belongs here. Wanting more of the game belongs to content even when the review asks for it as DLC: that is a review saying it ran out, not one about how the game is sold.
+  RULE: What is sold on top of the game, and how, belongs here, including what a purchase gives you: a pack whose contents are decided by chance is sold here, and whether luck then decides the match is difficulty. Wanting more of the game belongs to content even when the review asks for it as DLC: that is a review saying it ran out, not one about how the game is sold.
 
 Multiplayer and online (multiplayer)
   Playing with or against other people. Matchmaking, servers, lag and ping, co-op, player counts, whether lobbies are dead and whether cheaters ruin it.
-  RULE: Servers, matchmaking and connection quality belong here. What the other players are like belongs to community, and calling the game co-op as a kind of game belongs to genre.
+  RULE: Servers, matchmaking and connection quality belong here, and so does what playing with other people is like: better with friends, dull on your own, worth it only in a group. What the other players are like belongs to community, and calling the game co-op as a kind of game belongs to genre. "The game is dead" is here when nobody is playing it and updates when nobody is developing it.
 
 Community and players (community)
   The people who play it. Whether the community is welcoming or toxic, griefing and harassment, and what the playerbase is like.
+  RULE: What the people are like belongs here. What they have made belongs to mods, and whether there are enough of them online belongs to multiplayer.
 
 Updates and developer support (updates)
   What the developers do after release. Patches, roadmaps, early access progress, communication with players, whether promises were kept, and whether the game is abandoned.
-  RULE: What the developers do to the game belongs here, and so does praise or blame aimed at the studio itself, including thanking them and telling them to fix it. What the publisher or the platform requires of the player belongs to policy.
+  RULE: What the developers do to the game belongs here, and so does praise or blame aimed at the studio itself, including thanking them and telling them to fix it. A complaint about what a patch changed is about the change: balance to difficulty, a mechanic to gameplay, content removed to content. This is for the patching itself, its pace, and whether they listen. "The game is dead" is here when nobody is developing it and multiplayer when nobody is playing it. What the publisher or the platform requires of the player belongs to policy.
 
 Publisher and platform policy (policy)
   Decisions taken by the publisher or the platform rather than by the game. Needing a second account to play, region locks and delistings, DRM and kernel-level anti-cheat, launcher requirements, price rises, and terms that changed after people had bought it.
-  RULE: Anything the publisher or the platform decided belongs here, including a protest that is angry and brief and names no particular term. Only a protest about something with no connection to this game at all belongs to offtopic.
+  RULE: Anything the publisher or the platform decided belongs here, including a protest that is angry and brief and names no particular term, and including celebrating one that was reversed: "we won" about a withdrawn account requirement is this, and it is praise. What a decision is belongs here; what it does while playing belongs where it happens, so a launcher that will not sign you in is here and an anti-cheat that keeps you out of a match is multiplayer. Only a protest about something with no connection to this game at all belongs to offtopic.
 
 Hardware and compatibility (compatibility)
   Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
