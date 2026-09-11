@@ -9,5 +9,6 @@
   ],
   "polarity_where_subject_right": 0.9411764705882353,
   "macro_f1": 0.8727811764251949,
-  "off_sheet_subjects": {}
+  "off_sheet_subjects": {},
+  "answered_by": "claude-opus-5"
 }

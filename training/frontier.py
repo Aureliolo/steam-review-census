@@ -270,6 +270,12 @@ def main():
     read.add_argument("--key", default=None)
     read.add_argument("--out", default=None)
     read.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+    read.add_argument(
+        "--by",
+        required=True,
+        help="which model answered, as its own name. A benchmark row nobody can attribute is "
+        "a row nobody can reproduce or argue with.",
+    )
 
     mine = sub.add_parser("reader")
     mine.add_argument("--model", default=str(HERE.parent / "models" / "claim-reader"))
@@ -305,6 +311,7 @@ def main():
     answers = Path(args.answers)
     key = Path(args.key) if args.key else answers.parent / "key.json"
     found = score(answers, key, {claim.subject for claim in claimdata.load(args.data)})
+    found["answered_by"] = args.by
     print(json.dumps(found, indent=2))
     if args.out:
         Path(args.out).write_text(json.dumps(found, indent=2), encoding="utf-8")

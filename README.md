@@ -210,7 +210,7 @@ quietly drops the declined claims is a score for a classifier nobody is running.
 | TF-IDF bag of words | 32% | 44.1% |
 | nearest subject centroid over an untuned encoder | 5% | 42.3% |
 | **this reader** | **61%** | **74.8%** |
-| a frontier model given the same sheet | 99.6% | 87.0% |
+| Claude Opus 5, given the same sheet | 99.6% | 87.0% |
 
 The third row is what this project did before it trained anything, and it is why the rebuild
 happened: cosine distance to a prototype cannot say "this is about nothing", so at the accuracy

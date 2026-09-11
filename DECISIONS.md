@@ -394,7 +394,8 @@ model was not overfitting at five; it was underfitting at three.
 
 ### The frontier model wins, and that is the finding
 
-Measured 2026-09-11. A frontier model was given the category sheet the labellers work from,
+Measured 2026-09-11, with Claude Opus 5 as the frontier model. It was given the category sheet
+the labellers work from,
 471 frozen claims stratified twenty to a subject, each inside the review it came from, and the
 same right to abstain the reader has. The shipped reader was then run over **exactly those
 claims**, because the reader's usual frozen figure is over the natural distribution, which is
@@ -402,7 +403,7 @@ a quarter `verdict`, and two numbers from two distributions are not a comparison
 
 | on the same 471 claims | answers | accuracy where it answers | macro F1 | polarity |
 |---|---|---|---|---|
-| frontier model, zero-shot, given the sheet | **99.6%** | **87.0%** [83.6, 89.7] | **0.873** | 94.1% |
+| Claude Opus 5, zero-shot, given the sheet | **99.6%** | **87.0%** [83.6, 89.7] | **0.873** | 94.1% |
 | the shipped reader, claim alone | 60.7% | 74.8% [69.5, 79.5] | 0.525 | 87.4% |
 
 It is not close. The reader delivers 74.8% against a threshold that promised 75%, so its
