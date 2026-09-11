@@ -110,13 +110,34 @@ def split_by_game(
     games = sorted({claim.app_id for claim in claims})
     if len(games) < 3:
         return _split_by_review(claims, seed, test_share, validation_share)
-    shuffled = list(games)
-    random.Random(seed).shuffle(shuffled)
 
-    held = max(1, round(len(shuffled) * test_share))
-    checked = max(1, round(len(shuffled) * validation_share))
-    test_games = set(shuffled[:held])
-    validation_games = set(shuffled[held : held + checked])
+    # Each game's role comes from its own id and the seed, never from which other games are
+    # labelled. Shuffling the list of games would reassign every role each time a game was
+    # added, and the "games the model never saw" would quietly be different games on every
+    # run. Measured before this: eleven games froze {1295660, 1361210}; fifteen froze three
+    # others and put 1361210 into training.
+    #
+    # So a game is frozen if its hash falls in the lowest fifth of the range, validates if in
+    # the next fifteenth, and trains otherwise, against fixed thresholds rather than a ranking.
+    # A ranking would still move the boundary as the count grew. The shares hold only in
+    # expectation; a set this small can land short, and the floor below keeps it from landing
+    # at nothing, which is the one outcome worse than an uneven split.
+    placed = {app_id: _place(app_id, seed) for app_id in games}
+    test_games = {app_id for app_id, at in placed.items() if at < test_share}
+    validation_games = {
+        app_id
+        for app_id, at in placed.items()
+        if test_share <= at < test_share + validation_share
+    }
+    ranked = sorted(games, key=lambda app_id: placed[app_id])
+    if not test_games:
+        test_games = {ranked[0]}
+        validation_games.discard(ranked[0])
+    if not validation_games:
+        for app_id in ranked:
+            if app_id not in test_games:
+                validation_games = {app_id}
+                break
 
     train, validation, test = [], [], []
     for claim in claims:
@@ -127,6 +148,16 @@ def split_by_game(
         else:
             train.append(claim)
     return train, validation, test
+
+
+def _place(app_id: int, seed: int) -> float:
+    """Where a game sits in [0, 1), from its id and the seed alone.
+
+    SHA-256 rather than Python's hash, which is salted per process for strings and would put a
+    game somewhere different on every run.
+    """
+    digest = hashlib.sha256(f"{seed}:{app_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
 
 
 def _split_by_review(
