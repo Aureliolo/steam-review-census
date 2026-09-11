@@ -299,6 +299,9 @@ enum Command {
         /// The returned JSON: an object with `induced_by` and a `subjects` array.
         #[arg(long)]
         from: PathBuf,
+        /// The seed the handout was drawn with, recorded so the same draw can be rebuilt.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
         /// The handout the model read. Defaults to reference/distinct/<app id>.json.
         #[arg(long)]
         handout: Option<PathBuf>,
@@ -534,9 +537,10 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
         Command::IngestInduced {
             app_id,
             from,
+            seed,
             handout,
             to,
-        } => run_ingest_induced(*app_id, from, handout.clone(), to.clone()),
+        } => run_ingest_induced(*app_id, from, *seed, handout.clone(), to.clone()),
         Command::Brief { to } => run_brief(to),
         _ => return None,
     })
@@ -545,6 +549,7 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
 fn run_ingest_induced(
     app_id: u32,
     from: &std::path::Path,
+    seed: u64,
     handout: Option<PathBuf>,
     to: Option<PathBuf>,
 ) -> Result<()> {
@@ -562,14 +567,7 @@ fn run_ingest_induced(
         })?)?;
     let ids: Vec<String> = drawn.into_iter().map(|review| review.review_id).collect();
 
-    let returned: census_core::induced::InducedSet = serde_json::from_slice(&std::fs::read(from)?)?;
-    if returned.app_id != app_id {
-        anyhow::bail!(
-            "the returned list says app {} but was ingested as {app_id}",
-            returned.app_id
-        );
-    }
-
+    let returned: census_core::induced::Returned = serde_json::from_slice(&std::fs::read(from)?)?;
     let (kept, refused) = census_core::induced::check(&returned, &ids);
     println!("app          {app_id}");
     println!("induced by   {}", returned.induced_by);
@@ -599,8 +597,11 @@ fn run_ingest_induced(
         std::fs::create_dir_all(parent)?;
     }
     let survived = census_core::induced::InducedSet {
+        app_id,
+        seed,
+        handout_size: ids.len(),
+        induced_by: returned.induced_by,
         subjects: kept,
-        ..returned
     };
     std::fs::write(&path, serde_json::to_vec_pretty(&survived)?)?;
     println!("written to   {}", path.display());

@@ -55,6 +55,18 @@ pub struct InducedSet {
     pub subjects: Vec<Induced>,
 }
 
+/// What a model hands back: which model it is, and what it found.
+///
+/// Which game, which draw and how many reviews are facts about the handout rather than about
+/// the reading, so they are taken from the handout at ingest rather than asked for. A model
+/// that restates them can restate them wrong, and a list refused over a mistyped seed is a
+/// reading thrown away for nothing.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Returned {
+    pub induced_by: String,
+    pub subjects: Vec<Induced>,
+}
+
 /// Why an induced subject was refused.
 #[derive(Debug, Clone, Serialize)]
 pub struct Refused {
@@ -68,7 +80,7 @@ pub struct Refused {
 /// a subject with two pieces of evidence is refused, not kept with a note, because a report
 /// row resting on two reviews is the thing the check exists to prevent.
 #[must_use]
-pub fn check(returned: &InducedSet, handout_ids: &[String]) -> (Vec<Induced>, Vec<Refused>) {
+pub fn check(returned: &Returned, handout_ids: &[String]) -> (Vec<Induced>, Vec<Refused>) {
     let known: std::collections::HashSet<&str> = handout_ids.iter().map(String::as_str).collect();
     let spine: std::collections::HashSet<&str> =
         crate::taxonomy::CORE_SPINE.iter().map(|c| c.id).collect();
@@ -174,11 +186,8 @@ pub fn load(path: &Path) -> Result<Option<InducedSet>> {
 mod tests {
     use super::*;
 
-    fn returned(subjects: Vec<Induced>) -> InducedSet {
-        InducedSet {
-            app_id: 1,
-            seed: 1,
-            handout_size: 4,
+    fn returned(subjects: Vec<Induced>) -> Returned {
+        Returned {
             induced_by: "test".to_owned(),
             subjects,
         }

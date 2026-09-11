@@ -529,8 +529,7 @@ pub fn induction_brief() -> String {
     }
     brief.push_str(
         "\nReturn one JSON object and nothing else:\n\n\
-         {\n  \"app_id\": <the app id you were given>,\n  \"seed\": <the seed you were given>,\n  \
-         \"handout_size\": <how many reviews you read>,\n  \"induced_by\": \"<the model you \
+         {\n  \"induced_by\": \"<the model you \
          are>\",\n  \"subjects\": [\n    {\n      \"id\": \"<short, lowercase, hyphens>\",\n      \
          \"label\": \"<what the row is called>\",\n      \"description\": \"<one sentence: \
          what belongs here and what does not>\",\n      \"refines\": \"<a fixed subject id, \

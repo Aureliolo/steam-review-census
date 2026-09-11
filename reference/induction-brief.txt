@@ -35,9 +35,6 @@ The fixed subjects, which you must not name again:
 Return one JSON object and nothing else:
 
 {
-  "app_id": <the app id you were given>,
-  "seed": <the seed you were given>,
-  "handout_size": <how many reviews you read>,
   "induced_by": "<the model you are>",
   "subjects": [
     {
