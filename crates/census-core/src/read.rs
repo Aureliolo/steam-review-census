@@ -52,6 +52,54 @@ pub struct ReadOptions {
     /// counted from it, so the choice can change without re-downloading anything and every
     /// figure can say which reviews it is about.
     pub language: Option<String>,
+    pub depth: Depth,
+}
+
+/// How closely each review is read.
+///
+/// Neither setting drops a review. What changes is how finely one is taken apart before the
+/// model reads it, and therefore what a count is a count of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Depth {
+    /// A review becomes the separate points it makes, and each point is read on its own.
+    /// This is what makes a mention rate honest: a review that praises the art and damns the
+    /// story counts once for each, rather than once for whichever the model noticed.
+    #[default]
+    Deep,
+    /// The whole review is one point. A third of the work, and it systematically understates
+    /// anyone who wrote more than a sentence, because the model answers about the review as a
+    /// whole and a review about six things is about none of them clearly enough.
+    Shallow,
+}
+
+impl Depth {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Deep => "deep",
+            Self::Shallow => "shallow",
+        }
+    }
+
+    /// The points a review makes, at this depth.
+    ///
+    /// Every place the reading pass takes a review apart goes through here, so the pass and
+    /// the readings it writes cannot disagree about what a claim index names.
+    #[must_use]
+    pub fn claims_of(self, text: &str) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::Deep => crate::claims::split(text),
+            Self::Shallow => {
+                let whole = text.trim();
+                if whole.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![std::borrow::Cow::Borrowed(whole)]
+                }
+            }
+        }
+    }
 }
 
 impl Default for ReadOptions {
@@ -61,6 +109,7 @@ impl Default for ReadOptions {
             top_helpful: crate::capture::DEFAULT_TOP_HELPFUL,
             batch_size: DEFAULT_READ_BATCH,
             language: None,
+            depth: Depth::Deep,
         }
     }
 }
@@ -176,6 +225,10 @@ pub struct ReadReport {
     /// Reviews in the capture, whatever the language.
     pub corpus_reviews: u64,
     pub language: Option<String>,
+    /// How each review was taken apart. Anything that quotes a claim by its index has to
+    /// take the review apart the same way, so this is recorded rather than assumed.
+    #[serde(default)]
+    pub depth: Depth,
     pub claims: u64,
     /// Claims the model would not put a subject on. Reported rather than filed under
     /// whatever scored highest, which is the whole point of the rebuild.
@@ -282,7 +335,7 @@ fn read_distinct_claims(
         {
             return Ok(());
         }
-        for claim in crate::claims::split(text) {
+        for claim in options.depth.claims_of(text) {
             let key = crate::embed::sha256_bytes(&claim);
             if answers.contains_key(&key) {
                 continue;
@@ -347,7 +400,7 @@ struct Verdict {
     unclassified: usize,
 }
 
-fn judge(text: &str, answers: &HashMap<[u8; 32], Reading>) -> Verdict {
+fn judge(text: &str, depth: Depth, answers: &HashMap<[u8; 32], Reading>) -> Verdict {
     let mut praise = vec![false; CORE_SPINE.len()];
     let mut complaint = vec![false; CORE_SPINE.len()];
     let mut seen = vec![false; CORE_SPINE.len()];
@@ -356,7 +409,7 @@ fn judge(text: &str, answers: &HashMap<[u8; 32], Reading>) -> Verdict {
     let mut claims = 0;
     let mut unclassified = 0;
 
-    for claim in crate::claims::split(text) {
+    for claim in depth.claims_of(text) {
         claims += 1;
         let Some(reading) = answers.get(&crate::embed::sha256_bytes(&claim)) else {
             unclassified += 1;
@@ -442,7 +495,7 @@ fn count_reviews(
             positive += 1;
         }
 
-        let verdict = judge(text, answers);
+        let verdict = judge(text, options.depth, answers);
         claims += verdict.claims as u64;
         unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
@@ -480,7 +533,7 @@ fn count_reviews(
                 (false, false) => {}
             }
         }
-        for (index, claim) in crate::claims::split(text).into_iter().enumerate() {
+        for (index, claim) in options.depth.claims_of(text).into_iter().enumerate() {
             let reading = answers.get(&crate::embed::sha256_bytes(&claim));
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
@@ -529,6 +582,7 @@ fn count_reviews(
         reviews,
         corpus_reviews,
         language: options.language.clone(),
+        depth: options.depth,
         claims,
         unclassified_claims: unclassified,
         silent_reviews: silent,
@@ -685,5 +739,51 @@ impl ReadingRows {
             Arc::new(polarities.finish()),
         ];
         Ok(RecordBatch::try_new(Arc::clone(schema), columns)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shallow_reads_a_review_as_one_point_and_deep_as_several() {
+        let text = "The art is stunning. The story is a mess. Runs fine on a 3070.";
+        assert_eq!(Depth::Shallow.claims_of(text).len(), 1);
+        assert_eq!(Depth::Deep.claims_of(text).len(), 3);
+    }
+
+    #[test]
+    fn neither_depth_invents_a_point_from_nothing() {
+        assert!(Depth::Shallow.claims_of("   \n  ").is_empty());
+        assert!(Depth::Deep.claims_of("   \n  ").is_empty());
+    }
+
+    #[test]
+    fn a_reading_written_before_depth_existed_reads_back_as_deep() {
+        // Every reading on disk before this field was deep, and a missing field must say so
+        // rather than fail, or every existing corpus would need re-reading to open.
+        let stored = serde_json::json!({
+            "app_id": 1, "reviews": 1, "corpus_reviews": 1, "language": null, "claims": 1,
+            "unclassified_claims": 0, "silent_reviews": 0, "positive": 1, "top_helpful": 1,
+            "model": "m", "spine_version": "core-5", "threshold": 0.5, "device": "cpu",
+            "subjects": [], "languages": [], "months": []
+        });
+        let found: ReadReport = serde_json::from_value(stored).expect("an older reading opens");
+        assert_eq!(found.depth, Depth::Deep);
+        assert!(found.trained_on.is_empty());
+    }
+
+    #[test]
+    fn the_depth_a_reading_was_made_at_travels_with_it() {
+        let stored = serde_json::json!({
+            "app_id": 1, "reviews": 1, "corpus_reviews": 1, "language": null, "claims": 1,
+            "depth": "shallow",
+            "unclassified_claims": 0, "silent_reviews": 0, "positive": 1, "top_helpful": 1,
+            "model": "m", "spine_version": "core-5", "threshold": 0.5, "device": "cpu",
+            "subjects": [], "languages": [], "months": []
+        });
+        let found: ReadReport = serde_json::from_value(stored).expect("a shallow reading opens");
+        assert_eq!(found.depth, Depth::Shallow);
     }
 }

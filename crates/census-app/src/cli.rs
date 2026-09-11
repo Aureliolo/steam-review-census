@@ -75,6 +75,25 @@ impl From<Grain> for census_core::taxonomy::Unit {
     }
 }
 
+/// How closely the reading pass reads.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum Reading {
+    /// Each review becomes the separate points it makes.
+    #[default]
+    Deep,
+    /// Each review is one point.
+    Shallow,
+}
+
+impl From<Reading> for census_core::read::Depth {
+    fn from(value: Reading) -> Self {
+        match value {
+            Reading::Deep => Self::Deep,
+            Reading::Shallow => Self::Shallow,
+        }
+    }
+}
+
 const PROGRESS_EVERY_SHARDS: usize = 5;
 const PROGRESS_EVERY_TEXTS: u64 = 5_000;
 
@@ -283,6 +302,11 @@ enum Command {
         /// How many of the most-helpful reviews count as the top of the pile.
         #[arg(long, default_value_t = census_core::capture::DEFAULT_TOP_HELPFUL)]
         top_helpful: usize,
+        /// How closely to read. `deep` takes each review apart into the points it makes;
+        /// `shallow` reads each review as one point, which is faster and understates anyone
+        /// who wrote more than a sentence. Neither drops a review.
+        #[arg(long, default_value = "deep")]
+        depth: Reading,
     },
 
     /// Render a self-contained page from what the reading pass found.
@@ -367,19 +391,18 @@ pub async fn run() -> Result<()> {
             batch_size,
             language,
             top_helpful,
+            depth,
         } => {
             let model_dir = model.unwrap_or_else(census_core::reader::default_dir);
             fetch_reader(&model_dir).await?;
-            run_read(
-                &app_ids,
-                &model_dir,
-                &census_core::read::ReadOptions {
-                    out_dir: out,
-                    top_helpful,
-                    batch_size,
-                    language,
-                },
-            )
+            let options = census_core::read::ReadOptions {
+                out_dir: out,
+                top_helpful,
+                batch_size,
+                language,
+                depth: depth.into(),
+            };
+            run_read(&app_ids, &model_dir, &options)
         }
         Command::ExportTraining { from, to } => {
             let written = census_core::claimset::export_training(&from, &to)?;
@@ -568,6 +591,13 @@ fn run_read(
     let mut model = census_core::reader::ClaimReader::load(model_dir)?;
     eprintln!("model        {} on {}", model_dir.display(), model.device());
     eprintln!("threshold    {:.2}", model.provenance().threshold);
+    if options.depth != census_core::read::Depth::Deep {
+        eprintln!(
+            "depth        {}: each review is one point, which understates anyone who wrote \
+             more than a sentence",
+            options.depth.as_str()
+        );
+    }
     for &app_id in app_ids {
         read_one(&mut model, app_id, options)?;
     }

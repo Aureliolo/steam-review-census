@@ -423,7 +423,11 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let quote = |claim: &DrawnClaim| -> Option<Example> {
         let review = fetched.get(&claim.review_id)?;
         Some(Example {
-            claim: crate::claims::split(&review.text)
+            // Taken apart the way the reading pass took it apart, or the index names a
+            // different sentence from the one that was read.
+            claim: reading
+                .depth
+                .claims_of(&review.text)
                 .into_iter()
                 .nth(claim.index as usize)?
                 .into_owned(),
@@ -667,6 +671,7 @@ mod tests {
                 reviews: 100_000,
                 corpus_reviews: 100_000,
                 language: None,
+                depth: crate::read::Depth::Deep,
                 claims: 300_000,
                 unclassified_claims: 0,
                 silent_reviews: 0,

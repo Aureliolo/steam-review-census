@@ -388,6 +388,12 @@ fn claims_behind(
 ) -> Result<ClaimsBehind, String> {
     let dir = library_dir(&app);
     let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
+    // The depth the readings were made at, so a claim index names the same sentence here
+    // that it named when the model read it.
+    let depth = std::fs::read(snapshot.join("reading.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<census_core::read::ReadReport>(&bytes).ok())
+        .map_or(census_core::read::Depth::Deep, |found| found.depth);
 
     let mut total: u64 = 0;
     let mut wanted: Vec<(String, u16, String, f32)> = Vec::new();
@@ -413,7 +419,8 @@ fn claims_behind(
         .into_iter()
         .filter_map(|(id, index, polarity, confidence)| {
             let review = fetched.get(&id)?;
-            let claim = census_core::claims::split(&review.text)
+            let claim = depth
+                .claims_of(&review.text)
                 .into_iter()
                 .nth(index as usize)?
                 .into_owned();

@@ -1539,6 +1539,17 @@ fn trust(out: &mut String, app: &AppReport) {
 
     fact(out, "Read by", &built_from(app));
     fact(out, "Taxonomy", &app.reading.spine_version);
+    // Shallow numbers are not deep numbers with less work in them. A review about six things
+    // read as one point is about none of them clearly, and a page that did not say which way
+    // it was read would invite comparing the two.
+    if app.reading.depth != crate::read::Depth::Deep {
+        fact(
+            out,
+            "Depth",
+            "shallow: each review read as one point, so anyone who wrote more than a sentence \
+             is understated. Not comparable with a deep reading.",
+        );
+    }
     fact(
         out,
         "Claims read",
@@ -1922,6 +1933,7 @@ mod tests {
                     reviews: 1_000,
                     corpus_reviews: 1_000,
                     language: None,
+                    depth: crate::read::Depth::Deep,
                     claims: 3_000,
                     unclassified_claims: 300,
                     silent_reviews: 3,
