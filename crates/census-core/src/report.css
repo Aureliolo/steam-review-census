@@ -449,6 +449,14 @@ dl.induced summary {
   max-width: 52rem;
 }
 
+/* Prose assembled from the counts, so it reads as prose: no box, a measure a paragraph
+   wants, and room under it before the chart. */
+.in-short {
+  max-width: 52rem;
+  margin: 0.75rem 0 1.25rem;
+  line-height: 1.55;
+}
+
 .note {
   color: var(--ink-soft);
   font-size: 0.9rem;
@@ -937,6 +945,37 @@ h4.side .count {
   font-weight: 400;
   font-size: 0.82rem;
   margin-left: 0.4rem;
+}
+
+/* The words one side uses and the other does not, as a row of small chips under the heading.
+   Each carries its reviewer count, so a term is a number a reader can weigh, not a word cloud. */
+.stands-out {
+  margin: 0 0 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+
+.stands-out .lead {
+  color: var(--ink-faint);
+  margin-right: 0.2rem;
+}
+
+.stands-out .term {
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  white-space: nowrap;
+}
+
+.stands-out .term .n {
+  color: var(--ink-faint);
+  margin-left: 0.35rem;
+  font-variant-numeric: tabular-nums;
 }
 
 li.review {

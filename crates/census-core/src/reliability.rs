@@ -130,8 +130,7 @@ pub fn compare(first: &std::path::Path, second: &std::path::Path) -> Result<Reli
 /// one with eighty-seven.
 #[must_use]
 pub fn over(paired: &Paired) -> Reliability {
-    let pairs: Vec<(&ClaimLabel, &ClaimLabel)> =
-        paired.both.iter().map(|(a, b)| (a, b)).collect();
+    let pairs: Vec<(&ClaimLabel, &ClaimLabel)> = paired.both.iter().map(|(a, b)| (a, b)).collect();
     let fields = [
         (
             "subject",
@@ -379,7 +378,10 @@ mod tests {
             (label("1", 0, "bugs", false), label("1", 0, "bugs", false)),
             (label("1", 1, "story", false), label("1", 1, "story", false)),
             (label("1", 2, "genre", true), label("1", 2, "genre", false)),
-            (label("1", 3, "verdict", false), label("1", 3, "genre", true)),
+            (
+                label("1", 3, "verdict", false),
+                label("1", 3, "genre", true),
+            ),
         ];
         let found = over(&Paired {
             both: rows,

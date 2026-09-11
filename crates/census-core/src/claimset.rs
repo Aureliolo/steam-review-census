@@ -379,7 +379,9 @@ pub fn ingest(dir: &Path, from: &Path) -> Result<(Vec<ClaimLabel>, ClaimIngest)>
         for label in returned {
             let key = (label.review_id.clone(), label.index);
             let Some((review, claim)) = wanted.get(&key) else {
-                report.unknown.push(format!("{}#{}", label.review_id, label.index));
+                report
+                    .unknown
+                    .push(format!("{}#{}", label.review_id, label.index));
                 continue;
             };
             if !crate::taxonomy::CORE_SPINE
@@ -535,8 +537,7 @@ mod tests {
         assert_eq!(report.claims, 3);
         assert_eq!(report.batches, 2);
 
-        let first =
-            std::fs::read_to_string(dir.join("batches").join("batch-000.json")).unwrap();
+        let first = std::fs::read_to_string(dir.join("batches").join("batch-000.json")).unwrap();
         assert!(first.contains("The combat is superb."));
         assert!(
             first.contains("It runs badly."),

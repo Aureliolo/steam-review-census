@@ -521,7 +521,11 @@ pub fn induction_brief() -> String {
         CORE_SPINE.len()
     );
     for category in CORE_SPINE {
-        let _ = writeln!(brief, "  {} ({}): {}", category.label, category.id, category.description);
+        let _ = writeln!(
+            brief,
+            "  {} ({}): {}",
+            category.label, category.id, category.description
+        );
     }
     brief.push_str(
         "\nReturn one JSON object and nothing else:\n\n\
@@ -763,7 +767,10 @@ mod tests {
             );
         }
         for word in POLARITY {
-            assert!(brief.contains(word), "polarity {word} is asked for but not named");
+            assert!(
+                brief.contains(word),
+                "polarity {word} is asked for but not named"
+            );
         }
         assert!(!brief.contains(POLARITY_SLOT));
         assert!(

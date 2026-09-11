@@ -477,6 +477,13 @@ button.quiet-button:hover {
   color: var(--ink-soft);
 }
 
+/* Prose built from the counts, in the ink the counts use: it is a finding, not a caption. */
+.in-short {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  line-height: 1.55;
+}
+
 /* The one thing a reader has to know before reading a rate. Set apart from the lede and
    above the table because a footnote is where things go to be skipped, and a model that
    declined most of the corpus is not a footnote. */
@@ -625,6 +632,72 @@ button.quiet-button:hover {
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* The words each side uses and the other does not, as rows of chips a reader can press. A
+   chip is a count with a word on it, so it sits with the numbers rather than decorating them. */
+.stands-out {
+  max-width: 46rem;
+  margin: 0 0 1.25rem;
+}
+
+.stands-out .side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.stands-out .lead {
+  min-width: 7rem;
+  font-weight: 550;
+}
+
+.stands-out .praise .lead {
+  color: var(--under);
+}
+
+.stands-out .complaint .lead {
+  color: var(--over);
+}
+
+.stands-out .term {
+  padding: 0.12rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stands-out .term:hover {
+  border-color: var(--accent);
+}
+
+.stands-out .term.chosen {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stands-out .term .n {
+  margin-left: 0.35rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.stands-out .term.chosen .n {
+  color: inherit;
+}
+
+#stands-out-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
 }
 
 .quotes {

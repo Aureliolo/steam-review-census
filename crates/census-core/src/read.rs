@@ -251,6 +251,9 @@ pub struct ReadReport {
     pub threshold: f32,
     pub device: String,
     pub subjects: Vec<SubjectCount>,
+    /// The terms that separate each subject's praise from its complaints, in taxonomy order.
+    #[serde(default)]
+    pub said: Vec<crate::said::SaidAbout>,
     pub languages: Vec<(String, u64)>,
     /// What was said month by month, oldest first.
     pub months: Vec<Month>,
@@ -287,7 +290,6 @@ impl ReadReport {
 pub const UNUSUALLY_DECLINED: f64 = 1.2;
 
 impl ReadReport {
-
     /// Writes the counts beside the readings they were computed from.
     ///
     /// # Errors
@@ -496,6 +498,7 @@ fn count_reviews(
     let mut top: crate::bounded::Smallest<std::cmp::Reverse<u64>, Vec<usize>> =
         crate::bounded::Smallest::new(options.top_helpful);
     let mut rows = ReadingRows::default();
+    let mut said = crate::said::Said::new(CORE_SPINE.len());
 
     let mut reviews = 0_u64;
     let mut corpus_reviews = 0_u64;
@@ -563,9 +566,11 @@ fn count_reviews(
                 && let Some(subject) = reading.subject
             {
                 tallies[subject].claims += 1;
+                said.note(subject, reading.polarity, &claim);
             }
             rows.push(&row.recommendationid, index, reading);
         }
+        said.next_review();
 
         // Helpfulness ranks descending, and the bounded keeper takes the smallest key.
         top.offer(
@@ -634,6 +639,7 @@ fn count_reviews(
                 positive_mentions: tally.positive_mentions,
             })
             .collect(),
+        said: said.finish(&CORE_SPINE.iter().map(|c| c.id).collect::<Vec<_>>()),
         languages: ranked,
         months,
         elapsed: Duration::default(),
@@ -686,7 +692,9 @@ pub fn for_each_reading(
         let confidences = column("confidence")?
             .as_any()
             .downcast_ref::<Float32Array>()
-            .ok_or(crate::Error::MalformedPayload { field: "confidence" })?;
+            .ok_or(crate::Error::MalformedPayload {
+                field: "confidence",
+            })?;
         let polarities = column("polarity")?
             .as_any()
             .downcast_ref::<StringArray>()
@@ -731,7 +739,8 @@ impl ReadingRows {
         self.confidences
             .push(reading.map_or(0.0, |reading| reading.confidence));
         self.polarities.push(
-            reading.map_or(Polarity::Neutral, |reading| reading.polarity)
+            reading
+                .map_or(Polarity::Neutral, |reading| reading.polarity)
                 .as_str(),
         );
     }
@@ -819,12 +828,18 @@ mod tests {
             threshold: 0.5,
             device: String::new(),
             subjects: Vec::new(),
+            said: Vec::new(),
             languages: Vec::new(),
             months: Vec::new(),
             elapsed: Duration::ZERO,
         };
-        let ratio = found.declined_against_usual().expect("a usual figure is carried");
-        assert!(ratio >= UNUSUALLY_DECLINED, "90% against a usual 73% is {ratio}");
+        let ratio = found
+            .declined_against_usual()
+            .expect("a usual figure is carried");
+        assert!(
+            ratio >= UNUSUALLY_DECLINED,
+            "90% against a usual 73% is {ratio}"
+        );
 
         found.unclassified_claims = 700;
         assert!(found.declined_against_usual().unwrap() < UNUSUALLY_DECLINED);

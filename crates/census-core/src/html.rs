@@ -188,11 +188,7 @@ fn overview(out: &mut String, report: &Report) {
     if report.apps.len() < 2 {
         return;
     }
-    let total: u64 = report
-        .apps
-        .iter()
-        .map(|app| app.reading.reviews)
-        .sum();
+    let total: u64 = report.apps.iter().map(|app| app.reading.reviews).sum();
 
     out.push_str("<section class=\"overview\">\n<div class=\"wrap\">\n");
     out.push_str("<h2>Across these games</h2>\n");
@@ -508,6 +504,7 @@ fn game(out: &mut String, app: &AppReport, several: bool) {
     let _ = writeln!(out, "<h2>{}</h2>", escape(&app.crawl.title()));
     facts(out, app);
     headline(out, app);
+    in_short(out, app);
     over_time(out, app);
     categories(out, app);
     induced(out, app);
@@ -535,11 +532,7 @@ fn facts(out: &mut String, app: &AppReport) {
     // Two different numbers, and a reader who sees only the smaller one beside a coverage
     // figure taken over the larger one is left to work out why they disagree. Rates are over
     // what was counted; coverage is over what was captured, blank reviews included.
-    fact(
-        out,
-        "Reviews counted",
-        &thousands(app.reading.reviews),
-    );
+    fact(out, "Reviews counted", &thousands(app.reading.reviews));
     fact(
         out,
         "Captured",
@@ -605,6 +598,17 @@ fn headline(out: &mut String, app: &AppReport) {
         thousands(app.reading.reviews),
     );
     out.push_str("\n</p>\n");
+}
+
+/// The game in a paragraph, for the reader who will not read the table. Every clause is a
+/// count from the reading with words around it, and it is drawn from the same figures the
+/// table shows, so the two cannot disagree.
+fn in_short(out: &mut String, app: &AppReport) {
+    let text = crate::picture::in_short(&app.reading);
+    if text.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "<p class=\"in-short\">{}</p>", escape(&text));
 }
 
 /// The month the line falls furthest, as a sentence rather than as a shape to point at.
@@ -930,7 +934,10 @@ fn category_row(out: &mut String, app: &AppReport, category: &SubjectCount, wide
             // The share of all claims the model filed here, declined ones included, because
             // the labels the correction rests on were measured over declined claims too.
             let observed = (app.reading.claims > 0).then(|| {
-                #[expect(clippy::cast_precision_loss, reason = "claim counts are far below 2^53")]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "claim counts are far below 2^53"
+                )]
                 let share = category.claims as f64 / app.reading.claims as f64;
                 share
             });
@@ -1267,11 +1274,7 @@ fn induced(out: &mut String, app: &AppReport) {
     out.push_str("<dl class=\"induced\">\n");
     for found in &app.induced {
         let subject = &found.subject;
-        let _ = write!(
-            out,
-            "<div class=\"found\"><dt>{}",
-            escape(&subject.label)
-        );
+        let _ = write!(out, "<div class=\"found\"><dt>{}", escape(&subject.label));
         if let Some(parent) = subject
             .refines
             .as_deref()
@@ -1283,11 +1286,7 @@ fn induced(out: &mut String, app: &AppReport) {
                 escape(parent.label)
             );
         }
-        let _ = writeln!(
-            out,
-            "</dt>\n<dd><p>{}</p>",
-            escape(&subject.description)
-        );
+        let _ = writeln!(out, "</dt>\n<dd><p>{}</p>", escape(&subject.description));
         if !found.reviews.is_empty() {
             let _ = writeln!(
                 out,
@@ -1354,21 +1353,37 @@ fn reviews(out: &mut String, app: &AppReport, examples: &[Example]) {
 
 /// The evidence behind a subject, grouped by what it says.
 ///
-/// This is what stands in for a written summary until there is one. A reader opening a row
-/// wants to know what people praise and what they complain about, and eight claims in a
-/// single list make them work that out for themselves. Sorted into praise and complaint, with
-/// the counts of each beside the heading, the list answers the question rather than
-/// containing the answer.
+/// A reader opening a row wants to know what people praise and what they complain about, and
+/// eight claims in a single list make them work that out for themselves. Sorted into praise
+/// and complaint, with the counts of each beside the heading, the list answers the question
+/// rather than containing the answer. Above each list, the words that side uses and the other
+/// does not: nobody's paraphrase, just what was said more on this side than on that one,
+/// counted by reviewers.
 fn what_they_said(out: &mut String, app: &AppReport, subject: &SubjectCount, examples: &[Example]) {
     if examples.is_empty() {
         return;
     }
-    let sides: [(&str, &str, u64); 3] = [
-        ("praise", "What they praise", subject.praised + subject.mixed),
-        ("complaint", "What they complain about", subject.criticised + subject.mixed),
-        ("neutral", "Said without judging", 0),
+    let said = app
+        .reading
+        .said
+        .iter()
+        .find(|said| said.subject == subject.id);
+    let sides: [(&str, &str, u64, Option<&[crate::said::Term]>); 3] = [
+        (
+            "praise",
+            "What they praise",
+            subject.praised + subject.mixed,
+            said.map(|said| said.praised.as_slice()),
+        ),
+        (
+            "complaint",
+            "What they complain about",
+            subject.criticised + subject.mixed,
+            said.map(|said| said.criticised.as_slice()),
+        ),
+        ("neutral", "Said without judging", 0, None),
     ];
-    for (polarity, heading, reviews) in sides {
+    for (polarity, heading, reviews, terms) in sides {
         let shown: Vec<&Example> = examples
             .iter()
             .filter(|example| example.polarity == polarity)
@@ -1384,12 +1399,35 @@ fn what_they_said(out: &mut String, app: &AppReport, subject: &SubjectCount, exa
                 thousands(reviews)
             );
         }
-        out.push_str("</h4>\n<ol class=\"reviews\">\n");
+        out.push_str("</h4>\n");
+        if let Some(terms) = terms {
+            stands_out(out, terms);
+        }
+        out.push_str("<ol class=\"reviews\">\n");
         for example in shown {
             review(out, app, example);
         }
         out.push_str("</ol>\n");
     }
+}
+
+/// The terms one side of a subject uses far more than the other, with how many reviewers
+/// used each. Nothing is written when nothing clears the bar, which on a thin side is the
+/// usual and correct outcome.
+fn stands_out(out: &mut String, terms: &[crate::said::Term]) {
+    if terms.is_empty() {
+        return;
+    }
+    out.push_str("<p class=\"stands-out\"><span class=\"lead\">Words that stand out</span>");
+    for term in terms {
+        let _ = write!(
+            out,
+            " <span class=\"term\">{}<span class=\"n\" title=\"reviews using it\">{}</span></span>",
+            escape(&term.text),
+            thousands(term.reviews)
+        );
+    }
+    out.push_str("</p>\n");
 }
 
 fn review(out: &mut String, app: &AppReport, example: &Example) {
@@ -1585,11 +1623,7 @@ fn languages(out: &mut String, app: &AppReport) {
         .skip(LANGUAGES_SHOWN)
         .map(|(_, count)| count)
         .sum();
-    let rest = app
-        .reading
-        .languages
-        .len()
-        .saturating_sub(LANGUAGES_SHOWN);
+    let rest = app.reading.languages.len().saturating_sub(LANGUAGES_SHOWN);
     if rest > 0 {
         let _ = writeln!(
             out,
@@ -1940,14 +1974,14 @@ fn nothing(reason: &str) -> String {
     )
 }
 
-fn percent(rate: f64) -> String {
+pub(crate) fn percent(rate: f64) -> String {
     if rate > 0.0 && rate < 0.001 {
         return "<0.1%".to_owned();
     }
     format!("{:.1}%", rate * 100.0)
 }
 
-fn thousands(value: u64) -> String {
+pub(crate) fn thousands(value: u64) -> String {
     let digits = value.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (index, digit) in digits.chars().enumerate() {
@@ -1974,19 +2008,18 @@ mod tests {
     use super::*;
 
     fn sample_report(text: &str) -> Report {
-        let category =
-            |id: &str, label: &str, mentions: u64, top: u64| crate::read::SubjectCount {
-                id: id.to_owned(),
-                label: label.to_owned(),
-                primary_reviews: mentions / 2,
-                mention_reviews: mentions,
-                claims: mentions * 2,
-                praised: mentions / 3,
-                criticised: mentions / 3,
-                mixed: mentions / 6,
-                top_mention_reviews: top,
-                positive_mentions: mentions / 3,
-            };
+        let category = |id: &str, label: &str, mentions: u64, top: u64| crate::read::SubjectCount {
+            id: id.to_owned(),
+            label: label.to_owned(),
+            primary_reviews: mentions / 2,
+            mention_reviews: mentions,
+            claims: mentions * 2,
+            praised: mentions / 3,
+            criticised: mentions / 3,
+            mixed: mentions / 6,
+            top_mention_reviews: top,
+            positive_mentions: mentions / 3,
+        };
         let example = Example {
             review: crate::capture::CapturedReview {
                 id: "42".to_owned(),
@@ -2042,6 +2075,7 @@ mod tests {
                         category("bugs", "Bugs and crashes", 400, 30),
                         category("performance", "Performance", 100, 2),
                     ],
+                    said: vec![said_about_bugs()],
                     languages: vec![("english".to_owned(), 600), ("schinese".to_owned(), 400)],
                     months: vec![
                         crate::read::Month {
@@ -2064,6 +2098,21 @@ mod tests {
                 agreement: crate::report::Measurement::Unlabelled,
                 induced: Vec::new(),
             }],
+        }
+    }
+
+    /// What stands out on each side of the bugs row: one praise term, two complaint terms.
+    fn said_about_bugs() -> crate::said::SaidAbout {
+        let term = |text: &str, reviews| crate::said::Term {
+            text: text.to_owned(),
+            reviews,
+        };
+        crate::said::SaidAbout {
+            subject: "bugs".to_owned(),
+            praising: 200,
+            complaining: 100,
+            praised: vec![term("patched quickly", 41)],
+            criticised: vec![term("save corruption", 37), term("crashes", 29)],
         }
     }
 
@@ -2419,7 +2468,8 @@ mod tests {
             "a review the model never read must not carry a confidence: {section}"
         );
         assert!(
-            !section.contains("class=\"chip neutral\"") && !section.contains("class=\"chip praise\""),
+            !section.contains("class=\"chip neutral\"")
+                && !section.contains("class=\"chip praise\""),
             "nor a polarity: {section}"
         );
 
@@ -2784,7 +2834,8 @@ mod tests {
     #[test]
     fn the_cross_game_section_compares_the_corpora_and_not_only_the_subjects() {
         let mut report = two_games();
-        report.apps[0].agreement = crate::report::Measurement::Measured(Box::new(measured(100, 62)));
+        report.apps[0].agreement =
+            crate::report::Measurement::Measured(Box::new(measured(100, 62)));
 
         let table = render(&report)
             .split_once("<table class=\"corpora\">")
@@ -2885,6 +2936,26 @@ mod tests {
             page.contains("On Steam"),
             "the link back to the source is missing"
         );
+    }
+
+    #[test]
+    fn the_words_a_side_uses_are_shown_with_the_reviewers_behind_them() {
+        let page = render(&sample_report("ordinary text"));
+
+        // The complaint side has evidence, so its terms are on the page with their counts.
+        assert!(
+            page.contains(
+                "<span class=\"term\">save corruption<span class=\"n\" title=\"reviews using \
+                 it\">37</span></span>"
+            ),
+            "the term is missing its count"
+        );
+        // The praise side has no quoted evidence in this report, and a list of words under a
+        // heading that is not there would be a finding with nothing to open. The paragraph at
+        // the top still quotes it, because the paragraph is about the counts, not the quotes.
+        assert!(!page.contains("<span class=\"term\">patched quickly"));
+        assert!(page.contains("the praise says \u{201c}patched quickly\u{201d}"));
+        assert!(page.contains("Bugs and crashes divides opinion"));
     }
 
     /// The declarations inside a block, given the text that opens it.

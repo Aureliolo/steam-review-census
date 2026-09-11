@@ -195,12 +195,18 @@ mod tests {
     }
 
     fn handout() -> Vec<String> {
-        ["1", "2", "3", "4"].iter().map(|s| (*s).to_owned()).collect()
+        ["1", "2", "3", "4"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect()
     }
 
     #[test]
     fn a_subject_with_enough_real_evidence_is_kept() {
-        let (kept, refused) = check(&returned(vec![subject("mud", &["1", "2", "3"])]), &handout());
+        let (kept, refused) = check(
+            &returned(vec![subject("mud", &["1", "2", "3"])]),
+            &handout(),
+        );
         assert_eq!(kept.len(), 1);
         assert!(refused.is_empty());
     }
@@ -209,23 +215,34 @@ mod tests {
     fn evidence_the_handout_never_held_refuses_the_subject() {
         // A model that cites review 99 in a handout of four is making it up, and a subject
         // that rests on made-up reviews is not kept with the real ones subtracted.
-        let (kept, refused) =
-            check(&returned(vec![subject("mud", &["1", "2", "3", "99"])]), &handout());
+        let (kept, refused) = check(
+            &returned(vec![subject("mud", &["1", "2", "3", "99"])]),
+            &handout(),
+        );
         assert!(kept.is_empty());
-        assert!(refused[0].reason.contains("not in the handout"), "{}", refused[0].reason);
+        assert!(
+            refused[0].reason.contains("not in the handout"),
+            "{}",
+            refused[0].reason
+        );
     }
 
     #[test]
     fn two_reviews_are_a_coincidence_not_a_subject() {
-        let (kept, refused) = check(&returned(vec![subject("mud", &["1", "2", "2"])]), &handout());
+        let (kept, refused) = check(
+            &returned(vec![subject("mud", &["1", "2", "2"])]),
+            &handout(),
+        );
         assert!(kept.is_empty(), "a duplicated id is one review");
         assert!(refused[0].reason.contains("not enough"));
     }
 
     #[test]
     fn a_fixed_subject_cannot_be_induced_again() {
-        let (kept, refused) =
-            check(&returned(vec![subject("gameplay", &["1", "2", "3"])]), &handout());
+        let (kept, refused) = check(
+            &returned(vec![subject("gameplay", &["1", "2", "3"])]),
+            &handout(),
+        );
         assert!(kept.is_empty());
         assert!(refused[0].reason.contains("already a fixed subject"));
     }
@@ -244,13 +261,21 @@ mod tests {
 
     #[test]
     fn ids_are_made_safe_for_a_table_and_a_url() {
-        let (kept, refused) =
-            check(&returned(vec![subject("Mud Physics", &["1", "2", "3"])]), &handout());
+        let (kept, refused) = check(
+            &returned(vec![subject("Mud Physics", &["1", "2", "3"])]),
+            &handout(),
+        );
         assert!(kept.is_empty(), "a space is not allowed");
         assert_eq!(refused.len(), 1);
 
-        let (kept, _) = check(&returned(vec![subject("Mud-Physics", &["1", "2", "3"])]), &handout());
-        assert_eq!(kept[0].id, "mud-physics", "case is folded rather than refused");
+        let (kept, _) = check(
+            &returned(vec![subject("Mud-Physics", &["1", "2", "3"])]),
+            &handout(),
+        );
+        assert_eq!(
+            kept[0].id, "mud-physics",
+            "case is folded rather than refused"
+        );
 
         // Folding case means two ids that differ only in case are the same id.
         let (kept, refused) = check(

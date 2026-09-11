@@ -334,7 +334,10 @@ async fn download(
     path: &Path,
     on_progress: &mut impl FnMut(DownloadProgress),
 ) -> Result<()> {
-    let url = format!("https://huggingface.co/{repository}/resolve/main/{}", asset.remote);
+    let url = format!(
+        "https://huggingface.co/{repository}/resolve/main/{}",
+        asset.remote
+    );
     let mut response = http.get(&url).send().await?.error_for_status()?;
     let total = response.content_length();
 

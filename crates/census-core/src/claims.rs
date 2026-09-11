@@ -54,15 +54,7 @@ const DENSE_CHARACTER: usize = 3;
 /// A semicolon is deliberately absent. "It's not just a game; it's an experience" is one
 /// thought with a hinge in it, and cutting there leaves two halves that each say nothing.
 const TERMINATORS: [char; 9] = [
-    '.',
-    '!',
-    '?',
-    '\u{2026}',
-    '\u{3002}',
-    '\u{FF01}',
-    '\u{FF1F}',
-    '\u{06D4}',
-    '\u{0964}',
+    '.', '!', '?', '\u{2026}', '\u{3002}', '\u{FF01}', '\u{FF1F}', '\u{06D4}', '\u{0964}',
 ];
 
 /// The points a review makes, in the order it makes them.
@@ -71,7 +63,10 @@ const TERMINATORS: [char; 9] = [
 /// as one claim, which is the honest reading of a reviewer who wrote one long sentence.
 #[must_use]
 pub fn split(text: &str) -> Vec<std::borrow::Cow<'_, str>> {
-    claims_of(text).into_iter().map(|(_, claim)| claim).collect()
+    claims_of(text)
+        .into_iter()
+        .map(|(_, claim)| claim)
+        .collect()
 }
 
 /// The same split, as byte ranges into the review.
@@ -206,9 +201,10 @@ fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
     const LONGEST_TAG: usize = 200;
 
     let rest = &text[at + 1..];
-    let end = rest.char_indices().take(LONGEST_TAG).find_map(|(offset, ch)| {
-        (ch == ']').then_some(offset)
-    })?;
+    let end = rest
+        .char_indices()
+        .take(LONGEST_TAG)
+        .find_map(|(offset, ch)| (ch == ']').then_some(offset))?;
     let inside = &rest[..end];
     if inside.is_empty() {
         return None;
@@ -290,7 +286,9 @@ fn quote_state(ch: char, quoted: bool) -> Option<bool> {
 /// with a hyphen in front of it. Leaving the hyphen on gives the model a token that appears
 /// in every category and means nothing in any of them.
 fn tidied(text: &str, from: usize, to: usize) -> Option<std::ops::Range<usize>> {
-    const MARKERS: [char; 8] = ['-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>'];
+    const MARKERS: [char; 8] = [
+        '-', '+', '*', '\u{2022}', '\u{00B7}', '\u{2013}', '\u{2014}', '>',
+    ];
 
     let mut piece = &text[from..to];
     let mut start = from;
@@ -392,13 +390,19 @@ fn continues_a_word(text: &str, from: usize) -> bool {
 fn weight(piece: &str) -> usize {
     piece
         .chars()
-        .map(|ch| if writes_without_spaces(ch) { DENSE_CHARACTER } else { 1 })
+        .map(|ch| {
+            if writes_without_spaces(ch) {
+                DENSE_CHARACTER
+            } else {
+                1
+            }
+        })
         .sum()
 }
 
 /// Whether a character belongs to a script that carries about a word per character and puts
 /// no spaces between them.
-fn writes_without_spaces(ch: char) -> bool {
+pub(crate) fn writes_without_spaces(ch: char) -> bool {
     matches!(ch as u32,
         0x3040..=0x30FF   // Hiragana and Katakana
         | 0x3400..=0x4DBF // CJK unified ideographs, extension A
@@ -586,7 +590,8 @@ impl ClaimBatch {
         self.ids.push(id.to_owned());
         self.appids.push(app_id);
         self.indexes.push(u16::try_from(index).unwrap_or(u16::MAX));
-        self.starts.push(u32::try_from(at.start).unwrap_or(u32::MAX));
+        self.starts
+            .push(u32::try_from(at.start).unwrap_or(u32::MAX));
         self.ends.push(u32::try_from(at.end).unwrap_or(u32::MAX));
         self.languages.push(language.to_owned());
         self.digests.push(crate::embed::sha256_hex(claim));
@@ -637,7 +642,9 @@ mod tests {
 
     #[test]
     fn a_review_about_three_things_is_three_claims() {
-        let claims = split("Looks incredible. Runs like a slideshow on my machine. The story is the best in the series.");
+        let claims = split(
+            "Looks incredible. Runs like a slideshow on my machine. The story is the best in the series.",
+        );
         assert_eq!(claims.len(), 3);
         assert_eq!(claims[0], "Looks incredible.");
         assert!(claims[2].starts_with("The story"));
@@ -645,14 +652,17 @@ mod tests {
 
     #[test]
     fn a_score_is_not_a_sentence_boundary() {
-        assert_eq!(split("Solid 9.5 out of 10 for the soundtrack alone."), vec![
-            "Solid 9.5 out of 10 for the soundtrack alone."
-        ]);
+        assert_eq!(
+            split("Solid 9.5 out of 10 for the soundtrack alone."),
+            vec!["Solid 9.5 out of 10 for the soundtrack alone."]
+        );
     }
 
     #[test]
     fn full_width_stops_split_where_there_are_no_spaces() {
-        let claims = split("\u{753B}\u{9762}\u{304C}\u{7DBA}\u{9E97}\u{3067}\u{3059}\u{3002}\u{3067}\u{3082}\u{5024}\u{6BB5}\u{304C}\u{9AD8}\u{3059}\u{304E}\u{307E}\u{3059}\u{3002}");
+        let claims = split(
+            "\u{753B}\u{9762}\u{304C}\u{7DBA}\u{9E97}\u{3067}\u{3059}\u{3002}\u{3067}\u{3082}\u{5024}\u{6BB5}\u{304C}\u{9AD8}\u{3059}\u{304E}\u{307E}\u{3059}\u{3002}",
+        );
         assert_eq!(claims.len(), 2);
     }
 
@@ -672,7 +682,8 @@ mod tests {
 
     #[test]
     fn one_long_sentence_is_one_claim() {
-        let claims = split("i played this for six hundred hours and i still have no idea what is going on");
+        let claims =
+            split("i played this for six hundred hours and i still have no idea what is going on");
         assert_eq!(claims.len(), 1);
     }
 
@@ -691,7 +702,9 @@ mod tests {
 
     #[test]
     fn an_abbreviation_does_not_end_a_point() {
-        let claims = split("Bring a friend, e.g. someone who likes being shouted at, and it is a great time.");
+        let claims = split(
+            "Bring a friend, e.g. someone who likes being shouted at, and it is a great time.",
+        );
         assert_eq!(claims.len(), 1);
     }
 
@@ -708,7 +721,11 @@ mod tests {
         let claims = split("- The tutorial explains nothing at all\n- The interface is a mess");
         assert_eq!(claims.len(), 2);
         assert!(claims[0].starts_with("The tutorial"), "got {:?}", claims[0]);
-        assert!(claims[1].starts_with("The interface"), "got {:?}", claims[1]);
+        assert!(
+            claims[1].starts_with("The interface"),
+            "got {:?}",
+            claims[1]
+        );
     }
 
     #[test]
@@ -726,7 +743,9 @@ mod tests {
 
     #[test]
     fn a_sentence_inside_a_quotation_is_not_the_reviewers_own() {
-        let claims = split("The devs keep saying \"we hear you. we are working on it.\" and nothing changes.");
+        let claims = split(
+            "The devs keep saying \"we hear you. we are working on it.\" and nothing changes.",
+        );
         assert_eq!(claims.len(), 1, "got {claims:?}");
     }
 
@@ -734,7 +753,9 @@ mod tests {
     fn a_row_of_dashes_is_a_divider_rather_than_a_claim() {
         let claims = split("Great game.\n-----\nWould buy again at that price honestly.");
         assert!(
-            claims.iter().all(|claim| !claim.chars().all(|ch| ch == '-')),
+            claims
+                .iter()
+                .all(|claim| !claim.chars().all(|ch| ch == '-')),
             "got {claims:?}"
         );
     }
@@ -743,19 +764,25 @@ mod tests {
     fn steam_markup_is_not_something_anybody_said() {
         let claims = split("[b]Great[/b] combat and [i]awful[/i] menus throughout the game.");
         assert_eq!(claims.len(), 1);
-        assert_eq!(claims[0], "Great combat and awful menus throughout the game.");
+        assert_eq!(
+            claims[0],
+            "Great combat and awful menus throughout the game."
+        );
     }
 
     #[test]
     fn a_heading_tag_starts_a_new_point() {
-        let claims = split("[h3]Combat[/h3]The parrying is the best in years.[h3]Sound[/h3]Muffled and thin.");
+        let claims = split(
+            "[h3]Combat[/h3]The parrying is the best in years.[h3]Sound[/h3]Muffled and thin.",
+        );
         assert!(claims.len() >= 2, "got {claims:?}");
         assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
     }
 
     #[test]
     fn a_list_of_points_is_a_list_of_claims() {
-        let claims = split("[list][*]The interface is unusable[*]The tutorial explains nothing[/list]");
+        let claims =
+            split("[list][*]The interface is unusable[*]The tutorial explains nothing[/list]");
         assert_eq!(claims.len(), 2, "got {claims:?}");
         assert!(claims[0].contains("interface"));
         assert!(claims[1].contains("tutorial"));
@@ -769,7 +796,8 @@ mod tests {
 
     #[test]
     fn a_web_address_is_not_two_thoughts() {
-        let claims = split("Compare the charts at https://example.com/a?b=1&c=2 before you buy it.");
+        let claims =
+            split("Compare the charts at https://example.com/a?b=1&c=2 before you buy it.");
         assert_eq!(claims.len(), 1, "got {claims:?}");
     }
 
@@ -785,14 +813,24 @@ mod tests {
     fn a_numbered_list_is_numbered_points_rather_than_numbers_and_points() {
         let claims = split("1. The interface is unusable.\n2. The tutorial explains nothing.");
         assert_eq!(claims.len(), 2, "got {claims:?}");
-        assert!(claims[0].starts_with("The interface"), "got {:?}", claims[0]);
+        assert!(
+            claims[0].starts_with("The interface"),
+            "got {:?}",
+            claims[0]
+        );
         assert!(claims[1].starts_with("The tutorial"), "got {:?}", claims[1]);
     }
 
     #[test]
     fn an_abbreviation_in_any_language_does_not_end_a_point() {
-        assert_eq!(split("Es dauert ca. 40 Stunden bis zum Ende der Kampagne.").len(), 1);
-        assert_eq!(split("Roughly 40 hours, vs. 20 for the first one, which is generous.").len(), 1);
+        assert_eq!(
+            split("Es dauert ca. 40 Stunden bis zum Ende der Kampagne.").len(),
+            1
+        );
+        assert_eq!(
+            split("Roughly 40 hours, vs. 20 for the first one, which is generous.").len(),
+            1
+        );
     }
 
     #[test]
@@ -809,7 +847,8 @@ mod tests {
 
     #[test]
     fn a_multi_byte_space_before_a_boundary_does_not_panic() {
-        let claims = split("The soundtrack is superb.\u{a0}The mixing is not. It sits far too low.");
+        let claims =
+            split("The soundtrack is superb.\u{a0}The mixing is not. It sits far too low.");
         assert!(claims.len() >= 2, "got {claims:?}");
     }
 

@@ -142,6 +142,24 @@ review has to say, and any tool that forces it to a single sign is throwing that
 Claim-level polarity is available underneath, for reading rather than for headlines, and is
 labelled as what it is: a count of opinions, which the most talkative reviewers dominate.
 
+### What they said about it
+
+A fifth of reviewers complaining about performance is a count. Whether they mean stutter,
+crashes or load times is the thing a reader opened the row for, and no local model is asked to
+paraphrase anybody to say it. Instead, each side of a subject shows the **words that stand
+out**: the terms its complaints use far more than its praise does, and the reverse, each with
+the number of reviewers who used it. "stutter 84, crashes 61, memory leak 23" under
+performance is what was said, counted, and every term opens onto the exact claims it was
+counted from.
+
+The comparison is complaint against praise within one subject rather than against the corpus,
+because against the corpus a subject's vocabulary is mostly its own name: "fps" stands out in
+every performance claim and tells nobody anything. The ranking is a log-odds z-score with a
+half-count prior, so a word three reviewers used and nobody on the other side did does not
+outrank one three hundred used against ten, and a side with a handful of reviews shows nothing
+rather than promoting whatever those few happened to write. Counts are by reviewer, once per
+review however often it repeats itself, for the same reason the headline is a mention rate.
+
 ### Ratings that disagree with the text
 
 A thumbs-down is not always a complaint. "0/10, haven't slept in three days" is praise wearing

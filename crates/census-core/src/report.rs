@@ -263,8 +263,7 @@ impl AppReport {
         reason = "the top of the pile is a few dozen reviews"
     )]
     pub fn top_rate(&self, part: u64) -> Option<f64> {
-        (self.reading.top_helpful > 0)
-            .then(|| part as f64 / self.reading.top_helpful as f64)
+        (self.reading.top_helpful > 0).then(|| part as f64 / self.reading.top_helpful as f64)
     }
 }
 
@@ -335,12 +334,7 @@ impl Report {
                     // game that was not asked.
                     pooled.reviews += app.reading.reviews;
                     pooled.top_reviews += app.reading.top_helpful;
-                    if let Some(count) = app
-                        .reading
-                        .subjects
-                        .iter()
-                        .find(|s| s.id == category.id)
-                    {
+                    if let Some(count) = app.reading.subjects.iter().find(|s| s.id == category.id) {
                         pooled.mentions += count.mention_reviews;
                         pooled.top_mentions += count.top_mention_reviews;
                     }
@@ -429,14 +423,17 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     // Which subjects each quoted review raises anywhere, so a claim can be shown next to the
     // rest of its author's point rather than as though it were all they said.
     let mut raised: HashMap<String, Vec<String>> = HashMap::new();
-    crate::read::for_each_reading(&snapshot.join("readings.parquet"), |id, _, subject, _, _| {
-        if let (Some(subject), true) = (subject, wanted.contains(id)) {
-            let all = raised.entry(id.to_owned()).or_default();
-            if !all.iter().any(|seen| seen == subject) {
-                all.push(subject.to_owned());
+    crate::read::for_each_reading(
+        &snapshot.join("readings.parquet"),
+        |id, _, subject, _, _| {
+            if let (Some(subject), true) = (subject, wanted.contains(id)) {
+                let all = raised.entry(id.to_owned()).or_default();
+                if !all.iter().any(|seen| seen == subject) {
+                    all.push(subject.to_owned());
+                }
             }
-        }
-    })?;
+        },
+    )?;
 
     let quote = |claim: &DrawnClaim| -> Option<Example> {
         let review = fetched.get(&claim.review_id)?;
@@ -592,7 +589,9 @@ fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String,
             else {
                 return;
             };
-            let Some(side) = crate::taxonomy::POLARITY.iter().find(|side| **side == polarity)
+            let Some(side) = crate::taxonomy::POLARITY
+                .iter()
+                .find(|side| **side == polarity)
             else {
                 return;
             };
@@ -747,6 +746,7 @@ mod tests {
                         positive_mentions: mentions / 2,
                     })
                     .collect(),
+                said: Vec::new(),
                 languages: Vec::new(),
                 months: Vec::new(),
                 elapsed: std::time::Duration::ZERO,

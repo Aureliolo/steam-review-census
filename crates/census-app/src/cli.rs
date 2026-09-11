@@ -490,9 +490,7 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             english,
             to,
         } => run_sample_claims(app_ids, out, *reviews, *batch_size, *seed, *english, to),
-        Command::IngestClaims { app_id, from, to } => {
-            run_ingest_claims(*app_id, from, to.clone())
-        }
+        Command::IngestClaims { app_id, from, to } => run_ingest_claims(*app_id, from, to.clone()),
         Command::MeasureClaims {
             app_ids,
             out,
@@ -544,8 +542,7 @@ fn run_ingest_induced(
         })?)?;
     let ids: Vec<String> = drawn.into_iter().map(|review| review.review_id).collect();
 
-    let returned: census_core::induced::InducedSet =
-        serde_json::from_slice(&std::fs::read(from)?)?;
+    let returned: census_core::induced::InducedSet = serde_json::from_slice(&std::fs::read(from)?)?;
     if returned.app_id != app_id {
         anyhow::bail!(
             "the returned list says app {} but was ingested as {app_id}",
@@ -557,7 +554,11 @@ fn run_ingest_induced(
     println!("app          {app_id}");
     println!("induced by   {}", returned.induced_by);
     println!("handout      {} reviews", ids.len());
-    println!("kept         {} of {} subjects", kept.len(), returned.subjects.len());
+    println!(
+        "kept         {} of {} subjects",
+        kept.len(),
+        returned.subjects.len()
+    );
     for subject in &kept {
         println!(
             "  {:<24} {:>3} reviews  {}",
@@ -702,7 +703,10 @@ async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
             model_dir.display()
         );
     }
-    eprintln!("fetching the claim reader from {}", census_core::reader::PUBLISHED.repository);
+    eprintln!(
+        "fetching the claim reader from {}",
+        census_core::reader::PUBLISHED.repository
+    );
     // One line every ten megabytes rather than one per chunk, which would be thousands.
     let mut shown = (String::new(), 0_u64);
     census_core::reader::ensure(model_dir, |progress| {
@@ -720,7 +724,11 @@ async fn fetch_reader(model_dir: &std::path::Path) -> Result<()> {
                 mb(progress.downloaded),
                 mb(total)
             ),
-            None => eprintln!("  {:<14} {:>6.0} MB", progress.file, mb(progress.downloaded)),
+            None => eprintln!(
+                "  {:<14} {:>6.0} MB",
+                progress.file,
+                mb(progress.downloaded)
+            ),
         }
     })
     .await?;
@@ -862,8 +870,7 @@ fn run_second_opinion(
     for app_id in wanted {
         let dir = reference.join(app_id.to_string());
         let drawn = census_core::claimset::draw_second(&dir, share, seed)?;
-        let report =
-            census_core::claimset::write_set(&dir.join("second"), &drawn, batch_size)?;
+        let report = census_core::claimset::write_set(&dir.join("second"), &drawn, batch_size)?;
         reviews += report.reviews;
         claims += report.claims;
         batches += report.batches;
@@ -958,12 +965,15 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
     let table = |found: &census_core::reliability::Reliability| {
-        println!("\n  {:<14} {:>9} {:>8}   commonest split", "field", "agreed", "kappa");
+        println!(
+            "\n  {:<14} {:>9} {:>8}   commonest split",
+            "field", "agreed", "kappa"
+        );
         for field in &found.fields {
-            let split = field.commonest_split.as_ref().map_or_else(
-                String::new,
-                |(a, b, count)| format!("{a} / {b} ({count})"),
-            );
+            let split = field
+                .commonest_split
+                .as_ref()
+                .map_or_else(String::new, |(a, b, count)| format!("{a} / {b} ({count})"));
             let row = format!(
                 "  {:<14} {:>9} {:>8}   {split}",
                 field.field,
@@ -998,7 +1008,10 @@ fn run_compare_labels(app_ids: &[u32], reference: &std::path::Path) -> Result<()
 
     let pooled = census_core::reliability::over(&every);
     if several {
-        println!("\npooled over every set, {} claims read twice", thousands(pooled.overlap));
+        println!(
+            "\npooled over every set, {} claims read twice",
+            thousands(pooled.overlap)
+        );
         table(&pooled);
     }
 
@@ -1041,14 +1054,12 @@ fn run_measure_claims(
     out: &std::path::Path,
     reference: &std::path::Path,
 ) -> Result<()> {
-    let pct = |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+    let pct =
+        |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
 
     for &app_id in app_ids {
-        let found = census_core::measure::agreement(
-            out,
-            app_id,
-            &reference.join(app_id.to_string()),
-        )?;
+        let found =
+            census_core::measure::agreement(out, app_id, &reference.join(app_id.to_string()))?;
 
         println!("\napp {app_id}");
         println!(
@@ -1071,9 +1082,7 @@ fn run_measure_claims(
             reason = "reference sets are thousands of claims"
         )]
         {
-            let share = |part: u64, whole: u64| {
-                (whole > 0).then(|| part as f64 / whole as f64)
-            };
+            let share = |part: u64, whole: u64| (whole > 0).then(|| part as f64 / whole as f64);
             println!(
                 "  split by how the labeller called it: {} on {} clear-cut, {} on {} contested",
                 pct(share(found.clear_agreed, found.clear_answered)),
@@ -1176,10 +1185,16 @@ fn run_ingest_claims(app_id: u32, from: &std::path::Path, to: Option<PathBuf>) -
             }
         }
         if !report.unknown.is_empty() {
-            println!("  {} labels naming a claim nobody drew", report.unknown.len());
+            println!(
+                "  {} labels naming a claim nobody drew",
+                report.unknown.len()
+            );
         }
         if !report.rejected.is_empty() {
-            println!("  {} labels the sheet does not offer", report.rejected.len());
+            println!(
+                "  {} labels the sheet does not offer",
+                report.rejected.len()
+            );
             for one in report.rejected.iter().take(8) {
                 println!("    {one}");
             }
@@ -1231,7 +1246,10 @@ fn run_claims(app_id: u32, out: &std::path::Path) -> Result<()> {
     println!("per review   {:.2}", report.per_review());
     println!("distinct     {}", report.distinct);
     if let Some(share) = report.repeated() {
-        println!("repeated     {:.1}% of claims are said in the same words elsewhere", share * 100.0);
+        println!(
+            "repeated     {:.1}% of claims are said in the same words elsewhere",
+            share * 100.0
+        );
     }
     println!("empty        {} reviews split into nothing", report.empty);
     Ok(())
@@ -1281,21 +1299,22 @@ async fn run_embed(
     let mut embedder = census_core::Embedder::load(&cache, encoder, precision)?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
-    let report = census_core::embed_corpus(&mut embedder, out, app_id, batch_size, unit, |progress| {
-        let line = format!(
-            "  {} of {} distinct texts",
-            thousands(progress.embedded),
-            thousands(progress.unique_texts)
-        );
-        if interactive {
-            let mut err = std::io::stderr();
-            let _ = write!(err, "\r{line}   ");
-            let _ = err.flush();
-        } else if progress.embedded - last_line >= PROGRESS_EVERY_TEXTS {
-            last_line = progress.embedded;
-            eprintln!("{line}");
-        }
-    })?;
+    let report =
+        census_core::embed_corpus(&mut embedder, out, app_id, batch_size, unit, |progress| {
+            let line = format!(
+                "  {} of {} distinct texts",
+                thousands(progress.embedded),
+                thousands(progress.unique_texts)
+            );
+            if interactive {
+                let mut err = std::io::stderr();
+                let _ = write!(err, "\r{line}   ");
+                let _ = err.flush();
+            } else if progress.embedded - last_line >= PROGRESS_EVERY_TEXTS {
+                last_line = progress.embedded;
+                eprintln!("{line}");
+            }
+        })?;
     if interactive {
         eprintln!();
     }

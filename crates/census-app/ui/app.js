@@ -200,6 +200,12 @@ function drawTopics(counted) {
   }
   set(el('topics-lede'), `${parts.join(', ')}.`);
 
+  /* The paragraph is assembled by the core from the same counts the table shows, so the
+     window only decides whether there is one to show. */
+  const summary = el('in-short');
+  summary.hidden = counted.in_short === '';
+  set(summary, counted.in_short);
+
   const unread = counted.claims > 0 ? counted.unclassified_claims / counted.claims : 0;
   const silent = counted.reviews > 0 ? counted.silent_reviews / counted.reviews : 0;
 
@@ -310,11 +316,15 @@ function drawTopics(counted) {
   }
 }
 
-async function openClaims(subject, from) {
-  reading = { subject, from };
+/* `narrowed` is null for every point under the subject, or `{side, term}` for the points on
+   one side that use a word from the strip. The same page function serves both, so the strip
+   is a filter on the evidence and not a second view of it. */
+async function openClaims(subject, from, narrowed = null) {
+  reading = { subject, from, narrowed };
   show('evidence');
   set(el('evidence-name'), subject.label);
   set(el('evidence-lede'), 'Finding them...');
+  drawTerms(subject, narrowed);
   el('quotes').replaceChildren();
   el('earlier').disabled = true;
   el('later').disabled = true;
@@ -324,6 +334,8 @@ async function openClaims(subject, from) {
     page = await invoke('claims_behind', {
       appId: chosen,
       subject: subject.id,
+      side: narrowed?.side ?? null,
+      term: narrowed?.term ?? null,
       from,
       count: PER_PAGE,
     });
@@ -331,12 +343,17 @@ async function openClaims(subject, from) {
     set(el('evidence-lede'), String(failure));
     return;
   }
-  if (reading?.subject.id !== subject.id || reading.from !== from) return;
+  if (reading?.subject.id !== subject.id || reading.from !== from || reading.narrowed !== narrowed) {
+    return;
+  }
 
   set(
     el('evidence-lede'),
-    `${whole.format(page.total)} separate points about this, raised in ` +
-      `${whole.format(subject.reviews)} reviews. Each one is shown as it was written.`,
+    narrowed === null
+      ? `${whole.format(page.total)} separate points about this, raised in ` +
+          `${whole.format(subject.reviews)} reviews. Each one is shown as it was written.`
+      : `${whole.format(page.total)} ${narrowed.side === 'praise' ? 'praising' : 'complaining'} ` +
+          `points about this that say “${narrowed.term}”. Each one is shown as it was written.`,
   );
   drawClaims(page.claims);
 
@@ -344,6 +361,43 @@ async function openClaims(subject, from) {
   set(el('paging-note'), `${whole.format(from + 1)} to ${whole.format(upTo)}`);
   el('earlier').disabled = from === 0;
   el('later').disabled = upTo >= page.total;
+}
+
+/* The words each side of a subject uses and the other does not, each a button that narrows
+   the page to the points using it. Nothing is drawn for a side with nothing to say, and the
+   whole strip goes when neither side has anything, which on a game the model barely reads is
+   the honest state rather than an empty box. */
+function drawTerms(subject, narrowed) {
+  const sides = [
+    ['praised-terms', 'praise', subject.praised_terms],
+    ['criticised-terms', 'complaint', subject.criticised_terms],
+  ];
+  let any = false;
+  for (const [id, side, terms] of sides) {
+    const strip = el(id);
+    strip.hidden = terms.length === 0;
+    for (const stale of strip.querySelectorAll('button')) stale.remove();
+    for (const term of terms) {
+      any = true;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      const chosenHere = narrowed !== null && narrowed.side === side && narrowed.term === term.text;
+      chip.className = chosenHere ? 'term chosen' : 'term';
+      chip.title = chosenHere
+        ? 'Back to every point about this'
+        : `${whole.format(term.reviews)} reviews used this word on this side`;
+      chip.append(term.text);
+      const count = document.createElement('span');
+      count.className = 'n';
+      count.textContent = whole.format(term.reviews);
+      chip.append(count);
+      chip.addEventListener('click', () =>
+        openClaims(subject, 0, chosenHere ? null : { side, term: term.text }),
+      );
+      strip.append(chip);
+    }
+  }
+  el('stands-out').hidden = !any;
 }
 
 function drawClaims(claims) {
@@ -580,10 +634,10 @@ el('cancel').addEventListener('click', () => (chosen === null ? show('welcome') 
 el('back').addEventListener('click', () => choose(chosen));
 el('do-read').addEventListener('click', readGame);
 el('earlier').addEventListener('click', () => {
-  if (reading) openClaims(reading.subject, Math.max(0, reading.from - PER_PAGE));
+  if (reading) openClaims(reading.subject, Math.max(0, reading.from - PER_PAGE), reading.narrowed);
 });
 el('later').addEventListener('click', () => {
-  if (reading) openClaims(reading.subject, reading.from + PER_PAGE);
+  if (reading) openClaims(reading.subject, reading.from + PER_PAGE, reading.narrowed);
 });
 
 refresh();
