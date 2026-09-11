@@ -169,12 +169,34 @@ covers it once "?" is allowed to end a part.
 
 ### Abbreviations the list does not have, reported on 1466860
 
-"Since I've been playing the Def. Editions for a while" cut at "Def.", and "The biggest
-improvement might be" left dangling by a cut on the line after it. A capitalised word after a
-full stop that follows a three-letter capitalised token is a weaker signal than the list, but
-"Def." is not in ABBREVIATIONS and "Ed." is not either. Add both, and consider treating a
-one-to-four-letter capitalised token before a full stop, followed by a lowercase word, as an
-abbreviation regardless of the list. Goes in `claims-4` with the comma list.
+"Since I've been playing the Def. Editions for a while" cut at "Def.". A capitalised word
+after a full stop that follows a three-letter capitalised token is a weaker signal than the
+list, but "Def." is not in ABBREVIATIONS and "Ed." is not either. Add both, and consider
+treating a one-to-four-letter capitalised token before a full stop, followed by a lowercase
+word, as an abbreviation regardless of the list. Goes in `claims-4` with the comma list.
+
+### A heading tag used as bold, reported on 1466860 and 1716740
+
+"The biggest improvement might be [h1]EVERYONE WALK FAST[/h1], really nice" came back as
+three claims, the middle one shouting and the other two saying nothing. The Chinese
+long-form review on 1716740 does it eleven times: `[h2]` opened after a colon or a comma and
+closed before one, so the labeller received claims beginning with "，" and "？". The
+splitter treats every heading tag as a break because on Steam a heading is a block, but a
+reviewer who opens one mid-sentence wanted emphasis, and the text runs straight through it.
+
+The rule: a heading tag breaks only at a line boundary. An opening tag with nothing but
+whitespace between it and the previous line break, or the start of the review, begins a
+point; a closing tag with nothing but whitespace between it and the next line break, or the
+end, ends one. Anywhere else the tag is styling and is skipped like `[b]`. Every real
+heading in the same review still splits, since they all sit on lines of their own. Goes in
+`claims-4`.
+
+### An emoticon after a sentence joins the wrong neighbour
+
+":D", ":(", ";)" and ":|" sit after the sentence they colour, but a fragment below the
+minimum weight joins forward, so "Great fun. :D If you like Vermintide..." hands the smile to
+the next claim. Five claims across the drawn sets begin this way. A fragment with no letter
+in it, on a line that has one before it, should join backward. Goes in `claims-4`.
 
 ### Two shapes that may not be fixable mechanically
 
