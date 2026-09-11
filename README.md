@@ -350,12 +350,12 @@ These rules keep those figures honest:
   does not apply: the labels were written by a model, so what is measured is consistency
   between two models.
 
-  Measured so far, over 1,029 claims on twenty-three games: two labellers agree on the subject
-  87% of the time, kappa 0.85, and on polarity 93%, kappa 0.89. Those are figures a set can
-  stand on, and they did not move when the set grew from ten games to twenty-three.
+  Measured so far, over 1,400 claims on thirty games: two labellers agree on the subject
+  87% of the time, kappa 0.85, and on polarity 93%, kappa 0.90. Those are figures a set can
+  stand on, and they did not move when the set grew from ten games to thirty.
 
 - **The contested flag measures the labeller as much as the claim.** Two labellers given the
-  same definition reached for it on three tenths and on half of the same claims, kappa 0.42.
+  same definition reached for it on three tenths and on half of the same claims, kappa 0.48.
   The flag does find the right claims: where neither reached for it the two agree on the
   subject 99% of the time, and where either did they agree three times in four. What differs is the
   bar. So a game's contested rate is not compared with another game's, and agreement is

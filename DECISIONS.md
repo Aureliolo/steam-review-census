@@ -74,7 +74,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Decided | State |
 |---|---|
 | Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 25 of 36 games, one labeller at a time on the user's instruction |
-| **Opus spot-checks the labels** | done as a blind second reading of a tenth: 1,029 claims over twenty-three games, subject kappa 0.85 |
+| **Opus spot-checks the labels** | done as a blind second reading of a tenth: 1,400 claims over thirty games, subject kappa 0.85 |
 | Roughly 400 labels to start | 12,991 claims and counting, target 20,000 |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
 | Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
@@ -166,14 +166,14 @@ So a contested rate is a fact about a labeller as much as about a game, and the 
 rather than comparing it across games as though it were the same measure. The per-field
 figures are what `census compare-labels` prints, and the contested check runs every time.
 
-At twenty-three games read twice, **1,029 claims**, every figure held: subject 86.7% at kappa
-**0.85**, polarity 92.6% at 0.89, contested 70.9% at **0.42** with the first labeller flagging
-30% and the second 50%. On the 468 claims neither flagged they agree on the subject 99.4% of
-the time, and on the 561 either flagged, 76.1%. Their commonest disagreement is now
-`difficulty` against `gameplay`, twenty claims of it, ahead of `genre` against `verdict` (11)
-and `atmosphere` against `verdict` (8); every one of them is a boundary `reference/GAPS.md`
-already holds wording for. Two labellers, thirteen new games, and the same numbers to a point:
-that is a silver standard behaving like one.
+At thirty games read twice, **1,400 claims**, every figure held: subject 86.9% at kappa
+**0.85**, polarity 93.4% at 0.90, contested 74.1% at **0.48** with the first labeller flagging
+31% and the second 49%. On the 657 claims neither flagged they agree on the subject 99.2% of
+the time, and on the 743 either flagged, 76.0%. Their commonest disagreement is now
+`difficulty` against `gameplay`, twenty-five claims of it, ahead of `genre` against `verdict`
+(14) and `updates` against `verdict` (10); every one of them is a boundary
+`reference/GAPS.md` already holds wording for. Three times the claims, twenty more games, and
+the same numbers to a point: that is a silver standard behaving like one.
 
 Then the backbone was put to the bake-off it was always going to face, on sixteen games and
 8,608 claims, every candidate on the same split and schedule, judged on the validation games

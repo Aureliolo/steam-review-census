@@ -8,10 +8,10 @@ after the 36-game run is labelled and measured, and the sets are redrawn against
 Ordered by how many labellers reported the same thing without being able to see each other's
 work, which is the only evidence any of it has. The second reading adds a different kind of
 evidence: where two labellers given the same sheet disagree on the subject, the sheet is what
-failed. Their commonest disagreements, over 1,029 claims read twice across twenty-three games,
-are `difficulty` against `gameplay` (20), `genre` against `verdict` (11), `atmosphere` against
-`verdict` (8), `gameplay` against `genre` (6), and `updates`, `content` and `gameplay` each
-against `verdict` (6, 6, 5). Every one of those is below.
+failed. Their commonest disagreements, over 1,400 claims read twice across thirty games, are
+`difficulty` against `gameplay` (25), `genre` against `verdict` (14), `updates` against
+`verdict` (10), `atmosphere` against `verdict` (9) and `content` against `verdict` (8). Every
+one of those is below.
 
 ## Defects in the sheet, to fix in the next revision
 
@@ -108,11 +108,11 @@ rule ("how hard, and whether it is fair") does not say whether an enemy's behavi
 mechanic or a difficulty. One line would: an enemy's design is `gameplay`; how hard it is to
 beat is `difficulty`.
 
-This is now the largest gap the second reading finds: **20 of the 137 subject disagreements**
-over 1,029 claims read twice, ahead of every other pair, and it appears in five games rather
-than one. Skullgirls mixups, Nine Sols boss readability and Frostpunk 2 faction exploits are
-all the same shape: a mechanic described through how hard it makes the game. The rule above
-settles each of them, and it is the first line `core-6` should carry.
+This is now the largest gap the second reading finds: **25 of the 183 subject disagreements**
+over 1,400 claims read twice, ahead of every other pair, and it appears in six games rather
+than one. Skullgirls mixups, Nine Sols boss readability, Frostpunk 2 faction exploits and Old
+World's AI bonuses are all the same shape: a mechanic described through how hard it makes the
+game. The rule above settles each of them, and it is the first line `core-6` should carry.
 
 ### Faithful to the film: one report, a third of that game's contested claims
 
