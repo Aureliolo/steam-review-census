@@ -44,9 +44,12 @@ training/data/
 training/runs/*/checkpoints/
 training/runs/*/*.bin
 training/runs/*/*.safetensors
+training/runs/*/*.onnx
 # A tokenizer is seventeen megabytes and is reproducible from the backbone name recorded in
-# run.json, so it belongs with the published model rather than in the history.
+# run.json, so it belongs with the published model rather than in the history. Both the
+# directory the trainer saves and the copy the export lays beside the graph.
 training/runs/*/tokenizer/
+training/runs/*/tokenizer.json
 training/.venv/
 
 # Build and dependency artefacts

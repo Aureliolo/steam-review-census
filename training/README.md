@@ -29,16 +29,30 @@ Training wants a GPU. It will run on a CPU and you will not enjoy it.
 ```sh
 census export-training --to training/data/claims.jsonl   # labels plus their text, local only
 python bakeoff.py                                        # which backbone, decided by measurement
-python train.py --backbone <the winner>                  # the model
-python export.py --run runs/<id>                         # ONNX, with a parity assertion
+python train.py --backbone <the winner> --save           # the model
+python export.py --run runs/<id> --spine core-5 --fp16   # ONNX, with a parity assertion
+python publish.py --run runs/<id> \
+    --model-repo <you>/steam-review-claim-reader \
+    --data-repo <you>/steam-review-claims                # to Hugging Face, and pinned in the tool
 ```
 
 `claims.jsonl` holds review text and is never committed. What gets published is the model and a
-label set of review ids, claim offsets and labels, which anyone can rehydrate with `census`
-itself. Reviews belong to the people who wrote them.
+label set of review ids, claim offsets and labels, built from `reference/claims/` rather than
+from the training export, which anyone can rehydrate with `census` itself. Reviews belong to
+the people who wrote them, and `publish.py` refuses a row that carries text.
+
+Publishing pins the three model files by hash in `crates/census-core/src/reader.rs`, so the
+tool fetches exactly what went up and refuses anything else. Rebuild and commit after it runs.
+Until something is published the pin is empty, and an empty pin refuses to fetch rather than
+fetching unverified.
 
 ## What is recorded
 
-Every run writes `runs/<id>/` holding the config, the git sha, a hash of the label set, the
-metrics per category and per language, and the calibration curve. That directory is the only
-evidence a published figure has, so a run that did not write one did not happen.
+Every run writes `runs/<id>/` holding the config, the git sha, a hash of the label set, which
+games were trained on, validated on and frozen, the metrics per subject and per language, the
+whole risk-coverage curve, and the frozen games' figures at the threshold validation chose.
+That directory is the only evidence a published figure has, so a run that did not write one
+did not happen.
+
+The frozen games are read once, at the end, and choose nothing. The bake-off does not read
+them at all: a set used to choose between models cannot also say how the chosen one does.

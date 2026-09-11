@@ -205,6 +205,12 @@ def main():
         encoding="utf-8",
     )
 
+    # The reader wants three files beside each other, and so does publishing. The tokenizer
+    # directory the trainer saved holds more than the one file the tool reads.
+    import shutil
+
+    shutil.copyfile(run / "tokenizer" / "tokenizer.json", run / "tokenizer.json")
+
     card = run / "MODEL_CARD.md"
     metrics = record["validation"]
 

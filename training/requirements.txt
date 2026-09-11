@@ -14,3 +14,4 @@ pyarrow>=17
 onnx>=1.16
 onnxruntime-gpu>=1.19
 optimum[onnxruntime]>=1.21
+huggingface_hub>=0.25
