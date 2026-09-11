@@ -442,9 +442,17 @@ Then, in order:
    model. Measure the relabel cost on one game before paying it for thirty-six.
 4. **Games chosen for the rows that are starved**, not more games at random. `licensing` has
    32 claims over four games, `vr` 40, `accessibility` 48, and all three score zero. A random
-   game costs the same as a chosen one and buys almost none of them.
-5. **Publishing**, which is the user's decision and not near.
-6. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
+   game costs the same as a chosen one and buys almost none of them. Fifteen such games are
+   captured and drawn as of 2026-09-11: 14,711 claims waiting to be labelled, against the
+   18,907 the set already holds. Two VR games, two about accessibility, five licensed, and
+   four at the negative end of a distribution that was 24 Very Positive games out of 36.
+5. **Draw the claims the reader cannot answer, not more claims at random.** Every set so far
+   is a random draw, which is what makes prevalence measurable and is the right default. But
+   once a reader exists, the claims it abstains on are worth several times a random claim to
+   train from, and the `subset` field already distinguishes a draw that measures prevalence
+   from one that only teaches. Not built, and it must never contaminate the random sets.
+6. **Publishing**, which is the user's decision and not near.
+7. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.
 
 Built since this list was first written: the report page on readings, the polarity split,
