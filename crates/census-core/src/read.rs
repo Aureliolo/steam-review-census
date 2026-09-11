@@ -103,6 +103,33 @@ pub struct SubjectCount {
     pub positive_mentions: u64,
 }
 
+impl SubjectCount {
+    /// Share of the reviews raising this subject that recommended the game.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn positive_share(&self) -> Option<f64> {
+        (self.mention_reviews > 0)
+            .then(|| self.positive_mentions as f64 / self.mention_reviews as f64)
+    }
+
+    /// Reviews that both praise and criticise this subject, as a share of those raising it.
+    ///
+    /// The figure the old report had no way to produce. A subject praised by half and damned
+    /// by the other half, and one that every reviewer has mixed feelings about, are different
+    /// findings that a single positive share renders identically.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn mixed_share(&self) -> Option<f64> {
+        (self.mention_reviews > 0).then(|| self.mixed as f64 / self.mention_reviews as f64)
+    }
+}
+
 /// One month of a corpus.
 ///
 /// A subject raised steadily for two years and one raised furiously in a single week read
@@ -115,6 +142,29 @@ pub struct Month {
     pub positive: u64,
     /// Reviews raising each subject, in taxonomy order.
     pub subjects: Vec<u64>,
+}
+
+impl Month {
+    /// Share of this month's reviews that recommended the game.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn positive_share(&self) -> Option<f64> {
+        (self.reviews > 0).then(|| self.positive as f64 / self.reviews as f64)
+    }
+
+    /// Share of this month's reviews raising a subject, by its taxonomy position.
+    #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "review counts are far below 2^53"
+    )]
+    pub fn rate(&self, slot: usize) -> Option<f64> {
+        let raised = *self.subjects.get(slot)?;
+        (self.reviews > 0).then(|| raised as f64 / self.reviews as f64)
+    }
 }
 
 /// What reading a corpus found.

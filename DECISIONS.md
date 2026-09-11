@@ -89,9 +89,9 @@ removed.
 | Decided | State |
 |---|---|
 | The unit is a **claim**, not a review. A review is split into the points it makes and each point carries one subject | splitter written and tested |
-| A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | to build |
-| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | to build |
-| **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | to build |
+| A **fine-tuned multilingual encoder** replaces prototype similarity, distilled from Fable labels, exported to ONNX, run on the existing runtime | built, training on each new wave of labels |
+| The **backbone is chosen by bake-off**, not by reputation: several candidates, identical labels, identical frozen split, judged on per-category F1 and throughput together | to build; judged on area under the risk-coverage curve as well, since a backbone that knows when it does not know is worth more here than one point of accuracy |
+| **Calibrated abstention**: a claim below threshold is recorded as unclassified and counted, never folded into `verdict` | built, and the threshold is chosen by **the most coverage available at a promised accuracy**, never by maximising accuracy times coverage, which collapses to answering everything |
 | **Polarity is predicted per claim**, and reported per review per subject as praised, criticised or **mixed** | to build |
 | **Mention rate stays the headline** because it is verbosity-proof; claim share is deep-reading only and always labelled as verbosity-weighted | rule |
 | Model is **multilingual**, reports default to **English** with a working language switch | to build |
@@ -115,6 +115,19 @@ is measured rather than argued.
 | How often is a claim mis-split? | 12% to 17% by three labellers independently, which drove three rounds of splitter fixes |
 | What did labellers have nowhere to put? | Atmosphere and feel, by all three, and by six review-level labellers before them |
 
+Then eleven games, 5,574 claims, measured with games held out whole:
+
+| Question | Answer |
+|---|---|
+| How good is it on a game it has never seen? | Accuracy 0.392, macro F1 0.255, and those are the figures that matter. The pilot's 0.46 was within one game, which is the easy question |
+| How much can it answer at a promised 75% accuracy? | **20% of claims**, at threshold 0.42. The other 80% are declined and counted |
+| Is it calibrated? | Expected calibration error 0.107, area under the risk-coverage curve 0.423 |
+| What does it still not know? | `accessibility`, `community`, `compatibility` and `language` score zero F1: too few labelled claims to learn from |
+
+The first honest measurement of abstention came from fixing how the threshold is picked. Under
+the old objective the model answered every claim at 39% accuracy and declined nothing, which
+is the same failure as the prototype wearing a trained model's clothes.
+
 The taxonomy is now **core-5**: `atmosphere` added on that evidence, plus rules for comparing a
 game with its own predecessor, for praise or blame aimed at the studio, and for a game that
 will not start at all. Every earlier reference set and the shipped anchors are core-4 and are
@@ -122,12 +135,16 @@ refused by this build, which is the guard working rather than failing.
 
 ## What this leaves
 
-Four things stand between the current tool and what was agreed, in the order they matter:
+In the order they matter:
 
-1. **The desktop app.** Decided second of everything and never started.
-2. **Claim-level reading**, which is both the promised depth default and the only honest way to
-   compute the mention rate that every headline figure uses.
+1. **Labels.** Eleven games of the thirty-six are labelled. At 20% coverage the model cannot
+   carry a report yet, and nothing else on this list changes that: it is the one input every
+   other number depends on.
+2. **The report page**, which still renders the deleted classifier's counts and has to be
+   rebuilt on readings.
 3. **Summaries and drill-down**, which is the difference between reporting that 24.7% of
    players mention difficulty and telling a reader what they said about it.
 4. **Induced per-game categories**, so a game's own subjects appear rather than only the
-   twenty-four every game shares.
+   twenty-five every game shares.
+5. **Publishing** the model and the ids-and-offsets dataset, and fetching the model by checksum
+   so a user who downloads the binary is not asked to train one.

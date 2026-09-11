@@ -1,13 +1,17 @@
 //! Gathering everything a readable report needs, without re-reading the corpus.
 //!
-//! The counts come from the sidecar `census classify` writes, so a report never recomputes a
+//! The counts come from the sidecar the reading pass writes, so a report never recomputes a
 //! pass that has already run and can never disagree with the run it claims to describe.
 //!
 //! What the sidecar cannot hold is review text. A report that says 14% of reviews complain
 //! about performance is a claim a reader should be able to check, so a bounded, deterministic
-//! handful of the reviews behind every number is fetched from the capture and shown. Bounded
+//! handful of the claims behind every number is fetched from the capture and shown. Bounded
 //! because a million reviews will not fit in a page; deterministic because two runs against
 //! the same corpus should show the same evidence.
+//!
+//! The evidence is claims rather than whole reviews, because a claim is what the count is made
+//! of. Quoting the review would ask a reader to find the sentence that earned the subject, and
+//! on a long review that sentence is one of thirty.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -63,101 +67,6 @@ impl Default for ReportOptions {
     }
 }
 
-/// What `census classify` recorded beside the assignments.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Classification {
-    pub app_id: u32,
-    pub reviews: u64,
-    /// Classified reviews that recommended the game. Absent from sidecars written before
-    /// the classifier counted it.
-    #[serde(default)]
-    pub positive: u64,
-    pub unmatched: u64,
-    pub top_helpful: u64,
-    pub mention_margin: f32,
-    pub spine_version: String,
-    pub model: String,
-    #[serde(default)]
-    pub anchors_fitted_from: Vec<u32>,
-    pub categories: Vec<CategoryCount>,
-    /// Reviews per language, most common first.
-    #[serde(default)]
-    pub languages: Vec<(String, u64)>,
-    /// What was said month by month, oldest first. Absent from sidecars written before the
-    /// classifier counted it.
-    #[serde(default)]
-    pub months: Vec<Month>,
-    #[serde(default)]
-    pub top_reviews: Vec<TopRow>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct CategoryCount {
-    pub id: String,
-    pub label: String,
-    pub primary_count: u64,
-    pub mention_count: u64,
-    pub top_mention_count: u64,
-    /// Of the reviews mentioning this, how many still recommended the game. Absent from
-    /// sidecars written before the classifier counted it.
-    #[serde(default)]
-    pub positive_mentions: u64,
-}
-
-impl CategoryCount {
-    /// Share of the reviews mentioning this category that recommended the game.
-    #[must_use]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "review counts are far below 2^53"
-    )]
-    pub fn positive_share(&self) -> Option<f64> {
-        (self.mention_count > 0).then(|| self.positive_mentions as f64 / self.mention_count as f64)
-    }
-}
-
-/// One month of a corpus.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Month {
-    pub label: String,
-    pub reviews: u64,
-    pub positive: u64,
-    /// Mentions per category, in taxonomy order.
-    pub categories: Vec<u64>,
-}
-
-impl Month {
-    /// Share of this month's reviews that recommended the game.
-    #[must_use]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "review counts are far below 2^53"
-    )]
-    pub fn positive_share(&self) -> Option<f64> {
-        (self.reviews > 0).then(|| self.positive as f64 / self.reviews as f64)
-    }
-
-    /// Share of this month's reviews that mention a category, by its taxonomy position.
-    #[must_use]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "review counts are far below 2^53"
-    )]
-    pub fn rate(&self, slot: usize) -> Option<f64> {
-        let mentions = *self.categories.get(slot)?;
-        (self.reviews > 0).then(|| mentions as f64 / self.reviews as f64)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TopRow {
-    pub id: String,
-    pub helpfulness: f64,
-    pub votes_up: u32,
-    pub primary: String,
-    pub mentions: Vec<String>,
-}
-
 /// What the crawl recorded about the capture a report describes.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CrawlFacts {
@@ -196,12 +105,25 @@ impl CrawlFacts {
     }
 }
 
-/// One review shown as evidence, with the categories it was filed under.
+/// One claim shown as evidence, with the review it was made in.
+///
+/// The claim rather than the review is what a subject's count is made of, so it is what a
+/// reader checking the count has to be shown. The review comes with it because a claim reading
+/// "it doesn't" means nothing alone, and because the link back to Steam belongs to the review.
 #[derive(Debug, Clone)]
 pub struct Example {
     pub review: CapturedReview,
-    pub primary: String,
-    pub mentions: Vec<String>,
+    /// The words the model read, which is one point from the review and not all of it.
+    pub claim: String,
+    /// Which point of the review this is, counting from zero.
+    pub index: u16,
+    pub polarity: String,
+    /// How sure the model was. Shown, because a claim scraping past the threshold and one the
+    /// model is certain of are not equally good evidence and should not look it.
+    pub confidence: f32,
+    /// Every subject this review raises, so a quoted claim sits in the context of what else
+    /// its author said rather than looking like their only point.
+    pub also: Vec<String>,
     /// Whether this review is one of the most-helpful in the corpus.
     pub from_the_top: bool,
 }
@@ -223,8 +145,8 @@ impl Example {
 #[derive(Debug, Clone)]
 pub struct AppReport {
     pub crawl: CrawlFacts,
-    pub classification: Classification,
-    /// Evidence per category id, in taxonomy order.
+    pub reading: crate::read::ReadReport,
+    /// Evidence per subject id, in taxonomy order.
     pub examples: Vec<(String, Vec<Example>)>,
     /// The most-helpful reviews, which is what a reader skimming the store page sees.
     pub top: Vec<Example>,
@@ -232,7 +154,7 @@ pub struct AppReport {
     pub agreement: Measurement,
 }
 
-/// Whether a game's classifier error has been measured, and what stopped it if not.
+/// Whether a game's error has been measured, and what stopped it if not.
 ///
 /// A game with a reference set labelled against another taxonomy is not a game nobody has
 /// labelled, and a page that says it is tells a reader to go and do work that has been done.
@@ -244,16 +166,16 @@ pub enum Measurement {
     #[default]
     Unlabelled,
     /// A set exists, naming a taxonomy this build does not have. Scoring against it would
-    /// mark the classifier on categories nobody labelling it was offered.
+    /// mark the model on subjects nobody labelling it was offered.
     OtherTaxonomy(String),
     /// Boxed because the report behind it dwarfs the other two and every game carries one.
-    Measured(Box<crate::AgreementReport>),
+    Measured(Box<crate::measure::ClaimAgreement>),
 }
 
 impl Measurement {
     /// The report, where there is one.
     #[must_use]
-    pub fn report(&self) -> Option<&crate::AgreementReport> {
+    pub fn report(&self) -> Option<&crate::measure::ClaimAgreement> {
         match self {
             Self::Measured(report) => Some(report),
             _ => None,
@@ -263,50 +185,48 @@ impl Measurement {
 
 impl AppReport {
     /// Share of the whole corpus that recommended the game, which is the line every
-    /// category's own share should be read against.
+    /// subject's own share should be read against.
     #[must_use]
     #[expect(
         clippy::cast_precision_loss,
         reason = "review counts are far below 2^53"
     )]
     pub fn positive_baseline(&self) -> Option<f64> {
-        // Counted over the classified reviews rather than over Valve's own totals, which
+        // Counted over the reviews that were read rather than over Valve's own totals, which
         // include reviews with no text at all. A baseline drawn from a different population
         // than the shares it is compared against is worse than no baseline.
-        (self.classification.reviews > 0)
-            .then(|| self.classification.positive as f64 / self.classification.reviews as f64)
+        (self.reading.reviews > 0)
+            .then(|| self.reading.positive as f64 / self.reading.reviews as f64)
     }
-}
 
-impl AppReport {
     #[must_use]
-    pub fn app_id(&self) -> u32 {
-        self.classification.app_id
+    pub const fn app_id(&self) -> u32 {
+        self.reading.app_id
     }
 
-    /// The category whose share of the top of the pile most overstates its share of the
+    /// The subject whose share of the top of the pile most overstates its share of the
     /// corpus, which is the single number this whole tool exists to produce.
     ///
-    /// Only categories a real part of the top of the pile actually discusses are eligible.
+    /// Only subjects a real part of the top of the pile actually discusses are eligible.
     /// The top of the pile is a few dozen reviews, so one review mentioning something the
     /// corpus almost never mentions produces an enormous ratio out of a count of one, and
     /// leading a report with that would be reporting noise as a finding.
     #[must_use]
-    pub fn worst_bias(&self) -> Option<(&CategoryCount, f64)> {
-        let floor = self.classification.top_helpful.div_ceil(HEADLINE_TOP_SHARE);
-        self.classification
-            .categories
+    pub fn worst_bias(&self) -> Option<(&crate::read::SubjectCount, f64)> {
+        let floor = self.reading.top_helpful.div_ceil(HEADLINE_TOP_SHARE);
+        self.reading
+            .subjects
             .iter()
-            .filter(|c| c.mention_count > 0 && c.top_mention_count >= floor.max(2))
-            .filter_map(|c| self.bias(c).map(|factor| (c, factor)))
+            .filter(|s| s.mention_reviews > 0 && s.top_mention_reviews >= floor.max(2))
+            .filter_map(|s| self.bias(s).map(|factor| (s, factor)))
             .max_by(|(_, a), (_, b)| a.total_cmp(b))
     }
 
-    /// How much the top of the pile overstates a category, or `None` when nobody mentions it.
+    /// How much the top of the pile overstates a subject, or `None` when nobody raises it.
     #[must_use]
-    pub fn bias(&self, category: &CategoryCount) -> Option<f64> {
-        let overall = self.rate(category.mention_count)?;
-        let top = self.top_rate(category.top_mention_count)?;
+    pub fn bias(&self, subject: &crate::read::SubjectCount) -> Option<f64> {
+        let overall = self.rate(subject.mention_reviews)?;
+        let top = self.top_rate(subject.top_mention_reviews)?;
         (overall > 0.0).then_some(top / overall)
     }
 
@@ -316,7 +236,7 @@ impl AppReport {
         reason = "review counts are far below 2^53"
     )]
     pub fn rate(&self, part: u64) -> Option<f64> {
-        (self.classification.reviews > 0).then(|| part as f64 / self.classification.reviews as f64)
+        (self.reading.reviews > 0).then(|| part as f64 / self.reading.reviews as f64)
     }
 
     #[must_use]
@@ -325,8 +245,8 @@ impl AppReport {
         reason = "the top of the pile is a few dozen reviews"
     )]
     pub fn top_rate(&self, part: u64) -> Option<f64> {
-        (self.classification.top_helpful > 0)
-            .then(|| part as f64 / self.classification.top_helpful as f64)
+        (self.reading.top_helpful > 0)
+            .then(|| part as f64 / self.reading.top_helpful as f64)
     }
 }
 
@@ -392,19 +312,19 @@ impl Report {
                     reviews: 0,
                 };
                 for app in &self.apps {
-                    // A game that never had this category counted still contributes its
+                    // A game that never had this subject counted still contributes its
                     // reviews to the denominator: it is a game where nobody raised it, not a
                     // game that was not asked.
-                    pooled.reviews += app.classification.reviews;
-                    pooled.top_reviews += app.classification.top_helpful;
+                    pooled.reviews += app.reading.reviews;
+                    pooled.top_reviews += app.reading.top_helpful;
                     if let Some(count) = app
-                        .classification
-                        .categories
+                        .reading
+                        .subjects
                         .iter()
-                        .find(|c| c.id == category.id)
+                        .find(|s| s.id == category.id)
                     {
-                        pooled.mentions += count.mention_count;
-                        pooled.top_mentions += count.top_mention_count;
+                        pooled.mentions += count.mention_reviews;
+                        pooled.top_mentions += count.top_mention_reviews;
                     }
                 }
                 pooled
@@ -437,8 +357,7 @@ impl Report {
 ///
 /// # Errors
 ///
-/// Fails if a capture, its classifications, or the sidecar `census classify` writes are
-/// missing.
+/// Fails if a capture, its readings, or the sidecar the reading pass writes are missing.
 pub fn build(app_ids: &[u32], options: &ReportOptions) -> Result<Report> {
     let mut apps = Vec::with_capacity(app_ids.len());
     for &app_id in app_ids {
@@ -465,159 +384,194 @@ pub fn crawl_facts(out_dir: &Path, app_id: u32) -> Result<CrawlFacts> {
 
 fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
-    let classification: Classification = read_json(&snapshot.join("classification.json"))?;
+    let reading: crate::read::ReadReport = read_json(&snapshot.join("reading.json"))?;
     let crawl = crawl_facts(&options.out_dir, app_id)?;
 
-    // Re-embedding a corpus and forgetting to classify it again leaves counts that describe
-    // vectors nothing here holds any more. They would render perfectly and be wrong.
-    let corpus_encoder = crate::embed::corpus_encoder(&options.out_dir, app_id)?;
-    if corpus_encoder != classification.model {
+    // A reading made against a different taxonomy counts subjects this build does not have,
+    // and one made by a model that has since been replaced describes answers nothing here
+    // holds any more. Either would render perfectly and be wrong.
+    if reading.spine_version != crate::CORE_SPINE_VERSION {
         return Err(crate::Error::StaleAnchors {
-            field: "embedding model",
-            expected: corpus_encoder,
-            actual: classification.model,
+            field: "taxonomy",
+            expected: crate::CORE_SPINE_VERSION.to_owned(),
+            actual: reading.spine_version.clone(),
         });
     }
 
-    let wanted_per_category = shortlist(&snapshot, options)?;
-    let mut wanted: HashSet<String> = wanted_per_category
+    let drawn = shortlist(&snapshot, options)?;
+    let top_ids: HashSet<String> = top_of_the_pile(&snapshot, reading.top_helpful)?;
+    let mut wanted: HashSet<String> = drawn
         .values()
-        .flat_map(|filed| filed.iter().map(|one| one.id.clone()))
-        .collect();
-    let top_ids: HashSet<String> = classification
-        .top_reviews
-        .iter()
-        .map(|row| row.id.clone())
+        .flat_map(|claims| claims.iter().map(|one| one.review_id.clone()))
         .collect();
     wanted.extend(top_ids.iter().cloned());
 
     let fetched = crate::capture::reviews_for(&snapshot, &wanted)?;
 
+    // Which subjects each quoted review raises anywhere, so a claim can be shown next to the
+    // rest of its author's point rather than as though it were all they said.
+    let mut raised: HashMap<String, Vec<String>> = HashMap::new();
+    crate::read::for_each_reading(&snapshot.join("readings.parquet"), |id, _, subject, _, _| {
+        if let (Some(subject), true) = (subject, wanted.contains(id)) {
+            let all = raised.entry(id.to_owned()).or_default();
+            if !all.iter().any(|seen| seen == subject) {
+                all.push(subject.to_owned());
+            }
+        }
+    })?;
+
+    let quote = |claim: &DrawnClaim| -> Option<Example> {
+        let review = fetched.get(&claim.review_id)?;
+        Some(Example {
+            claim: crate::claims::split(&review.text)
+                .into_iter()
+                .nth(claim.index as usize)?
+                .into_owned(),
+            index: claim.index,
+            polarity: claim.polarity.clone(),
+            confidence: claim.confidence,
+            also: raised.get(&claim.review_id).cloned().unwrap_or_default(),
+            from_the_top: top_ids.contains(&claim.review_id),
+            review: review.clone(),
+        })
+    };
+
     let examples = CORE_SPINE
         .iter()
-        .map(|category| {
-            // A few from the top of the pile first, where the category reaches it at all.
-            // A random sample of a million reviews will almost never contain one of the
-            // fifty most-helpful, and what those fifty said about a category next to what
-            // everyone said is the whole argument in miniature.
-            let mut quoted: Vec<Example> = classification
-                .top_reviews
+        .map(|subject| {
+            let mut quoted: Vec<Example> = Vec::new();
+            // The top of the pile first, where the subject reaches it at all. A random sample
+            // of a million reviews will almost never contain one of the fifty most-helpful,
+            // and what those fifty said about a subject next to what everyone said is the
+            // whole argument in miniature.
+            let drawn_here = drawn.get(subject.id).map(Vec::as_slice).unwrap_or_default();
+            for claim in drawn_here
                 .iter()
-                .filter(|row| row.mentions.iter().any(|id| id == category.id))
+                .filter(|claim| top_ids.contains(&claim.review_id))
                 .take(FROM_THE_TOP)
-                .filter_map(|row| {
-                    Some(Example {
-                        review: fetched.get(&row.id)?.clone(),
-                        primary: row.primary.clone(),
-                        mentions: row.mentions.clone(),
-                        from_the_top: true,
-                    })
-                })
-                .collect();
-
-            for filed in wanted_per_category
-                .get(category.id)
-                .map(Vec::as_slice)
-                .unwrap_or_default()
+                .chain(drawn_here.iter())
             {
                 if quoted.len() >= options.examples {
                     break;
                 }
-                if quoted.iter().any(|shown| shown.review.id == filed.id) {
+                if quoted
+                    .iter()
+                    .any(|shown| shown.review.id == claim.review_id && shown.index == claim.index)
+                {
                     continue;
                 }
-                if let Some(review) = fetched.get(&filed.id) {
-                    quoted.push(Example {
-                        review: review.clone(),
-                        primary: filed.primary.clone(),
-                        mentions: filed.mentions.clone(),
-                        from_the_top: top_ids.contains(&filed.id),
-                    });
+                if let Some(example) = quote(claim) {
+                    quoted.push(example);
                 }
             }
-            (category.id.to_owned(), quoted)
+            (subject.id.to_owned(), quoted)
         })
         .collect();
 
-    let top = classification
-        .top_reviews
-        .iter()
-        .filter_map(|row| {
-            Some(Example {
-                review: fetched.get(&row.id)?.clone(),
-                primary: row.primary.clone(),
-                mentions: row.mentions.clone(),
-                from_the_top: true,
-            })
-        })
+    let mut top: Vec<Example> = drawn
+        .values()
+        .flatten()
+        .filter(|claim| top_ids.contains(&claim.review_id))
+        .filter_map(quote)
         .collect();
+    top.sort_by(|a, b| b.review.votes_up.cmp(&a.review.votes_up));
+    top.dedup_by(|a, b| a.review.id == b.review.id);
 
     let agreement = agreement_for(app_id, &options.out_dir);
     Ok(AppReport {
         crawl,
-        classification,
+        reading,
         examples,
         top,
         agreement,
     })
 }
 
-/// Picks which reviews to quote for each category, without holding the corpus.
+/// The ids of the most-helpful reviews in a capture, as Steam ranks them.
 ///
-/// Ranked by a hash of the review id, so the choice depends on the review rather than on
-/// where it happened to sit in the file, and a corpus that gains reviews does not reshuffle
-/// the evidence already shown. Mentions rather than main subjects: a category that is rarely
-/// what a review is *about* but often something it *says* would otherwise have almost
-/// nothing to show.
-fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String, Vec<Filed>>> {
-    let mut per_category: HashMap<&'static str, Smallest<[u8; 32], Filed>> = CORE_SPINE
+/// The reading pass counted these by the same rule, so a report and the counts it renders
+/// agree on which reviews are "the top of the pile" without either storing a list.
+fn top_of_the_pile(snapshot: &Path, how_many: u64) -> Result<HashSet<String>> {
+    let wanted = usize::try_from(how_many).unwrap_or(usize::MAX);
+    let mut ranked: Smallest<std::cmp::Reverse<u64>, String> = Smallest::new(wanted);
+    crate::capture::for_each_row(snapshot, |row, _| {
+        // The same key the reading pass ranks by, bit for bit, so the two cannot disagree
+        // about which reviews the top of the pile contains.
+        ranked.offer(
+            std::cmp::Reverse(row.helpfulness.to_bits()),
+            row.recommendationid,
+        );
+        Ok(())
+    })?;
+    Ok(ranked.take().into_iter().collect())
+}
+
+/// Picks which claims to quote for each subject, without holding the corpus.
+///
+/// Ranked by a hash of the review id and claim index, so the choice depends on the claim
+/// rather than on where it happened to sit in the file, and a corpus that gains reviews does
+/// not reshuffle the evidence already shown.
+///
+/// More are drawn than will be shown. A drawn claim can turn out to be unquotable, because
+/// the splitter that produced the readings and the splitter in this build can disagree about
+/// how many points a review makes, and a subject left with nothing to show is a count nobody
+/// can check.
+fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String, Vec<DrawnClaim>>> {
+    let draw = options.examples * 3;
+    let mut per_subject: HashMap<&'static str, Smallest<[u8; 32], DrawnClaim>> = CORE_SPINE
         .iter()
-        .map(|category| (category.id, Smallest::new(options.examples)))
+        .map(|subject| (subject.id, Smallest::new(draw)))
         .collect();
 
-    crate::evaluate::for_each_assignment(
-        &snapshot.join("classifications.parquet"),
-        |id, primary, mentions| {
-            for mention in mentions {
-                if let Some(keep) = per_category.get_mut(mention.as_str()) {
-                    keep.offer(
-                        crate::sample::rank(options.seed, "report", id),
-                        Filed {
-                            id: id.to_owned(),
-                            primary: primary.to_owned(),
-                            mentions: mentions.to_vec(),
-                        },
-                    );
-                }
+    crate::read::for_each_reading(
+        &snapshot.join("readings.parquet"),
+        |id, index, subject, confidence, polarity| {
+            let Some(subject) = subject else {
+                return;
+            };
+            if let Some(keep) = per_subject.get_mut(subject) {
+                keep.offer(
+                    crate::sample::rank(options.seed, "report", &format!("{id}:{index}")),
+                    DrawnClaim {
+                        review_id: id.to_owned(),
+                        index,
+                        polarity: polarity.to_owned(),
+                        confidence,
+                    },
+                );
             }
         },
     )?;
 
-    Ok(per_category
+    Ok(per_subject
         .into_iter()
         .map(|(id, keep)| (id.to_owned(), keep.take()))
         .collect())
 }
 
-/// A shortlisted review and everything the classifier filed it under, so a quoted review can
-/// show all its categories rather than only the one whose panel it happens to be in.
-struct Filed {
-    id: String,
-    primary: String,
-    mentions: Vec<String>,
+/// A shortlisted claim, before the review it belongs to has been fetched.
+#[derive(Debug, Clone)]
+struct DrawnClaim {
+    review_id: String,
+    index: u16,
+    polarity: String,
+    confidence: f32,
 }
 
-/// A game's measured agreement, when it has a reference set and stored classifications to
+/// A game's measured agreement, when it has a claim reference set and stored readings to
 /// compare. A report without one still renders; it just cannot say how often it is wrong.
 fn agreement_for(app_id: u32, out_dir: &Path) -> Measurement {
-    let dir = crate::evaluate::default_reference_dir(app_id);
-    let Ok(set) = crate::ReferenceSet::load(&dir) else {
+    let dir = crate::claimset::default_reference_dir(app_id);
+    let Ok(labels) = std::fs::read(dir.join("labels.json")) else {
         return Measurement::Unlabelled;
     };
-    if set.spine_version != crate::CORE_SPINE_VERSION {
-        return Measurement::OtherTaxonomy(set.spine_version);
+    let Ok(first) = serde_json::from_slice::<Vec<crate::claimset::ClaimLabel>>(&labels) else {
+        return Measurement::Unlabelled;
+    };
+    if first.is_empty() {
+        return Measurement::Unlabelled;
     }
-    crate::compare(&set, out_dir, app_id).map_or(Measurement::Unlabelled, |report| {
+    crate::measure::agreement(out_dir, app_id, &dir).map_or(Measurement::Unlabelled, |report| {
         Measurement::Measured(Box::new(report))
     })
 }
@@ -673,30 +627,38 @@ mod tests {
                 snapshot_unix: 0,
                 shards: 1,
             },
-            classification: Classification {
+            reading: crate::read::ReadReport {
                 app_id: 1,
                 reviews: 100_000,
+                corpus_reviews: 100_000,
+                language: None,
+                claims: 300_000,
+                unclassified_claims: 0,
+                silent_reviews: 0,
                 positive: 70_000,
-                unmatched: 0,
                 top_helpful,
-                mention_margin: 0.01,
-                spine_version: "core-3".to_owned(),
                 model: "test".to_owned(),
-                anchors_fitted_from: Vec::new(),
-                categories: categories
+                spine_version: crate::CORE_SPINE_VERSION.to_owned(),
+                threshold: 0.5,
+                device: "cpu".to_owned(),
+                subjects: categories
                     .into_iter()
-                    .map(|(id, mentions, top)| CategoryCount {
+                    .map(|(id, mentions, top)| crate::read::SubjectCount {
                         id: id.to_owned(),
                         label: id.to_owned(),
-                        primary_count: mentions,
-                        mention_count: mentions,
-                        top_mention_count: top,
+                        mention_reviews: mentions,
+                        primary_reviews: mentions,
+                        claims: mentions,
+                        praised: mentions / 2,
+                        criticised: mentions / 4,
+                        mixed: 0,
+                        top_mention_reviews: top,
                         positive_mentions: mentions / 2,
                     })
                     .collect(),
                 languages: Vec::new(),
                 months: Vec::new(),
-                top_reviews: Vec::new(),
+                elapsed: std::time::Duration::ZERO,
             },
             examples: Vec::new(),
             top: Vec::new(),
@@ -731,9 +693,9 @@ mod tests {
     }
 
     #[test]
-    fn a_category_nobody_mentions_has_no_bias_rather_than_an_infinite_one() {
+    fn a_subject_nobody_raises_has_no_bias_rather_than_an_infinite_one() {
         let report = app(50, vec![("absent", 0, 0)]);
         assert!(report.worst_bias().is_none());
-        assert_eq!(report.bias(&report.classification.categories[0]), None);
+        assert_eq!(report.bias(&report.reading.subjects[0]), None);
     }
 }

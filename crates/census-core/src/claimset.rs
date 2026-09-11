@@ -282,6 +282,18 @@ impl ClaimIngest {
     }
 }
 
+/// Where the claim reference sets live.
+#[must_use]
+pub fn reference_root() -> std::path::PathBuf {
+    std::path::PathBuf::from("reference").join("claims")
+}
+
+/// Where one game's claim reference set lives.
+#[must_use]
+pub fn default_reference_dir(app_id: u32) -> std::path::PathBuf {
+    reference_root().join(app_id.to_string())
+}
+
 /// Merges returned label files into a claim reference set.
 ///
 /// # Errors
