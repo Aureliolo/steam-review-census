@@ -1,0 +1,132 @@
+{
+  "app_id": 1809540,
+  "seed": 1,
+  "handout_size": 120,
+  "induced_by": "claude-opus-5",
+  "subjects": [
+    {
+      "id": "deflection-combat",
+      "label": "Parry and deflection timing",
+      "description": "The Sekiro-style deflect at the centre of the fighting: the rhythm and high of a clean parry, the tightness of the timing window, the parry tutorial, unbounded talismans and counters, and jokes about parrying things outside the game; not how hard an individual boss is and not the movement or platforming.",
+      "refines": "gameplay",
+      "evidence": [
+        "166942243",
+        "176239810",
+        "181667782",
+        "199197086",
+        "204136081",
+        "208506921",
+        "217476340",
+        "226362934",
+        "232156116"
+      ]
+    },
+    {
+      "id": "boss-encounters",
+      "label": "Named bosses and their patterns",
+      "description": "Individual boss fights as remembered encounters: Eigong above all, plus Yingzhao, Jiequan, Fuxi and Nuwa, learning a pattern over hours or days, calls to nerf or buff one, the derivations off a single move, and the death-Sol recovery inside a fight; not the parry system itself and not a general statement that the game is hard.",
+      "refines": "gameplay",
+      "evidence": [
+        "166280138",
+        "180040778",
+        "181667782",
+        "184850198",
+        "195005519",
+        "199804173",
+        "206233396",
+        "216752479",
+        "225432539",
+        "232372970"
+      ]
+    },
+    {
+      "id": "taoist-cultivation",
+      "label": "Taoist thought and Chinese myth",
+      "description": "The Taoist and mythological substance players argue with: cultivation and cyber-immortality, wu wei and non-action, whether the game calls Taoism superstition, the Houyi solar myth retold, and the arc from revenge to acceptance stated as philosophy; not the cast as characters and not general praise for the writing.",
+      "refines": "story",
+      "evidence": [
+        "166558365",
+        "167856325",
+        "168960142",
+        "192233723",
+        "195460927",
+        "196699950",
+        "217346559",
+        "232372970"
+      ]
+    },
+    {
+      "id": "named-cast",
+      "label": "The cast by name and gifts for Shuanshuan",
+      "description": "Attachment to specific characters named in the review: bringing Shuanshuan toys and wanting more trinkets to give him, missing Heng, Lady Ethereal, Jiequan, Yi as an arrogant drunk, and roll-calls of the whole cast; not the philosophy they voice and not the volume of dialogue.",
+      "refines": "story",
+      "evidence": [
+        "167128816",
+        "167701439",
+        "172335004",
+        "184481834",
+        "187998398",
+        "191866110",
+        "205948688",
+        "219331728",
+        "225570521"
+      ]
+    },
+    {
+      "id": "felinoid-cast-appeal",
+      "label": "Cat-people design and finding them attractive",
+      "description": "The Solarians as anthropomorphic cats and what players want from that: sphinx-cat and white-cat jokes, furry framing, openly fancying Jiequan or the mechanical soldiers, and requests for outfit skins; not affection for a character as a person in the story and not the art style in general.",
+      "refines": null,
+      "evidence": [
+        "166785203",
+        "169299030",
+        "171078123",
+        "172286323",
+        "180884283",
+        "184153222",
+        "190493934",
+        "203569856",
+        "226048758"
+      ]
+    },
+    {
+      "id": "hollow-knight-yardstick",
+      "label": "Measured against Hollow Knight and Silksong",
+      "description": "Reviews that name Hollow Knight or Silksong specifically: this as the metroidvania to play while Silksong does not exist, found-my-Silksong and Silksong-delay jokes, better than Hollow Knight except for the animation, and warnings that it is far more combat than exploration; not a bare statement that this is a metroidvania or a soulslike.",
+      "refines": "genre",
+      "evidence": [
+        "166722158",
+        "167860810",
+        "169708586",
+        "181907816",
+        "186034509",
+        "199804173",
+        "216752479"
+      ]
+    },
+    {
+      "id": "unskippable-dialogue",
+      "label": "Dialogue volume and unskippable cutscenes",
+      "description": "How much talking sits between the fights and whether you can get past it: interminable rambling conversations in the opening hours, cutscenes and story that cannot be skipped on a repeat run, and hating the amount of reading; not the quality of the plot or the themes it carries.",
+      "refines": "story",
+      "evidence": [
+        "181667782",
+        "198165965",
+        "210727666",
+        "220655084"
+      ]
+    },
+    {
+      "id": "map-and-traversal",
+      "label": "Map screen, fast travel and backtracking",
+      "description": "Getting around Fusang: a detailed map that will not fit on one screen, save points that cannot teleport to one another, too much re-running of old ground, and guidance so thin you do not know what you are missing; not the platforming moves themselves and not the amount of content.",
+      "refines": "gameplay",
+      "evidence": [
+        "180942961",
+        "194525737",
+        "203240735",
+        "212774827"
+      ]
+    }
+  ]
+}
