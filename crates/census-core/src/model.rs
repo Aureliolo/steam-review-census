@@ -28,31 +28,18 @@ pub const MAX_TOKENS: usize = 512;
 /// licensed and published as a single-file ONNX graph, because the tool fetches and runs the
 /// graph itself rather than shipping a Python stack to do it.
 ///
-/// A corpus records which encoder produced it and anchors record which encoder they were
-/// fitted under, so vectors from two encoders can never be silently compared. Changing this
-/// means re-embedding, which is why `census fit` can embed a reference set directly: a
-/// candidate can be measured on labelled reviews before a corpus is committed to it.
+/// A corpus records which encoder produced it, so vectors from two encoders can never be
+/// silently compared. Changing this means re-embedding.
 ///
-/// All four were measured that way on 2026-09-08, leave-one-game-out over six reference sets
-/// and 600 held-out reviews. "descriptions" is the zero-setup path with no labels at all;
-/// "unseen game" is anchors fitted on the other five games and never on the one being judged,
-/// which is the figure that decides this.
+/// These encoders no longer decide any subject. What reads a claim is the trained model in
+/// [`crate::reader`]; embeddings remain for the passes that need a vector rather than a
+/// judgement, which is deduplication and neighbour search.
 ///
-/// The fitting has moved on since, so the absolute figures below no longer match what the
-/// tool prints today. What the table is for is the comparison between the four, which was
-/// made under one configuration on one set of reviews, and every candidate was given the
-/// same one.
-///
-/// | encoder | dimensions | descriptions | unseen game | against e5-small |
-/// |---------|-----------|--------------|-------------|------------------|
-/// | e5-small | 384 | 30.0% | 46.3% | reference |
-/// | e5-base | 768 | 23.3% | 48.8% | +58 / -43, p = 0.16 |
-/// | arctic-m-v2 | 768 | 22.0% | 46.8% | worse than gte on the same reviews |
-/// | gte-base | 768 | **37.2%** | **51.8%** | **+94 / -61, p = 0.0099** |
-///
-/// gte-base wins on both, and it is the only candidate whose margin over the incumbent
-/// survives a paired test. It costs 1.5x the time and twice the storage of e5-small, which
-/// is what half a million reviews' worth of extra agreement is being bought with.
+/// All four were compared on 2026-09-08 under the prototype classifier, which has since been
+/// deleted for reasons that had nothing to do with which encoder it ran: gte-base won by 5.5
+/// points on a game it had never seen, and it is the only candidate whose margin survived a
+/// paired test. The comparison stands as a ranking of these four encoders, and the absolute
+/// figures it was made from describe a method this tool no longer uses.
 ///
 /// The e5 family remains for anyone who wants the smaller vectors or the first-party ONNX:
 /// intfloat publish their own exports, while gte-base's graph is a third-party conversion of

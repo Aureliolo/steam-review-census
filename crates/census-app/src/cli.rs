@@ -976,8 +976,8 @@ mod tests {
     #[test]
     fn the_flag_default_is_the_encoder_the_library_would_have_picked() {
         // Two defaults that must agree: what `--model` falls back to, and what a corpus is
-        // embedded with when nothing says otherwise. Drift between them would classify a
-        // corpus with anchors from another encoder, which is refused, loudly, much later.
+        // embedded with when nothing says otherwise. Drift between them would leave a corpus
+        // holding vectors from an encoder nothing else expects, which is refused much later.
         let parsed = Cli::parse_from(["census", "embed", "1"]);
         let Command::Embed { model, .. } = parsed.command else {
             panic!("embed did not parse as embed");
