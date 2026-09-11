@@ -74,7 +74,7 @@ State means: **done** is built and in use; **partial** is built for one case and
 | Decided | State |
 |---|---|
 | Claims labelled by Fable 5.1 agents, one game each, shown the text alone | done for 25 of 36 games, one labeller at a time on the user's instruction |
-| **Opus spot-checks the labels** | done as a blind second reading of a tenth: 456 claims over ten games, subject kappa 0.85 |
+| **Opus spot-checks the labels** | done as a blind second reading of a tenth: 1,029 claims over twenty-three games, subject kappa 0.85 |
 | Roughly 400 labels to start | 12,991 claims and counting, target 20,000 |
 | 30 to 35 mid-size games, mixed sentiment, small corpora acceptable | done, 36 games drawn |
 | Stratified subset trains, random subset measures, and the two are never merged | superseded at claim level: **whole games** are held out and the frozen ones choose nothing. A game's role is fixed by a hash of its own id, so adding games moves none; over the 36 drawn that is 8 frozen (214490, 620980, 774361, 1057090, 1274570, 1466860, 1809540, 2881650), 4 validation (275850, 1295660, 1465360, 1601580), 24 train. The earlier shuffle reassigned every role on every run, which was found when fifteen games froze a different pair from eleven |
@@ -166,6 +166,15 @@ So a contested rate is a fact about a labeller as much as about a game, and the 
 rather than comparing it across games as though it were the same measure. The per-field
 figures are what `census compare-labels` prints, and the contested check runs every time.
 
+At twenty-three games read twice, **1,029 claims**, every figure held: subject 86.7% at kappa
+**0.85**, polarity 92.6% at 0.89, contested 70.9% at **0.42** with the first labeller flagging
+30% and the second 50%. On the 468 claims neither flagged they agree on the subject 99.4% of
+the time, and on the 561 either flagged, 76.1%. Their commonest disagreement is now
+`difficulty` against `gameplay`, twenty claims of it, ahead of `genre` against `verdict` (11)
+and `atmosphere` against `verdict` (8); every one of them is a boundary `reference/GAPS.md`
+already holds wording for. Two labellers, thirteen new games, and the same numbers to a point:
+that is a silver standard behaving like one.
+
 Then the backbone was put to the bake-off it was always going to face, on sixteen games and
 8,608 claims, every candidate on the same split and schedule, judged on the validation games
 only so the frozen ones stay unread by the thing choosing:
@@ -204,7 +213,20 @@ Then twenty-three games, 12,011 claims, five frozen (214490 joined them), 2,495 
 | Does the tool agree? | 1,070 answered at 0.807 across the five corpora, one claim from training's 1,071 at 0.808, which is the half-precision tie again |
 | Per game? | 76.3% on 1466860 to 87.0% on 1057090; declined 47% to 63% of labelled claims, and 57% is now the usual figure the reader carries |
 
-Five games earlier it answered 37%; the labels are still what moves it.
+Then twenty-seven games, 14,163 claims, six frozen (2881650 joined them), 2,797 frozen claims,
+and this is the installed reader:
+
+| Question | Answer |
+|---|---|
+| How much does it answer, and how well? | **47% of claims at 0.798**, 1,315 claims, at a threshold of 0.77 chosen on the validation games |
+| How good is it on a game it has never seen? | Accuracy 0.601, macro F1 0.487 over the six, polarity F1 0.766, calibration error 0.109, AURC **0.210** |
+| Does the tool agree? | 1,218 answered at 0.804 over the 2,614 labels it could join. Not to the claim this time, and why is below |
+| Per game? | 71.6% on 1274570 to 87.6% on 1057090; declined 42% to 59% of labelled claims, and 53% is now the usual figure the reader carries |
+
+Nine games earlier it answered 37%; the labels are still what moves it. Coverage rose four
+points and agreement fell one, which is the threshold moving down the same risk-coverage curve
+rather than a better or worse model: AURC, the figure that does not depend on where the
+threshold sits, improved from 0.217 to 0.210.
 
 ### The splitter changed under the labels, and the labels held
 
@@ -237,13 +259,22 @@ window, with the counts themselves left standing, until the game is read again. 
 the measure would have joined a stale reading silently and reported a number that was wrong
 by however many indexes had shifted, which is how it was first run and why the guard exists.
 
-The chain was first verified end to end at eleven games, and is re-verified at every wave.
+The chain was first verified end to end at eleven games and re-verified at every wave since.
 Training measures the frozen games in Python, on the full-precision weights, from the claim
 text as labelled. The tool measures them in Rust, on the half-precision ONNX graph, over a
 corpus it split itself and joined back to the labels by review id and the span each label
 names. At eleven games the two agreed on **221 claims answered and 0.620 agreement**, to the
-claim. That is the splitter, the export, the join and the reader all reproducing one number,
-which is the only way to know that none of them is quietly wrong.
+claim; at twenty-three, on 1,070 against 1,071 at 0.807 against 0.808. That is the splitter,
+the export, the join and the reader all reproducing one number, which is the only way to know
+that none of them is quietly wrong.
+
+At twenty-seven it is 1,218 at 0.804 against 1,315 at 0.798, and the gap is the splitter
+rather than a fault: training reads the claim text as the labeller was shown it, cut by
+`claims-3`, while the tool reads the corpus as `claims-4` cuts it, and 183 of the 2,797
+labelled claims name spans it no longer cuts. Every figure the model card quotes still comes
+from training on the labelled text, which is the measurement that does not depend on the
+splitter at all. The two come back into exact agreement when the sets are redrawn under
+`claims-4` for `core-6`, and until then the difference is reported rather than smoothed.
 
 So the model card and every report now quote the **frozen** games, never the validation ones.
 A card is read by somebody deciding whether to run this on a game of their own, and the

@@ -8,9 +8,10 @@ after the 36-game run is labelled and measured, and the sets are redrawn against
 Ordered by how many labellers reported the same thing without being able to see each other's
 work, which is the only evidence any of it has. The second reading adds a different kind of
 evidence: where two labellers given the same sheet disagree on the subject, the sheet is what
-failed. Their commonest disagreements, over 456 claims read twice, were `genre` against
-`verdict` (8), `gameplay` against `genre` (5), `content` against `gameplay` (4), `updates`
-against `verdict` (4) and `atmosphere` against `verdict` (3). Every one of those is below.
+failed. Their commonest disagreements, over 1,029 claims read twice across twenty-three games,
+are `difficulty` against `gameplay` (20), `genre` against `verdict` (11), `atmosphere` against
+`verdict` (8), `gameplay` against `genre` (6), and `updates`, `content` and `gameplay` each
+against `verdict` (6, 6, 5). Every one of those is below.
 
 ## Defects in the sheet, to fix in the next revision
 
@@ -99,13 +100,19 @@ and marked most of them contested. A RULE on `updates` would settle it: a compla
 a patch changed is about the change (`difficulty`, `gameplay`, `content`); `updates` is for
 the patching itself, its pace, and whether the developers listen.
 
-### The alien that cannot be fought, and other enemies: two reports
+### The alien that cannot be fought, and the commonest disagreement between labellers
 
 "You can't fight back", the alien's AI on 214490, parry windows, enemy spam and damage
 sponges on 1809540: `gameplay` against `difficulty` every time, and the sheet's `difficulty`
 rule ("how hard, and whether it is fair") does not say whether an enemy's behaviour is a
 mechanic or a difficulty. One line would: an enemy's design is `gameplay`; how hard it is to
 beat is `difficulty`.
+
+This is now the largest gap the second reading finds: **20 of the 137 subject disagreements**
+over 1,029 claims read twice, ahead of every other pair, and it appears in five games rather
+than one. Skullgirls mixups, Nine Sols boss readability and Frostpunk 2 faction exploits are
+all the same shape: a mechanic described through how hard it makes the game. The rule above
+settles each of them, and it is the first line `core-6` should carry.
 
 ### Faithful to the film: one report, a third of that game's contested claims
 
