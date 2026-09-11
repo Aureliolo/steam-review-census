@@ -663,4 +663,6 @@ Built since this list was first written: the report page on readings, the polari
 corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
 words that stand out on each side of a subject, the paragraph, the bake-off, the timeline,
 languages and induced subjects in the window, the sweep, the language switch, `claims-4` and
-the span join that let it ship mid-run.
+the span join that let it ship mid-run, the adjudication page and the ingest behind it, the
+frontier comparison, the configuration sweep and the tool that reads it (`training/sweep.py`),
+and the teaching draw.
