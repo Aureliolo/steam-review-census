@@ -158,6 +158,16 @@ const PROBE = `(function () {
   check('the progress bar never moves',
     parseFloat(document.querySelector('.progress i').style.width) > 0);
 
+  // A reader who opens the sheet to settle a boundary must not have it shut on them by the
+  // act of answering, which is the one moment they were reading it for.
+  var sheet = document.querySelector('details.sheet');
+  sheet.open = true;
+  sheet.dispatchEvent(new Event('toggle'));
+  document.querySelector('button.pick').click();
+  document.querySelector('button.tone[data-tone="neutral"]').click();
+  check('the category sheet shuts itself when a claim is answered',
+    document.querySelector('details.sheet').open === true);
+
   return wrong;
 })()`;
 

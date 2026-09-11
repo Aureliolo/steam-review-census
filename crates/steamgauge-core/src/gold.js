@@ -82,6 +82,10 @@
     );
   }
 
+  // The page redraws itself on every answer, so anything the reader opened has to be put back
+  // or the sheet slams shut the moment they use it.
+  var sheetOpen = false;
+
   function render() {
     if (at >= questions.length) return renderDone();
     var question = questions[at];
@@ -193,7 +197,11 @@
         "Your answers are kept in this browser as you go.</p>"
     );
 
-    html.push('<details class="sheet"><summary>The category sheet</summary><dl>');
+    html.push(
+      '<details class="sheet"' +
+        (sheetOpen ? " open" : "") +
+        "><summary>The category sheet</summary><dl>"
+    );
     categories.forEach(function (category) {
       html.push("<dt>" + escape(category.label) + " <kbd>" + escape(keys[category.id]) + "</kbd></dt>");
       html.push("<dd>" + escape(category.description || "") + "</dd>");
@@ -262,6 +270,12 @@
     if (unsure) unsure.onclick = function () { set(question, "unsure", !mine.unsure); };
     var out = document.getElementById("export");
     if (out) out.onclick = exportAnswers;
+    var sheet = app.querySelector("details.sheet");
+    if (sheet) {
+      sheet.ontoggle = function () {
+        sheetOpen = sheet.open;
+      };
+    }
   }
 
   function exportAnswers() {
