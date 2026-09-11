@@ -1144,7 +1144,7 @@ fn verdict_cell(out: &mut String, category: &SubjectCount, baseline: Option<f64>
         );
         return;
     };
-    let spread = crate::evaluate::wilson(category.positive_mentions, category.mention_reviews);
+    let spread = crate::measure::wilson(category.positive_mentions, category.mention_reviews);
     let tone = match (baseline, spread) {
         (Some(baseline), Some((low, _))) if low > baseline => " warmer",
         (Some(baseline), Some((_, high))) if high < baseline => " colder",

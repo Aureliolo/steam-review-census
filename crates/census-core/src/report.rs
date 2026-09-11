@@ -474,7 +474,7 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
         .filter(|claim| top_ids.contains(&claim.review_id))
         .filter_map(quote)
         .collect();
-    top.sort_by(|a, b| b.review.votes_up.cmp(&a.review.votes_up));
+    top.sort_by_key(|example| std::cmp::Reverse(example.review.votes_up));
     top.dedup_by(|a, b| a.review.id == b.review.id);
 
     let agreement = agreement_for(app_id, &options.out_dir);
@@ -531,7 +531,7 @@ fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String,
             };
             if let Some(keep) = per_subject.get_mut(subject) {
                 keep.offer(
-                    crate::sample::rank(options.seed, "report", &format!("{id}:{index}")),
+                    crate::bounded::rank(options.seed, "report", &format!("{id}:{index}")),
                     DrawnClaim {
                         review_id: id.to_owned(),
                         index,

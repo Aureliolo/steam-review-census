@@ -476,10 +476,10 @@ fn count_reviews(
         }
         for (index, claim) in crate::claims::split(text).into_iter().enumerate() {
             let reading = answers.get(&crate::embed::sha256_bytes(&claim));
-            if let Some(reading) = reading {
-                if let Some(subject) = reading.subject {
-                    tallies[subject].claims += 1;
-                }
+            if let Some(reading) = reading
+                && let Some(subject) = reading.subject
+            {
+                tallies[subject].claims += 1;
             }
             rows.push(&row.recommendationid, index, reading);
         }

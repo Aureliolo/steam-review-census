@@ -15,11 +15,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-use census_core::{
-    ClassifyOptions,
-    anchors::{Anchor, Anchors, FitParams},
-    taxonomy::{CORE_SPINE, CORE_SPINE_VERSION},
-};
+use census_core::taxonomy::{CORE_SPINE, CORE_SPINE_VERSION};
 use parquet::arrow::ArrowWriter;
 
 /// One axis per category, so a review's nearest anchor is the one this test names and not
@@ -244,31 +240,109 @@ fn sha256_hex(text: &str) -> String {
         })
 }
 
-fn write_anchors(path: &Path) {
-    let anchors = Anchors {
-        spine_version: CORE_SPINE_VERSION.to_owned(),
-        model: MODEL.to_owned(),
-        fitted_from: vec![1],
-        params: Some(FitParams {
-            smoothing: 8.0,
-            secondary_weight: 0.5,
-            mention_margin: 0.05,
-            scoring: census_core::anchors::Scoring::Raw,
-        }),
-        centre: None,
-        categories: CORE_SPINE
-            .iter()
-            .enumerate()
-            .map(|(slot, category)| Anchor {
-                id: category.id.to_owned(),
-                evidence: 1.0,
-                learned_share: 0.5,
-                bias: 0.0,
-                vector: vector(slot),
+/// The readings a model would have produced, written by hand.
+///
+/// Every review here makes one claim, which is the only shape that lets a test assert exact
+/// counts without also asserting how the splitter happens to cut prose today. The point of
+/// this file is the join between the stages, not the arithmetic inside any one of them.
+fn write_readings(snapshot: &Path) {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("recommendationid", DataType::Utf8, false),
+        Field::new("claim_index", DataType::UInt16, false),
+        Field::new("subject", DataType::Utf8, true),
+        Field::new("confidence", DataType::Float32, false),
+        Field::new("polarity", DataType::Utf8, false),
+    ]));
+
+    let mut ids = StringBuilder::new();
+    let mut indexes = arrow::array::UInt16Builder::new();
+    let mut subjects = StringBuilder::new();
+    let mut confidences = Float32Builder::new();
+    let mut polarities = StringBuilder::new();
+
+    let mut counted = 0_u64;
+    let mut positive = 0_u64;
+    let mut per_subject = vec![0_u64; CORE_SPINE.len()];
+    let mut top = seeds();
+    top.sort_by_key(|seed| std::cmp::Reverse(seed.votes_up));
+    let loudest: Vec<&str> = top.iter().take(2).map(|seed| seed.id).collect();
+    let mut top_per_subject = vec![0_u64; CORE_SPINE.len()];
+
+    for seed in seeds() {
+        if seed.text.trim().is_empty() {
+            continue;
+        }
+        counted += 1;
+        positive += u64::from(seed.voted_up);
+        per_subject[seed.category] += 1;
+        if loudest.contains(&seed.id) {
+            top_per_subject[seed.category] += 1;
+        }
+        ids.append_value(seed.id);
+        indexes.append_value(0);
+        subjects.append_value(CORE_SPINE[seed.category].id);
+        confidences.append_value(0.9);
+        polarities.append_value(if seed.voted_up { "praise" } else { "complaint" });
+    }
+
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            Arc::new(ids.finish()),
+            Arc::new(indexes.finish()),
+            Arc::new(subjects.finish()),
+            Arc::new(confidences.finish()),
+            Arc::new(polarities.finish()),
+        ],
+    )
+    .unwrap();
+    let file = std::fs::File::create(snapshot.join("readings.parquet")).unwrap();
+    let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+
+    let subjects: Vec<serde_json::Value> = CORE_SPINE
+        .iter()
+        .enumerate()
+        .map(|(slot, category)| {
+            serde_json::json!({
+                "id": category.id,
+                "label": category.label,
+                "mention_reviews": per_subject[slot],
+                "primary_reviews": per_subject[slot],
+                "claims": per_subject[slot],
+                "praised": 0,
+                "criticised": per_subject[slot],
+                "mixed": 0,
+                "top_mention_reviews": top_per_subject[slot],
+                "positive_mentions": 0,
             })
-            .collect(),
-    };
-    anchors.save(path).unwrap();
+        })
+        .collect();
+
+    std::fs::write(
+        snapshot.join("reading.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "app_id": 1,
+            "reviews": counted,
+            "corpus_reviews": counted,
+            "language": serde_json::Value::Null,
+            "claims": counted,
+            "unclassified_claims": 0,
+            "silent_reviews": 0,
+            "positive": positive,
+            "top_helpful": 2,
+            "model": MODEL,
+            "spine_version": CORE_SPINE_VERSION,
+            "threshold": 0.5,
+            "device": "cpu",
+            "subjects": subjects,
+            "languages": [["english", 4], ["schinese", 1]],
+            "months": [],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 }
 
 /// A capture, its embeddings and an anchor set, all on disk and all real files.
@@ -296,7 +370,7 @@ fn build_corpus(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     .unwrap();
     write_capture(&snapshot);
     write_embeddings(&snapshot);
-    write_anchors(&root.join("anchors.json"));
+    write_readings(&snapshot);
     (root, snapshot)
 }
 
@@ -308,69 +382,45 @@ fn reporting(root: &Path) -> census_core::report::ReportOptions {
     }
 }
 
-fn classifying(root: &Path) -> ClassifyOptions {
-    ClassifyOptions {
-        out_dir: root.to_path_buf(),
-        mention_margin: 0.05,
-        top_helpful: 2,
-    }
-}
-
 #[test]
 fn a_capture_becomes_a_page_without_a_model_or_a_network() {
     let (root, _snapshot) = build_corpus("pipeline");
-    let anchors = Anchors::load(&root.join("anchors.json")).unwrap();
-    let options = ClassifyOptions {
-        out_dir: root.clone(),
-        mention_margin: 0.05,
-        top_helpful: 2,
-    };
-    let report = census_core::classify_corpus(&anchors, 1, &options, |_| {}).unwrap();
+
+    let rendered = census_core::report::build(&[1], &reporting(&root)).unwrap();
+    let app = &rendered.apps[0];
 
     // Six reviews in the capture. The blank one is in no rate at all, not even the
     // denominator, which is what makes the others mean what they say.
     assert_eq!(
-        report.reviews, 5,
+        app.reading.reviews, 5,
         "a review with no text is not a review here"
-    );
-    assert_eq!(report.unmatched, 0, "every text present had a vector");
-    assert_eq!(
-        report.positive, 2,
-        "the blank review must not count as positive"
     );
 
     let by_id = |id: &str| {
-        report
-            .categories
+        app.reading
+            .subjects
             .iter()
-            .find(|c| c.id == id)
-            .unwrap_or_else(|| panic!("no category {id}"))
+            .find(|s| s.id == id)
+            .unwrap_or_else(|| panic!("no subject {id}"))
     };
     assert_eq!(
-        by_id("bugs").mention_count,
+        by_id("bugs").mention_reviews,
         2,
         "the repeated text counts twice"
     );
-    assert_eq!(by_id("performance").mention_count, 1);
-    assert_eq!(by_id("verdict").mention_count, 2);
-    assert_eq!(by_id("verdict").positive_mentions, 2);
-    assert_eq!(by_id("bugs").positive_mentions, 0);
-
-    // Two languages, English first because more reviews are written in it.
-    assert_eq!(
-        report.languages,
-        vec![("english".to_owned(), 4), ("schinese".to_owned(), 1)]
-    );
+    assert_eq!(by_id("performance").mention_reviews, 1);
 
     // The top of the pile is two reviews, and the 900-vote crash report is one of them, so
     // bugs are far more of the top than of the corpus.
-    assert_eq!(report.top_helpful, 2);
-    assert!(by_id("bugs").bias_factor(report.reviews, 2).unwrap() > 1.0);
+    assert_eq!(app.reading.top_helpful, 2);
+    assert!(app.bias(by_id("bugs")).unwrap() > 1.0);
 
-    // Everything a report needs must now be on disk, written by the run above.
-    let rendered = census_core::report::build(&[1], &reporting(&root)).unwrap();
+    // The evidence has to survive the join from readings to capture: a claim is quoted by
+    // review id and claim index, and the text it names is read back out of the shards.
+    let quoted: usize = app.examples.iter().map(|(_, shown)| shown.len()).sum();
+    assert!(quoted > 0, "no claim reached the page as evidence");
+
     let page = census_core::html::render(&rendered);
-
     assert!(page.contains("Test Game"), "the game's name is missing");
     assert!(
         page.contains("crashes on launch"),
@@ -387,23 +437,21 @@ fn a_capture_becomes_a_page_without_a_model_or_a_network() {
 
 #[test]
 fn counts_the_corpus_no_longer_supports_are_refused_rather_than_drawn() {
-    // Re-embedding without classifying again leaves counts describing vectors that are gone.
-    // They would render perfectly and every one of them would be wrong.
+    // A reading made against another taxonomy counts subjects this build does not have. It
+    // would render perfectly and every number in it would be about something else.
     let (root, snapshot) = build_corpus("stale");
-    let anchors = Anchors::load(&root.join("anchors.json")).unwrap();
-    census_core::classify_corpus(&anchors, 1, &classifying(&root), |_| {}).unwrap();
 
-    let sidecar = snapshot.join("classification.json");
+    let sidecar = snapshot.join("reading.json");
     let mut stored: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
-    stored["model"] = serde_json::Value::String("some-other-encoder".to_owned());
+    stored["spine_version"] = serde_json::Value::String("core-1".to_owned());
     std::fs::write(&sidecar, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
 
     let message = census_core::report::build(&[1], &reporting(&root))
-        .expect_err("a stale classification must not render")
+        .expect_err("a reading against another taxonomy must not render")
         .to_string();
     assert!(
-        message.contains("embedding model"),
+        message.contains("taxonomy"),
         "the refusal should name what disagrees, got: {message}"
     );
 

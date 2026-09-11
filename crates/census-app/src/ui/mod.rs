@@ -110,7 +110,7 @@ fn shelf(dir: &Path) -> Shelf {
             });
         }
     }
-    games.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    games.sort_by_key(|game| game.name.to_lowercase());
     Shelf {
         path: dir.display().to_string(),
         games,
@@ -182,153 +182,6 @@ async fn crawl(app: AppHandle, app_id: u32) -> Result<Shelf, String> {
     .await
     .map_err(text)?;
     Ok(shelf(&out_dir))
-}
-
-/// One category, counted.
-#[derive(Debug, Clone, Serialize)]
-struct Topic {
-    id: String,
-    label: String,
-    mentions: u64,
-    primary: u64,
-    rate: Option<f64>,
-    top_rate: Option<f64>,
-    bias: Option<f64>,
-    positive: Option<f64>,
-}
-
-/// What a game's corpus says, as the window draws it.
-#[derive(Debug, Clone, Serialize)]
-struct Analysis {
-    app_id: u32,
-    name: String,
-    reviews: u64,
-    top_of_the_pile: u64,
-    positive_baseline: Option<f64>,
-    topics: Vec<Topic>,
-}
-
-#[tauri::command]
-fn analysis(app: AppHandle, app_id: u32) -> Result<Analysis, String> {
-    let options = report::ReportOptions {
-        out_dir: library_dir(&app),
-        ..report::ReportOptions::default()
-    };
-    let built = report::build(&[app_id], &options).map_err(text)?;
-    let one = built
-        .apps
-        .first()
-        .ok_or_else(|| "that game has not been counted yet".to_owned())?;
-
-    let topics = one
-        .classification
-        .categories
-        .iter()
-        .map(|category| Topic {
-            id: category.id.clone(),
-            label: category.label.clone(),
-            mentions: category.mention_count,
-            primary: category.primary_count,
-            rate: one.rate(category.mention_count),
-            top_rate: one.top_rate(category.top_mention_count),
-            bias: one.bias(category),
-            positive: category.positive_share(),
-        })
-        .collect();
-
-    Ok(Analysis {
-        app_id,
-        name: one.crawl.title(),
-        reviews: one.classification.reviews,
-        top_of_the_pile: one.classification.top_helpful,
-        positive_baseline: one.positive_baseline(),
-        topics,
-    })
-}
-
-/// One review, as evidence for a number.
-#[derive(Debug, Clone, Serialize)]
-struct Quote {
-    id: String,
-    text: String,
-    language: String,
-    voted_up: bool,
-    votes_up: u32,
-    created: i64,
-    url: Option<String>,
-    primary: String,
-    mentions: Vec<String>,
-}
-
-/// A window onto the reviews behind one figure.
-#[derive(Debug, Clone, Serialize)]
-struct Behind {
-    category: String,
-    total: u64,
-    from: usize,
-    quotes: Vec<Quote>,
-}
-
-/// Every review filed under a category, a page at a time.
-///
-/// This is what separates a rate from an assertion: the number on screen is a count of these,
-/// and there is no figure anywhere in the window that cannot be opened into the reviews it
-/// was counted from.
-#[tauri::command]
-fn behind(app: AppHandle, app_id: u32, category: String, from: usize, count: usize) -> Result<Behind, String> {
-    let dir = library_dir(&app);
-    let snapshot = embed::latest_snapshot(&dir, app_id).map_err(text)?;
-
-    let mut total: u64 = 0;
-    let mut filed: Vec<(String, String, Vec<String>)> = Vec::new();
-    census_core::evaluate::for_each_assignment(
-        &snapshot.join("classifications.parquet"),
-        |id, primary, mentions| {
-            if primary != category && !mentions.iter().any(|named| named == &category) {
-                return;
-            }
-            total += 1;
-            if total as usize > from && filed.len() < count {
-                filed.push((id.to_owned(), primary.to_owned(), mentions.to_vec()));
-            }
-        },
-    )
-    .map_err(text)?;
-
-    let wanted: std::collections::HashSet<String> =
-        filed.iter().map(|(id, _, _)| id.clone()).collect();
-    let mut fetched = census_core::capture::reviews_for(&snapshot, &wanted).map_err(text)?;
-
-    let quotes = filed
-        .into_iter()
-        .filter_map(|(id, primary, mentions)| {
-            let review = fetched.remove(&id)?;
-            let url = (!review.author_steamid.is_empty()).then(|| {
-                format!(
-                    "https://steamcommunity.com/profiles/{}/recommended/{app_id}/",
-                    review.author_steamid
-                )
-            });
-            Some(Quote {
-                id,
-                text: review.text,
-                language: review.language,
-                voted_up: review.voted_up,
-                votes_up: review.votes_up,
-                created: review.created,
-                url,
-                primary,
-                mentions,
-            })
-        })
-        .collect();
-
-    Ok(Behind {
-        category,
-        total,
-        from,
-        quotes,
-    })
 }
 
 /// How far a reading has got, as the window draws it.
@@ -516,7 +369,7 @@ fn claims_behind(
                 return;
             }
             total += 1;
-            if total as usize > from && wanted.len() < count {
+            if total > from as u64 && wanted.len() < count {
                 wanted.push((id.to_owned(), index, polarity.to_owned(), confidence));
             }
         },
@@ -569,7 +422,7 @@ fn claims_behind(
 /// # Errors
 ///
 /// Fails if the webview cannot be created, which on Linux means the system webview is
-/// missing and on Windows means WebView2 is not installed.
+/// missing and on Windows means `WebView2` is not installed.
 pub fn run() -> anyhow::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -577,8 +430,6 @@ pub fn run() -> anyhow::Result<()> {
             library,
             look_up,
             crawl,
-            analysis,
-            behind,
             reading,
             claims_behind,
             read_game

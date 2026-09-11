@@ -99,13 +99,15 @@ pub struct ClaimReader {
     device: &'static str,
 }
 
+/// Written by hand because the session and the tokenizer hold megabytes each, and a debug
+/// line that prints a model is not a debug line anyone reads.
 impl std::fmt::Debug for ClaimReader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClaimReader")
             .field("device", &self.device)
             .field("subjects", &self.provenance.subjects.len())
             .field("threshold", &self.provenance.threshold)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

@@ -119,7 +119,7 @@ pub fn draw(
             subset: "random".to_owned(),
             claims,
         };
-        let key = crate::sample::rank(seed, "claims", id);
+        let key = crate::bounded::rank(seed, "claims", id);
         if language == "english" {
             english.offer(key, drawn);
         } else {

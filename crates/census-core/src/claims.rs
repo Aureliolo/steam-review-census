@@ -97,17 +97,17 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
     let mut chars = text.char_indices().peekable();
 
     while let Some((at, ch)) = chars.next() {
-        if ch == '[' {
-            if let Some((after, kind)) = markup_at(text, at) {
-                while chars.peek().is_some_and(|(next, _)| *next < after) {
-                    chars.next();
-                }
-                if kind == Markup::Break && !text[start..at].trim().is_empty() {
-                    pieces.push((start, at));
-                    start = at;
-                }
-                continue;
+        if ch == '['
+            && let Some((after, kind)) = markup_at(text, at)
+        {
+            while chars.peek().is_some_and(|(next, _)| *next < after) {
+                chars.next();
             }
+            if kind == Markup::Break && !text[start..at].trim().is_empty() {
+                pieces.push((start, at));
+                start = at;
+            }
+            continue;
         }
         if let Some(open) = quote_state(ch, quoted) {
             quoted = open;
@@ -122,9 +122,7 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
         // in half leaves two fragments that mean nothing apart.
         let ends = if ch == '\n' {
             true
-        } else if quoted || open_brackets > 0 {
-            false
-        } else if inside_a_link(text, at) {
+        } else if quoted || open_brackets > 0 || inside_a_link(text, at) {
             false
         } else if ch == '.' {
             // The only ambiguous terminator. Every other one in TERMINATORS ends a thought
@@ -134,10 +132,8 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
                 && !continues_a_number(text, at)
                 && !abbreviates(text, at)
                 && !continues_a_word(text, at + ch.len_utf8())
-        } else if TERMINATORS.contains(&ch) {
-            true
         } else {
-            false
+            TERMINATORS.contains(&ch)
         };
 
         if !ends {
@@ -203,9 +199,9 @@ const BREAKING_TAGS: [&str; 12] = [
 
 /// Recognises Steam's markup at `at`, returning where it ends and what it does.
 ///
-/// Reviews are written with BBCode and the tags are not what anybody said. Left in, `[h3]`
+/// Reviews are written with `BBCode` and the tags are not what anybody said. Left in, `[h3]`
 /// and `[/list]` are tokens the model sees in every category and learns nothing from, and a
-/// labeller was handed `[h3] ... [/h3]` as though it were a claim.
+/// labeller was handed a heading tag and its closing tag as though they were a claim.
 fn markup_at(text: &str, at: usize) -> Option<(usize, Markup)> {
     const LONGEST_TAG: usize = 200;
 
@@ -248,11 +244,11 @@ fn without_markup(piece: &str) -> String {
     let mut at = 0;
     while at < piece.len() {
         let ch = piece[at..].chars().next().unwrap_or('\0');
-        if ch == '[' {
-            if let Some((after, _)) = markup_at(piece, at) {
-                at = after;
-                continue;
-            }
+        if ch == '['
+            && let Some((after, _)) = markup_at(piece, at)
+        {
+            at = after;
+            continue;
         }
         clean.push(ch);
         at += ch.len_utf8();

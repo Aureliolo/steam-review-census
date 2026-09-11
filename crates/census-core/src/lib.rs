@@ -2,16 +2,13 @@
 //!
 //! Nothing here is stable yet. See the repository README for what is being built.
 
-pub mod anchors;
 pub mod api;
 mod bounded;
 pub mod capture;
 pub mod claims;
 pub mod claimset;
-pub mod classify;
 pub mod crawl;
 pub mod embed;
-pub mod evaluate;
 pub mod html;
 pub mod measure;
 pub mod model;
@@ -19,22 +16,20 @@ pub mod query;
 pub mod read;
 pub mod reader;
 pub mod report;
-pub mod sample;
 pub mod shard;
 pub mod state;
 pub mod taxonomy;
 pub mod time;
 
-pub use anchors::{Anchors, FitOutcome, FitParams};
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};
 pub use capture::CaptureWriter;
-pub use classify::{CategoryStats, ClassifyOptions, ClassifyReport, classify_corpus};
 pub use crawl::{CrawlOptions, CrawlReport, Progress, StopReason, crawl};
 pub use embed::{DEFAULT_BATCH_SIZE, EmbedReport, Embedder, embed_corpus};
-pub use evaluate::{AgreementReport, ReferenceSet, Slice, compare};
+pub use measure::{ClaimAgreement, SubjectAgreement, agreement};
 pub use model::{Encoder, Precision};
 pub use query::{ReviewQuery, SortOrder};
-pub use sample::{SampleOptions, SampleReport, SampledReview};
+pub use read::{ReadOptions, ReadReport, read_corpus};
+pub use reader::ClaimReader;
 pub use shard::{DEFAULT_SHARD_TARGET, Shard};
 pub use state::CrawlState;
 pub use taxonomy::{CORE_SPINE, CORE_SPINE_VERSION, Category};
@@ -76,38 +71,32 @@ pub enum Error {
     #[error("no embeddings found at {path}; run `census embed` first")]
     NoEmbeddings { path: std::path::PathBuf },
 
-    #[error("no classifications found at {path}; run `census classify` first")]
+    #[error("no readings found at {path}; run `census read` first")]
     NoClassifications { path: std::path::PathBuf },
 
-    #[error("no reference set at {path}; run `census sample` then `census ingest` first")]
+    #[error("no reference set at {path}; run `census sample-claims` then `census ingest-claims`")]
     NoReferenceSet { path: std::path::PathBuf },
 
-    #[error("no fitted anchors at {path}; run `census fit` first")]
+    #[error("no claim reader at {path}; train one or fetch the published model")]
     NoAnchors { path: std::path::PathBuf },
 
     /// Written by a build that recorded less about a run than this one reads back. The
-    /// assignments inside predate whatever is missing, so they are refused rather than
+    /// readings inside predate whatever is missing, so they are refused rather than
     /// partially interpreted.
-    #[error(
-        "{path} was written by an older build and is missing {field}; re-run `census classify`"
-    )]
+    #[error("{path} was written by an older build and is missing {field}; re-run `census read`")]
     StaleClassifications {
         path: std::path::PathBuf,
         field: &'static str,
     },
 
-    /// Anchors fitted against a different taxonomy or embedding model would shift every
-    /// category boundary without anything appearing to go wrong, so they are refused.
-    #[error("anchors were fitted for a different {field}: expected {expected}, got {actual}")]
+    /// A model trained against a different taxonomy would move every subject boundary without
+    /// anything appearing to go wrong, so it is refused.
+    #[error("this was produced for a different {field}: expected {expected}, got {actual}")]
     StaleAnchors {
         field: &'static str,
         expected: String,
         actual: String,
     },
-
-    /// Fitting needs the labelled reviews to be present in the corpus that was embedded.
-    #[error("no reference label matched the embedded corpus; re-crawl app {app_id} first")]
-    NoTrainingExamples { app_id: u32 },
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),

@@ -348,94 +348,6 @@ function drawClaims(claims) {
 
 let reading = null;
 
-async function openBehind(topic, from) {
-  reading = { topic, from };
-  show('evidence');
-  set(el('evidence-name'), topic.label);
-  set(el('evidence-lede'), 'Finding them...');
-  el('quotes').replaceChildren();
-  el('earlier').disabled = true;
-  el('later').disabled = true;
-
-  let page;
-  try {
-    page = await invoke('behind', {
-      appId: chosen,
-      category: topic.id,
-      from,
-      count: PER_PAGE,
-    });
-  } catch (failure) {
-    set(el('evidence-lede'), String(failure));
-    return;
-  }
-  if (reading?.topic.id !== topic.id || reading.from !== from) return;
-
-  set(
-    el('evidence-lede'),
-    `${whole.format(page.total)} reviews raise this, ${
-      topic.rate === null ? '' : `${share.format(topic.rate)} of the corpus, `
-    }shown in the order they were written.`,
-  );
-  drawQuotes(page.quotes);
-
-  const upTo = from + page.quotes.length;
-  set(el('paging-note'), `${whole.format(from + 1)} to ${whole.format(upTo)}`);
-  el('earlier').disabled = from === 0;
-  el('later').disabled = upTo >= page.total;
-}
-
-function drawQuotes(quotes) {
-  const list = el('quotes');
-  list.replaceChildren();
-  for (const quote of quotes) {
-    const item = document.createElement('li');
-
-    const body = document.createElement('p');
-    body.textContent = quote.text;
-    body.lang = bcp47(quote.language);
-
-    const byline = document.createElement('div');
-    byline.className = 'byline';
-
-    const verdict = document.createElement('span');
-    verdict.className = quote.voted_up ? 'verdict-up' : 'verdict-down';
-    verdict.textContent = quote.voted_up ? 'Recommended' : 'Not recommended';
-    byline.append(verdict);
-
-    if (quote.votes_up > 0) {
-      const votes = document.createElement('span');
-      votes.textContent = `${whole.format(quote.votes_up)} found this helpful`;
-      byline.append(votes);
-    }
-
-    const when = document.createElement('span');
-    when.textContent = day.format(new Date(quote.created * 1000));
-    byline.append(when);
-
-    for (const mention of quote.mentions) {
-      const tag = document.createElement('span');
-      tag.className = 'tag';
-      tag.textContent = mention;
-      byline.append(tag);
-    }
-
-    if (quote.url) {
-      const link = document.createElement('a');
-      link.href = '#';
-      link.textContent = 'On Steam';
-      link.addEventListener('click', (event) => {
-        event.preventDefault();
-        openOutside(quote.url);
-      });
-      byline.append(link);
-    }
-
-    item.append(body, byline);
-    list.append(item);
-  }
-}
-
 /* Steam's language codes are its own; the ones a browser needs for hyphenation and font
    selection are not, and getting this wrong renders Chinese in a Japanese face. */
 function bcp47(steam) {
@@ -599,10 +511,10 @@ el('cancel').addEventListener('click', () => (chosen === null ? show('welcome') 
 el('back').addEventListener('click', () => choose(chosen));
 el('do-read').addEventListener('click', readGame);
 el('earlier').addEventListener('click', () => {
-  if (reading) openBehind(reading.topic, Math.max(0, reading.from - PER_PAGE));
+  if (reading) openClaims(reading.subject, Math.max(0, reading.from - PER_PAGE));
 });
 el('later').addEventListener('click', () => {
-  if (reading) openBehind(reading.topic, reading.from + PER_PAGE);
+  if (reading) openClaims(reading.subject, reading.from + PER_PAGE);
 });
 
 refresh();

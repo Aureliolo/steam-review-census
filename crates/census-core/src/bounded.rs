@@ -9,6 +9,23 @@
 //! one sort of everything, and the result is identical to sorting the corpus and taking the
 //! front of it, which is what the tests assert.
 
+/// Ranks a row deterministically for a given seed and purpose.
+///
+/// Hashing rather than shuffling means the choice depends only on the row, so a corpus that
+/// gains reviews does not renumber the ones already drawn, and two runs against the same
+/// corpus quote the same evidence. The purpose keeps two draws over the same corpus from
+/// being the same draw.
+#[must_use]
+pub(crate) fn rank(seed: u64, purpose: &str, id: &str) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(seed.to_le_bytes());
+    hasher.update(purpose.as_bytes());
+    hasher.update(id.as_bytes());
+    hasher.finalize().into()
+}
+
 /// Keeps the `limit` items with the smallest keys offered so far.
 ///
 /// Smallest rather than largest because every caller here ranks by a hash, where "smallest"
