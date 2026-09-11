@@ -253,25 +253,43 @@ These rules keep those figures honest:
   or cold only where the interval on the reviews raising it clears the game's own baseline, so
   eight reviews all recommending the game is left as the 100% it is instead of dressed as the
   finding a thousand reviews at 98% would be.
-- **Reference sets span several games.** Anchors built from one game carry that game's
-  vocabulary. Sets are labelled across games of different genres and different overall
-  sentiment, so agreement can be measured on a game the anchors were never fitted to:
-  `census fit --leave-one-out` fits on every game but one and reports the one left out, which
-  is the only figure that says whether a category travels. Numbers from a single corpus
-  describe that corpus and nothing else. It reports that figure again over the reviews the
-  labeller called clear-cut and over the ones it called contested, because those answer
-  different questions: anchors that genuinely cannot reach a game are worse where the reading
-  was easy, and a taxonomy that does not fit a game is worse only where the labeller could
-  not place the review either.
+- **Reference sets span several games, and whole games are held out.** A model trained on one
+  game carries that game's vocabulary. Sets are labelled across games of different genres and
+  different overall sentiment, and the split holds out whole games rather than whole claims,
+  so the figure says whether a subject travels rather than whether the model can repeat itself.
+  Numbers from a single corpus describe that corpus and nothing else. The same figure is
+  reported again over the claims the labeller called clear-cut and over the ones it called
+  contested, because those answer different questions: a model that genuinely cannot reach a
+  game is worse where the reading was easy, and a taxonomy that does not fit a game is worse
+  only where the labeller could not place the claim either.
 
 ## Honest limits
 
-- **Every review in a reference set is labelled once, so the set cannot say how reliable it
-  is.** Reliability of an annotation set is normally shown by having two labellers do the same
-  reviews and reporting how often they agree. Nothing here does that, so the honest position is
-  that the silver standard's own error is unknown rather than small. The cheapest fix is also
-  the one that would let the word accuracy be used at all: a person labelling a subset
-  independently, with the size of that subset recorded in the manifest.
+- **Reports default to English, so the headline is a fact about players who write English.**
+  The capture is always the whole census, every language in it, and the filter is applied when
+  the counting happens rather than when the crawling does, so the choice is reversible and no
+  corpus has to be downloaded twice. But a mention rate over English reviews is not a mention
+  rate over players: on some corpora English is under half of what was written. Every figure
+  says which set it is over, and switching the language recounts from the same capture. The
+  reason for the default is that evidence nobody can read is evidence nobody can check, and
+  being able to open a rate and read what is behind it is the whole design.
+
+- **The model declines claims it is not sure about, and those are counted rather than hidden.**
+  A claim below the threshold gets no subject and is reported as unclassified. That is a real
+  answer and an honest one, but it means a mention rate is a rate over the claims the model
+  would commit to. The share it declined is printed beside it, and a large one is a finding
+  about the corpus rather than a footnote.
+
+- **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
+  people lets whoever writes most set the numbers, which is the same distortion this tool
+  exists to expose at the top of the pile. The headline is always the share of reviews.
+
+- **A tenth of the reference set is labelled twice, and the rest is labelled once.** Reliability
+  is measured on that tenth and assumed for the rest. It is a far better position than having
+  no second reading at all, and it is not the same as a set where every label was adjudicated.
+  The silver standard's own error is estimated rather than known, and the word accuracy still
+  does not apply: the labels were written by a model, so what is measured is consistency
+  between two models.
 
 - **A labeller is not told which game it is, but is given one game at a time.** Withholding the
   game keeps the label answerable from the same text the classifier reads. Handing over a whole
