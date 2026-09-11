@@ -2074,8 +2074,8 @@ const SCRIPT: &str = include_str!("report.js");
 mod tests {
     use super::*;
 
-    fn sample_report(text: &str) -> Report {
-        let category = |id: &str, label: &str, mentions: u64, top: u64| crate::read::SubjectCount {
+    fn a_category(id: &str, label: &str, mentions: u64, top: u64) -> crate::read::SubjectCount {
+        crate::read::SubjectCount {
             id: id.to_owned(),
             label: label.to_owned(),
             primary_reviews: mentions / 2,
@@ -2086,7 +2086,11 @@ mod tests {
             mixed: mentions / 6,
             top_mention_reviews: top,
             positive_mentions: mentions / 3,
-        };
+        }
+    }
+
+    fn sample_report(text: &str) -> Report {
+        let category = a_category;
         let example = Example {
             review: crate::capture::CapturedReview {
                 id: "42".to_owned(),
