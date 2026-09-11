@@ -475,14 +475,16 @@ nothing. Two are missing, and no amount of further labelling closes either.
    export back and prints the share that matches the labeller already on record, which is the
    first figure in this project that may be called accuracy. Chrome drives the page in CI.
 
-   Only 27 splits, rather than the four hundred first estimated, because a tenth of each set is
-   read twice and only the frozen games count here: 271 claims read twice at 93.2% agreement
-   leaves 27. Splits from the other games settle boundaries just as well and measure nothing,
-   so they can be drawn separately when the boundaries are what is wanted.
-2. **A comparison against the alternatives.** Half done: the trivial baselines run over the
-   same frozen claims and the same abstention protocol, in "What it has to beat" above. What
-   is missing is a frontier model asked the same question directly, on the same claims, with
-   all the figures reported together whichever way it falls.
+   Frozen-only gives 27 splits rather than the four hundred first estimated, because a tenth
+   of each set is read twice and 271 claims at 93.2% agreement leaves 27. A disagreement
+   settles a boundary and measures nothing, so it may come from any game, and the default
+   draws from all of them: 1,000 blind and 192 split, out of 1,400 claims read twice.
+2. **A comparison against the alternatives. Done, and it does not flatter this project.**
+   Four baselines run over the same frozen claims and the same abstention protocol, in "What
+   it has to beat" above, including Claude Opus 5 asked the same question directly. It answers
+   99.6% of them at 87.0% where this reader answers 60.7% at 74.8%. The honest claim is not
+   that this beats a frontier model but that it gets most of the way there for the electricity
+   rather than for tens of thousands of dollars a game, and can say how far short it falls.
 
 Then, in order:
 
@@ -493,9 +495,11 @@ Then, in order:
 4. **Games chosen for the rows that are starved**, not more games at random. `licensing` has
    32 claims over four games, `vr` 40, `accessibility` 48, and all three score zero. A random
    game costs the same as a chosen one and buys almost none of them. Fifteen such games are
-   captured and drawn as of 2026-09-11: 14,711 claims waiting to be labelled, against the
-   18,907 the set already holds. Two VR games, two about accessibility, five licensed, and
-   four at the negative end of a distribution that was 24 Very Positive games out of 36.
+   captured and drawn as of 2026-09-11: two VR games, two about accessibility, five licensed,
+   and four at the negative end of a distribution that was 24 Very Positive games out of 36.
+   One is labelled (546560, 675 claims, 16 of them `vr`, which is 40% more `vr` than the whole
+   set held). The other fourteen are drawn and waiting: 14,036 claims against the 19,582 the
+   set holds. What stopped it was the labelling quota, not the plan.
 5. **Draw the claims the reader cannot answer, not more claims at random.** Every set so far
    is a random draw, which is what makes prevalence measurable and is the right default. But
    once a reader exists, the claims it abstains on are worth several times a random claim to
