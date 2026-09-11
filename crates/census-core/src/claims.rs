@@ -40,7 +40,27 @@ use crate::Result;
 /// list of short comma-separated points is that many points, a question keeps its short
 /// answer, a heading tag opened mid-sentence is emphasis rather than a heading, a line that
 /// ends on a comma has not finished, and an emoticon belongs to the sentence before it.
-pub const SPLITTER_VERSION: &str = "claims-4";
+/// `claims-5` is the copypasta: a ballot-box template is the boxes the reviewer ticked and
+/// not the ones they left blank, and a drawing made of punctuation is one claim rather than
+/// one per line.
+pub const SPLITTER_VERSION: &str = "claims-5";
+
+/// The marks a review template offers as options, ticked or left blank.
+///
+/// One review in seven hundred is one of these, and they hold 1.8% of every claim in the
+/// reference set: a single Deep Rock Galactic review came back as fifty-eight claims, of
+/// which fifty-three were options its author never chose.
+const BALLOT_BOXES: [char; 6] = [
+    '\u{2610}', '\u{2611}', '\u{2612}', '\u{25A1}', '\u{2713}', '\u{2714}',
+];
+
+/// The marks that count as ticked. A reviewer who fills a template in with an "x" is
+/// answering it as surely as one who has a font with a tick in it.
+const TICKED: [char; 5] = ['\u{2611}', '\u{2612}', '\u{2713}', '\u{2714}', 'x'];
+
+/// How many lines of punctuation in a row are a picture rather than a sentence. Two could be
+/// a shrug and a face; three is somebody drawing.
+const LINES_OF_A_DRAWING: usize = 3;
 
 /// The most a comma-separated part may weigh for a sentence of three or more of them to be
 /// read as a list of points. "Stunning visual, calm music, epic story" is three of weight
@@ -77,8 +97,10 @@ const TERMINATORS: [char; 9] = [
 
 /// The points a review makes, in the order it makes them.
 ///
-/// Never empty for text with any content in it: a review that terminates nothing comes back
-/// as one claim, which is the honest reading of a reviewer who wrote one long sentence.
+/// Never empty for text with a word in it: a review that terminates nothing comes back as one
+/// claim, which is the honest reading of a reviewer who wrote one long sentence. Empty for a
+/// review that is only a drawing, which is a review that says nothing rather than one whose
+/// single claim the reader has to decline.
 #[must_use]
 pub fn split(text: &str) -> Vec<std::borrow::Cow<'_, str>> {
     claims_of(text)
@@ -180,13 +202,31 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
         pieces.push((start, text.len()));
     }
 
-    join_the_fragments(text, pieces)
+    // A template has already decided what its claims are, and they are short on purpose: an
+    // answer to a heading is "Beautiful", which the fragment joiner would glue to the next
+    // answer and the list splitter would cut again.
+    let filled_in = a_template_or_a_drawing(text);
+    let pieces = filled_in.clone().unwrap_or_else(|| {
+        join_the_fragments(text, pieces)
+            .into_iter()
+            .flat_map(|piece| listed_points(text, piece))
+            .collect()
+    });
+
+    pieces
         .into_iter()
-        .flat_map(|piece| listed_points(text, piece))
         .filter_map(|(from, to)| tidied(text, from, to))
         .filter_map(|at| {
             let piece = &text[at.clone()];
             let cleaned = without_markup(piece);
+            // The span runs from the heading to the answer and passes over the options in
+            // between, which are lines the reviewer declined. They are inside it because a
+            // span is one range of bytes; they are not inside what anybody said.
+            let cleaned = if filled_in.is_some() {
+                without_the_unchosen(&cleaned)
+            } else {
+                cleaned
+            };
             let cleaned = cleaned.trim();
             if cleaned.is_empty() {
                 return None;
@@ -199,6 +239,118 @@ pub fn claims_of(text: &str) -> Vec<(std::ops::Range<usize>, std::borrow::Cow<'_
             Some((at, claim))
         })
         .collect()
+}
+
+/// Drops the lines of a template the reviewer left blank, and the rules between sections.
+fn without_the_unchosen(piece: &str) -> String {
+    piece
+        .lines()
+        .filter(|line| {
+            let bare = line.trim();
+            !bare.is_empty() && option_mark(bare) != Some(false) && !is_a_drawn_line(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Cuts a review that is a filled-in template, or a picture, into what it actually says.
+///
+/// Steam reviews are full of a copypasta: a heading, then a column of options with one
+/// ticked. Split by sentence it comes back as dozens of claims, nearly all of them options
+/// the reviewer passed over, and four labellers in a row flagged every fragment. The ticked
+/// boxes are the review; the blank ones are the ones somebody else would have ticked.
+///
+/// A drawing goes the same way: fifteen lines of braille or a hand made of brackets, cut into
+/// a claim per line, none of which is words. Recognised by what a line is made of rather than
+/// what it says, so it holds in every script.
+///
+/// `None` where the review is neither, which is all but one in seven hundred.
+fn a_template_or_a_drawing(text: &str) -> Option<Vec<(usize, usize)>> {
+    let lines: Vec<(usize, &str)> = text
+        .split_inclusive('\n')
+        .scan(0, |at, line| {
+            let start = *at;
+            *at += line.len();
+            Some((start, line))
+        })
+        .collect();
+
+    let boxed = lines
+        .iter()
+        .filter(|(_, line)| line.trim_start().starts_with(BALLOT_BOXES))
+        .count();
+    let drawn = longest_run(&lines, is_a_drawn_line);
+    if boxed < LINES_OF_A_DRAWING && drawn < LINES_OF_A_DRAWING {
+        return None;
+    }
+
+    // A heading above the options is what the ticked one is an answer to, so it stays in
+    // front of it: "{ Graphics }" and "Beautiful" are one claim about graphics.
+    let mut pieces: Vec<(usize, usize)> = Vec::new();
+    let mut held: Option<usize> = None;
+    for (at, line) in &lines {
+        let end = at + line.len();
+        let bare = line.trim();
+        match option_mark(bare) {
+            // An option nobody chose. Not a claim, and not a heading for the next one.
+            Some(false) => {}
+            Some(true) => {
+                let from = held.take().unwrap_or(*at);
+                pieces.push((from, end));
+            }
+            None => {
+                if bare.is_empty() || is_a_drawn_line(line) {
+                    continue;
+                }
+                // Anything that is not an option is a heading for the options under it,
+                // unless nothing follows, in which case it is a claim of its own.
+                held = Some(held.unwrap_or(*at));
+            }
+        }
+    }
+    if let Some(from) = held {
+        pieces.push((from, text.len()));
+    }
+    // A review that is nothing but a drawing is one claim, which the reader declines. Falling
+    // back to the sentence split here would hand back the picture a line at a time, which is
+    // the shape this exists to stop.
+    Some(if pieces.is_empty() {
+        vec![(0, text.len())]
+    } else {
+        pieces
+    })
+}
+
+/// Whether a line is one of a template's options, and whether the reviewer chose it.
+///
+/// A box is unambiguous in either state. A bare "x" is how somebody without a font full of
+/// ticks answers the same template, and it counts only where a space follows it, so "x2
+/// speed is great" stays a sentence.
+fn option_mark(bare: &str) -> Option<bool> {
+    let mut chars = bare.chars();
+    let first = chars.next()?;
+    if BALLOT_BOXES.contains(&first) {
+        return Some(TICKED.contains(&first));
+    }
+    let crossed = first == 'x' || first == 'X';
+    (crossed && chars.next().is_some_and(char::is_whitespace)).then_some(true)
+}
+
+/// Whether a line is part of a picture: it has something on it, and none of it is a letter
+/// or a digit in any script.
+fn is_a_drawn_line(line: &str) -> bool {
+    let bare = line.trim();
+    !bare.is_empty() && bare.chars().count() > 1 && !bare.chars().any(char::is_alphanumeric)
+}
+
+/// The longest run of consecutive lines the test holds for.
+fn longest_run(lines: &[(usize, &str)], test: impl Fn(&str) -> bool) -> usize {
+    let (mut longest, mut running) = (0, 0);
+    for (_, line) in lines {
+        running = if test(line) { running + 1 } else { 0 };
+        longest = longest.max(running);
+    }
+    longest
 }
 
 /// Runs a boundary that begins at `end` out over any further terminators and the whitespace
@@ -982,6 +1134,62 @@ mod tests {
         assert!(claims[0].contains("parrying"), "got {:?}", claims[0]);
         assert!(claims[1].contains("Muffled"), "got {:?}", claims[1]);
         assert!(claims.iter().all(|claim| !claim.contains("[h3]")));
+    }
+
+    /// The copypasta four labellers in a row flagged, in the shape they actually found it.
+    #[test]
+    fn a_template_is_the_boxes_the_reviewer_ticked() {
+        let claims = split(
+            "{ Graphics }\n\u{2610} You forget what reality is\n\u{2611} Beautiful\n\u{2610} Good\n\u{2610} MS-DOS\n{ Gameplay }\n\u{2610} Very good\n\u{2611} Good\n\u{2610} Mehh\n",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].contains("Graphics"), "got {:?}", claims[0]);
+        assert!(claims[0].contains("Beautiful"), "got {:?}", claims[0]);
+        assert!(
+            !claims[0].contains("MS-DOS"),
+            "an option nobody ticked is not a claim: {:?}",
+            claims[0]
+        );
+        assert!(claims[1].contains("Gameplay"), "got {:?}", claims[1]);
+    }
+
+    /// Reviewers without a font that has a tick in it type an "x". Recognising the template
+    /// is still the blank boxes' work, since nobody writes one of those by accident.
+    #[test]
+    fn a_template_filled_in_with_an_x_is_still_filled_in() {
+        let claims = split(
+            "Audience\n\u{2610} Kids\nx Everyone\n\u{2610} Veterans\nSound\n\u{2610} Tinny\nX Superb\n\u{2610} Deafening\n",
+        );
+        assert_eq!(claims.len(), 2, "got {claims:?}");
+        assert!(claims[0].contains("Everyone"), "got {:?}", claims[0]);
+        assert!(claims[1].contains("Superb"), "got {:?}", claims[1]);
+        assert!(
+            !claims.iter().any(|claim| claim.contains("Veterans")),
+            "got {claims:?}"
+        );
+    }
+
+    #[test]
+    fn a_drawing_is_one_claim_rather_than_one_per_line() {
+        let claims = split(
+            "Best game ever.\n( \u{0361}\u{00B0} \u{035C}\u{0296} \u{0361}\u{00B0})\n/|\\ /|\\\n_/ \\_\n| |\nBuy it now.",
+        );
+        assert!(claims.len() <= 2, "got {claims:?}");
+        assert!(
+            claims.iter().any(|claim| claim.contains("Best game")),
+            "got {claims:?}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_review_is_not_a_template() {
+        // Two lines of punctuation is a shrug and a face, not somebody drawing, and a review
+        // with no boxes in it must go through the ordinary path untouched.
+        let claims = split(
+            "The combat is superb.\n:)\n\u{00AF}\\_(\u{30C4})_/\u{00AF}\nThe menus are a disaster.",
+        );
+        assert!(claims.len() >= 2, "got {claims:?}");
+        assert!(claims[0].contains("combat"), "got {:?}", claims[0]);
     }
 
     #[test]
