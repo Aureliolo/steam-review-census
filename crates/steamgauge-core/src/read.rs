@@ -283,6 +283,10 @@ pub struct ReadReport {
     /// read against something.
     #[serde(default)]
     pub usual_declined: Option<f32>,
+    /// What the reader scored on games nobody involved in it had seen. Copied into the
+    /// reading so a report can say what its rates are worth without the model being present.
+    #[serde(default)]
+    pub frozen: Option<crate::reader::Frozen>,
     /// Whether each claim was read with its review around it. The same model cannot be asked
     /// both ways, so this says which question the corpus was actually asked.
     #[serde(default)]
@@ -413,6 +417,7 @@ pub fn read_corpus(
         model: model.provenance().trained_from.clone(),
         trained_on: model.provenance().data_fingerprint.clone(),
         usual_declined: model.provenance().usual_declined,
+        frozen: model.provenance().frozen,
         context,
         spine_version: model.provenance().spine_version.clone(),
         captured_unix: captured.changed_unix(),
@@ -762,6 +767,7 @@ fn count_reviews(
         model: String::new(),
         trained_on: String::new(),
         usual_declined: None,
+        frozen: None,
         context: false,
         spine_version: String::new(),
         threshold: 0.0,
@@ -1047,6 +1053,7 @@ mod tests {
             model: String::new(),
             trained_on: String::new(),
             usual_declined: Some(0.73),
+            frozen: None,
             context: false,
             spine_version: String::new(),
             threshold: 0.5,

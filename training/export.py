@@ -249,6 +249,18 @@ def main():
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
                 "usual_declined": usual_declined,
+                # What this model did on games it never saw, carried so that a report of a
+                # game with no reference set can still say what its rates are worth. Without
+                # it, the only honest thing such a report can say is nothing.
+                "frozen": {
+                    "games": len(record.get("games", {}).get("test", [])),
+                    "claims": record.get("claims", {}).get("test"),
+                    "coverage": frozen.get("coverage"),
+                    "accuracy": frozen.get("accuracy"),
+                    "macro_f1": record.get("test", {}).get("macro_f1"),
+                }
+                if frozen.get("coverage") is not None
+                else None,
             },
             indent=2,
         ),

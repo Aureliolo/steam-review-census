@@ -217,6 +217,7 @@ mod tests {
             model: String::new(),
             trained_on: String::new(),
             usual_declined: None,
+            frozen: None,
             context: false,
             spine_version: String::new(),
             threshold: 0.5,

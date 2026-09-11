@@ -89,6 +89,23 @@ pub struct Provenance {
     /// reader of one game's report can know that is if the reader carries the comparison.
     #[serde(default)]
     pub usual_declined: Option<f32>,
+    /// What this model did on the games it never saw. Carried with the graph so that a report
+    /// of a game nobody has labelled can still say what its rates are worth: without it the
+    /// only honest thing such a report could say is nothing at all.
+    #[serde(default)]
+    pub frozen: Option<Frozen>,
+}
+
+/// A model's own measurement, on games that chose nothing about it.
+#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize)]
+pub struct Frozen {
+    pub games: u32,
+    pub claims: u32,
+    /// The share of claims it answered rather than declining.
+    pub coverage: f64,
+    /// How often it was right about the ones it answered.
+    pub accuracy: f64,
+    pub macro_f1: f64,
 }
 
 /// Where the claim reader lives when nobody has said.

@@ -1760,10 +1760,7 @@ fn trust(out: &mut String, app: &AppReport) {
 
     match &app.agreement {
         crate::report::Measurement::Measured(agreement) => agreement_note(out, agreement),
-        crate::report::Measurement::Unlabelled => out.push_str(
-            "<p class=\"warn\">No claims have been labelled for this game, so how often the \
-             model is wrong here has not been measured. Treat every rate as provisional.</p>\n",
-        ),
+        crate::report::Measurement::Unlabelled => unmeasured_here(out, app),
         // Not the same thing as nobody having labelled it, and telling a reader it is sends
         // them to do work that is already done.
         crate::report::Measurement::OtherTaxonomy(version) => {
@@ -1783,6 +1780,36 @@ fn trust(out: &mut String, app: &AppReport) {
         "<p class=\"note\">These rates are a census, not a survey: every review Valve serves \
          was counted, so there is no sampling error to report. What they do carry is \
          classifier error, which is what the agreement figure above measures.</p>\n",
+    );
+}
+
+/// What to tell a reader of a game nobody has labelled.
+///
+/// Most games a person runs this on will be in exactly this position, and "not measured" on
+/// its own is both true and useless: it invites the reader either to distrust everything or to
+/// trust everything, and the model does have a measurement, taken on games it had never seen.
+/// That figure is not about this corpus and the wording must not pretend otherwise.
+fn unmeasured_here(out: &mut String, app: &AppReport) {
+    let Some(frozen) = app.reading.frozen else {
+        out.push_str(
+            "<p class=\"warn\">No claims have been labelled for this game, so how often the \
+             model is wrong here has not been measured. Treat every rate as provisional.</p>\n",
+        );
+        return;
+    };
+    let _ = writeln!(
+        out,
+        "<p class=\"warn\">No claims have been labelled for this game, so how often the model \
+         is wrong <em>here</em> has not been measured. What is measured is how it does on {} \
+         games it had never seen, over {} labelled claims: it answers {} of them and names the \
+         same subject a separate labeller did {} of the time when it does, declining the rest \
+         rather than guessing. Those labellers were themselves language models. Expect this \
+         corpus to be somewhere near that and treat every rate as provisional until this game \
+         is labelled too.</p>",
+        frozen.games,
+        thousands(u64::from(frozen.claims)),
+        percent(frozen.coverage),
+        percent(frozen.accuracy),
     );
 }
 
@@ -2113,6 +2140,13 @@ mod tests {
                     model: "test-reader".to_owned(),
                     trained_on: "0123456789abcdef".to_owned(),
                     usual_declined: Some(0.1),
+                    frozen: Some(crate::reader::Frozen {
+                        games: 8,
+                        claims: 3769,
+                        coverage: 0.577,
+                        accuracy: 0.749,
+                        macro_f1: 0.504,
+                    }),
                     context: true,
                     threshold: 0.5,
                     device: "cpu".to_owned(),

@@ -752,6 +752,7 @@ mod tests {
                 model: "test".to_owned(),
                 trained_on: String::new(),
                 usual_declined: None,
+                frozen: None,
                 context: false,
                 spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                 threshold: 0.5,
