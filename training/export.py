@@ -27,6 +27,27 @@ HERE = Path(__file__).resolve().parent
 # that a changed argmax cannot hide inside it on anything but a genuine tie.
 TOLERANCE = 2e-3
 
+# Half precision keeps about three decimal digits, so logits of this size drift by tens of
+# thousandths. The argmax check below is what actually guards the answers.
+HALF_TOLERANCE = 8e-2
+
+
+class InFullPrecisionOut(torch.nn.Module):
+    """Runs the model in half precision and hands back full-precision numbers.
+
+    The arithmetic is where the saving is; the three small vectors that come out are not. A
+    graph whose outputs are half precision forces every reader of it to know that, and the
+    tool that runs this graph should not have to care which precision it was exported at.
+    """
+
+    def __init__(self, inner: torch.nn.Module):
+        super().__init__()
+        self.inner = inner
+
+    def forward(self, input_ids, attention_mask):
+        subject, polarity, pooled = self.inner(input_ids, attention_mask)
+        return subject.float(), polarity.float(), pooled.float()
+
 
 def sample_claims(path: Path, count: int) -> list[str]:
     claims = claimdata.load(path)
@@ -41,6 +62,12 @@ def main():
     parser.add_argument("--opset", type=int, default=17)
     parser.add_argument("--check", type=int, default=256)
     parser.add_argument("--spine", default="core-4", help="the taxonomy these labels were made against")
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="export half precision: half the download, and roughly half the arithmetic over "
+        "millions of claims. Checked against the full-precision model like any other export.",
+    )
     args = parser.parse_args()
 
     run = Path(args.run)
@@ -57,9 +84,21 @@ def main():
         texts, truncation=True, max_length=record["max_length"], padding=True, return_tensors="pt"
     )
 
+    # The reference answers come from the full-precision model whatever is exported, so a
+    # half-precision graph is checked against the thing it is meant to approximate rather
+    # than against itself.
+    with torch.no_grad():
+        wanted = model(encoded["input_ids"], encoded["attention_mask"])[0].numpy()
+
+    exported = model
+    if args.fp16:
+        half = ClaimReader(record["backbone"], len(subjects))
+        half.load_state_dict(torch.load(run / "model.bin", map_location="cpu"))
+        exported = InFullPrecisionOut(half.eval().half()).eval()
+
     graph = run / "model.onnx"
     torch.onnx.export(
-        model,
+        exported,
         (encoded["input_ids"], encoded["attention_mask"]),
         graph,
         input_names=["input_ids", "attention_mask"],
@@ -72,6 +111,12 @@ def main():
             "pooled": {0: "batch"},
         },
         opset_version=args.opset,
+        # The tracing exporter rather than the dynamo one. Dynamo produces a graph full of
+        # operators ONNX Runtime's CUDA provider does not implement, so it partitions the
+        # model and copies tensors between host and device at every boundary: measured, the
+        # same weights ran at sixty claims a second on a 4090 and the card sat at a quarter
+        # busy. The traced graph is plainer and stays on the card.
+        dynamo=False,
     )
 
     # One file, not a graph plus a weights blob beside it. What ships is verified by checksum
@@ -85,10 +130,9 @@ def main():
 
     import onnxruntime
 
-    with torch.no_grad():
-        wanted = model(encoded["input_ids"], encoded["attention_mask"])[0].numpy()
-
-    session = onnxruntime.InferenceSession(str(graph), providers=["CPUExecutionProvider"])
+    # Half precision has no CPU kernels worth the name, so it is checked where it will run.
+    providers = ["CUDAExecutionProvider"] if args.fp16 else ["CPUExecutionProvider"]
+    session = onnxruntime.InferenceSession(str(graph), providers=providers)
     got = session.run(
         ["subject_logits"],
         {
@@ -97,24 +141,40 @@ def main():
         },
     )[0]
 
+    got = got.astype(np.float32)
     drift = float(np.abs(wanted - got).max())
     moved = int((wanted.argmax(axis=1) != got.argmax(axis=1)).sum())
+    # Half precision carries about three decimal digits, so the logits genuinely move. What
+    # must not move is the answer: a changed argmax is a category boundary that shifted.
+    allowed = HALF_TOLERANCE if args.fp16 else TOLERANCE
     print(f"parity: largest drift {drift:.2e} over {len(texts)} claims, {moved} answers changed")
-    if drift > TOLERANCE or moved:
+    if drift > allowed or moved:
         raise SystemExit(
             f"the exported graph disagrees with the model it came from "
-            f"({drift:.2e} > {TOLERANCE:.0e}, {moved} answers changed). Not shipping this."
+            f"({drift:.2e} > {allowed:.0e}, {moved} answers changed). Not shipping this."
         )
 
     # What the Rust side needs to use the graph without being told anything else. The
     # taxonomy version is in here so a model trained against another spine is refused rather
     # than quietly asked about categories nobody labelled.
+    # A threshold this low is not abstention, it is the nearest-match classifier this project
+    # replaced. Twenty-four subjects put a uniform guess at 0.042, so a model told to answer
+    # above 0.05 answers everything, and every claim of "unclassified" the tool makes becomes a
+    # claim it cannot keep. Refused here rather than discovered in a report.
+    threshold = record["validation"].get("threshold", 0.5)
+    floor = 2.0 / len(subjects)
+    if threshold < floor:
+        raise SystemExit(
+            f"threshold {threshold:.3f} is below {floor:.3f}, which for {len(subjects)} "
+            f"subjects is what a coin lands on. This model does not abstain. Not shipping it."
+        )
+
     (run / "reader.json").write_text(
         json.dumps(
             {
                 "spine_version": args.spine,
                 "subjects": subjects,
-                "threshold": record["validation"].get("threshold", 0.5),
+                "threshold": threshold,
                 "max_tokens": record["max_length"],
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
@@ -141,6 +201,12 @@ def main():
                 f"- Accuracy {metrics['accuracy']:.3f}, macro F1 {metrics['macro_f1']:.3f}",
                 f"- Polarity macro F1 {metrics['polarity_macro_f1']:.3f}",
                 f"- Calibration error {metrics['calibration_error']:.3f}",
+                f"- Below {threshold:.2f} confidence it says nothing, which leaves it answering "
+                f"{metrics.get('threshold_coverage', 0):.0%} of claims at "
+                f"{metrics.get('threshold_accuracy') or 0:.3f} accuracy"
+                + ("" if metrics.get("threshold_met", True) else ", short of what was asked of it"),
+                f"- Area under the risk-coverage curve {metrics.get('aurc', 0):.3f} (lower is "
+                f"better; it says whether the model knows when it does not know)",
                 f"- Trained on {record['claims']['train']} claims, validated on "
                 f"{record['claims']['validation']}, held out {record['claims']['test']}",
                 f"- Data fingerprint `{record['data_fingerprint']}`, code `{record['git_sha'][:12]}`",

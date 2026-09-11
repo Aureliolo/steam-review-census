@@ -119,8 +119,63 @@ def expected_calibration_error(confidence, correct, bins=15):
     return float(error)
 
 
+def risk_coverage(confidence, correct, min_accuracy):
+    """Where to stop answering, and the whole curve the choice was made from.
+
+    The obvious objective, accuracy times coverage, is degenerate on a model that is not yet
+    good. Coverage rises faster than accuracy falls all the way down, so the product is
+    maximised at the bottom of the sweep and the model is told to answer everything. Measured:
+    it chose 0.05, which for twenty-four subjects is barely above the 0.042 a uniform guess
+    scores, and a corpus of 17,596 claims came back with nothing declined. That is the failure
+    this model was built to end, arrived at by arithmetic instead of by cosine distance.
+
+    So the objective is the one selective prediction actually asks for: answer as much as
+    possible, on the condition that what you do answer is right at least `min_accuracy` of the
+    time. The lowest threshold meeting that condition is the most coverage available at the
+    promised quality. When no threshold meets it the model is not good enough to promise it,
+    and that is recorded rather than rounded away.
+    """
+    curve = []
+    for floor in np.arange(0.05, 0.991, 0.01):
+        sure = confidence >= floor
+        if not sure.any():
+            continue
+        curve.append(
+            {
+                "threshold": round(float(floor), 3),
+                "coverage": float(sure.mean()),
+                "accuracy": float(correct[sure].mean()),
+            }
+        )
+
+    meeting = [point for point in curve if point["accuracy"] >= min_accuracy]
+    if meeting:
+        best = max(meeting, key=lambda point: point["coverage"])
+        return curve, {**best, "met": True}
+
+    # Nothing reaches the bar. The most accurate point available is what there is, and the
+    # `met` flag is what stops it being read as though it had cleared it.
+    best = max(curve, key=lambda point: point["accuracy"]) if curve else None
+    if best is None:
+        return curve, {"threshold": 1.0, "coverage": 0.0, "accuracy": None, "met": False}
+    return curve, {**best, "met": False}
+
+
+def area_under_risk_coverage(confidence, correct):
+    """How good the confidence ordering is, without reference to any threshold.
+
+    Lower is better. A threshold is a policy; this is the property the policy is drawn from,
+    and it is what tells you whether a backbone knows when it does not know. Two models can
+    reach the same accuracy and only one of them be usable with abstention.
+    """
+    order = np.argsort(-confidence)
+    ranked = correct[order]
+    risks = [1.0 - ranked[: size + 1].mean() for size in range(len(ranked))]
+    return float(np.mean(risks)) if risks else 0.0
+
+
 @torch.no_grad()
-def evaluate(model, loader, device, subjects, claims):
+def evaluate(model, loader, device, subjects, claims, min_accuracy=0.75):
     model.eval()
     subject_logits, polarity_logits = [], []
     for batch in loader:
@@ -162,24 +217,18 @@ def evaluate(model, loader, device, subjects, claims):
             "accuracy": float(correct[sure].mean()) if sure.any() else None,
         }
 
-    # Where to stop answering. Chosen by the product of how often it answers and how often it
-    # is right when it does, because either alone has a trivial maximum: answer nothing, or
-    # answer everything. Chosen here on validation claims and never on the held-out ones,
-    # since a threshold tuned against the test set turns the test set into an opinion.
-    best_threshold, best_score = 0.0, -1.0
-    for floor in np.arange(0.05, 0.96, 0.05):
-        sure = confidence >= floor
-        if not sure.any():
-            continue
-        score = float(correct[sure].mean()) * float(sure.mean())
-        if score > best_score:
-            best_threshold, best_score = float(floor), score
+    curve, chosen = risk_coverage(confidence, correct, min_accuracy)
 
     return {
         "accuracy": float(correct.mean()),
         "macro_f1": macro,
-        "threshold": best_threshold,
-        "threshold_score": best_score,
+        "threshold": chosen["threshold"],
+        "threshold_coverage": chosen["coverage"],
+        "threshold_accuracy": chosen["accuracy"],
+        "threshold_met": chosen["met"],
+        "min_accuracy": min_accuracy,
+        "risk_coverage": curve,
+        "aurc": area_under_risk_coverage(confidence, correct),
         "polarity_macro_f1": polarity_macro,
         "calibration_error": expected_calibration_error(confidence, correct),
         "on_clear_cut": float(correct[~contested].mean()) if (~contested).any() else None,
@@ -266,12 +315,28 @@ def run(args) -> dict:
             if step % 50 == 0:
                 print(f"  epoch {epoch + 1} step {step}/{len(loaders['train'])} loss {running / (step + 1):.4f}")
 
-        metrics = evaluate(model, loaders["validation"], device, subjects, validation)
+        metrics = evaluate(
+            model, loaders["validation"], device, subjects, validation, args.min_accuracy
+        )
         print(
             f"epoch {epoch + 1}: accuracy {metrics['accuracy']:.3f}  "
             f"macro F1 {metrics['macro_f1']:.3f}  polarity {metrics['polarity_macro_f1']:.3f}  "
             f"calibration {metrics['calibration_error']:.3f}"
         )
+        answers = "answers nothing at that accuracy" if not metrics["threshold_met"] else (
+            f"answers {metrics['threshold_coverage']:.0%} of claims at "
+            f"{metrics['threshold_accuracy']:.3f}"
+        )
+        print(
+            f"  abstains below {metrics['threshold']:.2f}: {answers}"
+            f"{'' if metrics['threshold_met'] else f' (wanted {args.min_accuracy:.2f})'}"
+        )
+
+    # Scored once more outside the loop, so what `run.json` reports is measured from the same
+    # weights that get saved rather than from whichever epoch happened to be last.
+    metrics = evaluate(
+        model, loaders["validation"], device, subjects, validation, args.min_accuracy
+    )
 
     elapsed = time.time() - started
     record = {
@@ -312,6 +377,14 @@ def parse():
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--polarity-weight", type=float, default=0.5)
     parser.add_argument("--split-seed", type=int, default=1)
+    parser.add_argument(
+        "--min-accuracy",
+        type=float,
+        default=0.75,
+        help="how often the model must be right on the claims it does answer. The abstention "
+        "threshold is the one giving the most coverage at this accuracy; if none reaches it, "
+        "that is recorded rather than lowered to whatever the model can manage.",
+    )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--save", action="store_true")
     return parser.parse_args()

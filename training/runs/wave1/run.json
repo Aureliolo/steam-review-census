@@ -1,0 +1,291 @@
+{
+  "backbone": "xlm-roberta-base",
+  "epochs": 6,
+  "batch_size": 32,
+  "learning_rate": 2e-05,
+  "max_length": 128,
+  "polarity_weight": 0.5,
+  "split_seed": 1,
+  "device": "cuda",
+  "git_sha": "1818dd9bdf22485dcaf8c6e826afcf36c686a73d",
+  "data_fingerprint": "7deb903e9c17af2d",
+  "claims": {
+    "train": 2725,
+    "validation": 876,
+    "test": 1668
+  },
+  "subjects": [
+    "accessibility",
+    "atmosphere",
+    "audio",
+    "bugs",
+    "community",
+    "compatibility",
+    "content",
+    "controls",
+    "difficulty",
+    "gameplay",
+    "genre",
+    "graphics",
+    "language",
+    "licensing",
+    "monetisation",
+    "multiplayer",
+    "offtopic",
+    "performance",
+    "policy",
+    "price",
+    "story",
+    "tutorial",
+    "updates",
+    "verdict",
+    "vr"
+  ],
+  "seconds": 89,
+  "validation": {
+    "accuracy": 0.4257990867579909,
+    "macro_f1": 0.3423274784457835,
+    "threshold": 0.05,
+    "threshold_score": 0.4257990867579909,
+    "polarity_macro_f1": 0.5985067536525653,
+    "calibration_error": 0.04732203471674221,
+    "on_clear_cut": 0.48881789137380194,
+    "on_contested": 0.268,
+    "per_subject": {
+      "atmosphere": {
+        "precision": 0.32558139534883723,
+        "recall": 0.3684210526315789,
+        "f1": 0.34567901234567905,
+        "support": 38
+      },
+      "audio": {
+        "precision": 0.5,
+        "recall": 0.8333333333333334,
+        "f1": 0.625,
+        "support": 12
+      },
+      "bugs": {
+        "precision": 0.034482758620689655,
+        "recall": 0.5,
+        "f1": 0.06451612903225806,
+        "support": 2
+      },
+      "community": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 9
+      },
+      "compatibility": {
+        "precision": 0.5,
+        "recall": 0.6666666666666666,
+        "f1": 0.5714285714285715,
+        "support": 3
+      },
+      "content": {
+        "precision": 0.2222222222222222,
+        "recall": 0.2127659574468085,
+        "f1": 0.2173913043478261,
+        "support": 47
+      },
+      "controls": {
+        "precision": 0.18181818181818182,
+        "recall": 0.2857142857142857,
+        "f1": 0.2222222222222222,
+        "support": 14
+      },
+      "difficulty": {
+        "precision": 0.3384615384615385,
+        "recall": 0.2857142857142857,
+        "f1": 0.3098591549295775,
+        "support": 77
+      },
+      "gameplay": {
+        "precision": 0.6428571428571429,
+        "recall": 0.31952662721893493,
+        "f1": 0.42687747035573126,
+        "support": 169
+      },
+      "genre": {
+        "precision": 0.5353535353535354,
+        "recall": 0.5955056179775281,
+        "f1": 0.5638297872340425,
+        "support": 89
+      },
+      "graphics": {
+        "precision": 0.41304347826086957,
+        "recall": 0.6129032258064516,
+        "f1": 0.49350649350649356,
+        "support": 31
+      },
+      "language": {
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "f1": 0.8,
+        "support": 3
+      },
+      "monetisation": {
+        "precision": 0.23076923076923078,
+        "recall": 0.3,
+        "f1": 0.2608695652173913,
+        "support": 10
+      },
+      "multiplayer": {
+        "precision": 0.2608695652173913,
+        "recall": 0.24,
+        "f1": 0.24999999999999994,
+        "support": 25
+      },
+      "offtopic": {
+        "precision": 0.42105263157894735,
+        "recall": 0.4,
+        "f1": 0.41025641025641024,
+        "support": 80
+      },
+      "performance": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 2
+      },
+      "policy": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1
+      },
+      "price": {
+        "precision": 0.30434782608695654,
+        "recall": 0.875,
+        "f1": 0.4516129032258065,
+        "support": 8
+      },
+      "story": {
+        "precision": 0.09090909090909091,
+        "recall": 0.21428571428571427,
+        "f1": 0.1276595744680851,
+        "support": 14
+      },
+      "tutorial": {
+        "precision": 0.27450980392156865,
+        "recall": 0.42424242424242425,
+        "f1": 0.33333333333333337,
+        "support": 33
+      },
+      "updates": {
+        "precision": 0.3488372093023256,
+        "recall": 0.4838709677419355,
+        "f1": 0.4054054054054055,
+        "support": 31
+      },
+      "verdict": {
+        "precision": 0.7555555555555555,
+        "recall": 0.5730337078651685,
+        "f1": 0.6517571884984026,
+        "support": 178
+      }
+    },
+    "per_language": {
+      "english": {
+        "accuracy": 0.43042071197411,
+        "claims": 618
+      },
+      "schinese": {
+        "accuracy": 0.3645833333333333,
+        "claims": 96
+      },
+      "japanese": {
+        "accuracy": 0.38333333333333336,
+        "claims": 60
+      },
+      "russian": {
+        "accuracy": 0.3333333333333333,
+        "claims": 24
+      },
+      "french": {
+        "accuracy": 0.3888888888888889,
+        "claims": 18
+      },
+      "koreana": {
+        "accuracy": 0.47058823529411764,
+        "claims": 17
+      },
+      "brazilian": {
+        "accuracy": 0.5,
+        "claims": 10
+      },
+      "spanish": {
+        "accuracy": 0.42857142857142855,
+        "claims": 7
+      },
+      "czech": {
+        "accuracy": 0.8,
+        "claims": 5
+      },
+      "german": {
+        "accuracy": 0.75,
+        "claims": 4
+      },
+      "polish": {
+        "accuracy": 0.25,
+        "claims": 4
+      },
+      "tchinese": {
+        "accuracy": 1.0,
+        "claims": 4
+      },
+      "turkish": {
+        "accuracy": 0.6666666666666666,
+        "claims": 3
+      },
+      "ukrainian": {
+        "accuracy": 0.6666666666666666,
+        "claims": 3
+      },
+      "swedish": {
+        "accuracy": 1.0,
+        "claims": 1
+      },
+      "hungarian": {
+        "accuracy": 1.0,
+        "claims": 1
+      },
+      "latam": {
+        "accuracy": 0.0,
+        "claims": 1
+      }
+    },
+    "per_length": {
+      "medium": {
+        "accuracy": 0.4225721784776903,
+        "claims": 381
+      },
+      "short": {
+        "accuracy": 0.44881889763779526,
+        "claims": 381
+      },
+      "long": {
+        "accuracy": 0.35964912280701755,
+        "claims": 114
+      }
+    },
+    "abstention": {
+      "0.3": {
+        "answers_for": 0.632420091324201,
+        "accuracy": 0.5216606498194946
+      },
+      "0.5": {
+        "answers_for": 0.3093607305936073,
+        "accuracy": 0.6752767527675276
+      },
+      "0.7": {
+        "answers_for": 0.1415525114155251,
+        "accuracy": 0.7903225806451613
+      },
+      "0.9": {
+        "answers_for": 0.012557077625570776,
+        "accuracy": 0.8181818181818182
+      }
+    }
+  }
+}
