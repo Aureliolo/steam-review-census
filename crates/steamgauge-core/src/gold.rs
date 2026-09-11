@@ -271,6 +271,106 @@ pub fn render(questions: &[Question], found: GoldDraw) -> String {
 mod tests {
     use super::*;
 
+    /// A reference set on disk: one frozen game and one training game, each with three claims.
+    /// The second labeller reads two of them, agreeing on one and differing on the other, and
+    /// never sees the third, which is therefore the only one left to read blind.
+    fn a_reference_set(root: &Path) {
+        for app_id in [214_490_u32, 296_970_u32] {
+            let dir = root.join(app_id.to_string());
+            std::fs::create_dir_all(dir.join("second")).unwrap();
+
+            let drawn = serde_json::json!([{
+                "id": "r1", "app_id": app_id, "language": "english", "subset": "random",
+                "claims": [
+                    {"index": 0, "start": 0, "end": 9, "text": "Runs badly"},
+                    {"index": 1, "start": 10, "end": 20, "text": "Looks great"},
+                    {"index": 2, "start": 21, "end": 30, "text": "Worth it"}
+                ]
+            }]);
+            std::fs::write(dir.join("sample.json"), drawn.to_string()).unwrap();
+
+            let label = |index: u16, subject: &str| {
+                serde_json::json!({
+                    "review_id": "r1", "index": index, "app_id": app_id,
+                    "language": "english", "subset": "random", "start": 0, "end": 9,
+                    "splitter": "claims-5", "taxonomy": "core-6", "produced_by": "one",
+                    "subject": subject, "polarity": "praise", "ironic": false,
+                    "confidence": "high", "ambiguous": false, "split_wrong": false
+                })
+            };
+            std::fs::write(
+                dir.join("labels.json"),
+                serde_json::json!([
+                    label(0, "performance"),
+                    label(1, "graphics"),
+                    label(2, "verdict")
+                ])
+                .to_string(),
+            )
+            .unwrap();
+            std::fs::write(
+                dir.join("second").join("labels.json"),
+                serde_json::json!([label(0, "performance"), label(2, "price")]).to_string(),
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_blind_draw_is_frozen_games_only_and_a_split_can_come_from_anywhere() {
+        // 214490 is frozen and 296970 trains, both pinned in DECISIONS.md.
+        assert_eq!(role(214_490, SPLIT_SEED), Role::Frozen);
+        assert_ne!(role(296_970, SPLIT_SEED), Role::Frozen);
+
+        let root = std::env::temp_dir().join(format!("steamgauge-gold-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        a_reference_set(&root);
+
+        let (frozen_only, counts) = draw(&root, 100, Splits::Frozen, 1).unwrap();
+        assert!(
+            frozen_only
+                .iter()
+                .all(|question| question.app_id == 214_490),
+            "a training game reached a draw that measures the model"
+        );
+        assert_eq!(
+            counts.blind, 1,
+            "a claim two labellers already answered is settled, and spending a person on it is \
+             not what the blind sample is for"
+        );
+        assert_eq!(counts.split, 1);
+        assert_eq!(counts.agreed, 1);
+        assert_eq!(
+            counts.games, 1,
+            "only the frozen game counts as a game read"
+        );
+
+        let (everywhere, wider) = draw(&root, 100, Splits::Everywhere, 1).unwrap();
+        assert_eq!(
+            wider.split, 2,
+            "the training game's disagreement was left out"
+        );
+        assert_eq!(
+            wider.blind, counts.blind,
+            "widening which games' disagreements are shown widened the blind sample too, which \
+             would put a game the model trained on into the measurement"
+        );
+        assert!(
+            everywhere
+                .iter()
+                .filter(|question| question.app_id == 296_970)
+                .all(|question| question.shown.is_some()),
+            "a claim from a training game may only appear as a disagreement"
+        );
+
+        let (none, quiet) = draw(&root, 100, Splits::None, 1).unwrap();
+        assert_eq!(quiet.split, 0);
+        assert!(none.iter().all(|question| question.shown.is_none()));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn a_page_carries_every_question_and_the_whole_sheet() {
         let questions = vec![Question {
