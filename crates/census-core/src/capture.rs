@@ -308,6 +308,117 @@ pub fn texts_for<S: std::hash::BuildHasher>(
     Ok(found)
 }
 
+/// Reviews taken as "the top of the pile" when measuring helpfulness bias. Steam's own
+/// default view shows a page of this order, which is what most people actually read.
+pub const DEFAULT_TOP_HELPFUL: usize = 50;
+
+/// One captured review, without its text, for passes that walk the whole corpus.
+///
+/// The text arrives beside this rather than inside it, because the passes that hold rows in
+/// memory hold hundreds of thousands of them and the text is the only field big enough to
+/// matter.
+#[derive(Debug, Clone)]
+pub struct Row {
+    pub recommendationid: String,
+    pub text_hash: String,
+    /// Steam's own helpfulness score, which is what orders the page people read.
+    pub helpfulness: f64,
+    pub votes_up: u32,
+    pub voted_up: bool,
+    pub language: String,
+    pub created: i64,
+}
+
+/// Streams every review with the fields a counting pass needs, and its text.
+///
+/// # Errors
+///
+/// Fails if a shard cannot be read, or if the visitor does.
+pub fn for_each_row(snapshot: &Path, mut visit: impl FnMut(Row, &str) -> Result<()>) -> Result<()> {
+    use arrow::array::{Array, BooleanArray, Float64Array, Int64Array, StringArray, UInt32Array};
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    for shard in shards_of(snapshot)? {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let field = |name: &'static str| -> Result<&dyn Array> {
+                batch
+                    .column_by_name(name)
+                    .map(AsRef::as_ref)
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let cast = |name: &'static str| -> Result<&StringArray> {
+                field(name)?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or(Error::MalformedPayload { field: name })
+            };
+            let ids = cast("recommendationid")?;
+            let texts = cast("review")?;
+            let languages = cast("language")?;
+            let helpful = field("weighted_vote_score")?
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or(Error::MalformedPayload {
+                    field: "weighted_vote_score",
+                })?;
+            let votes = field("votes_up")?
+                .as_any()
+                .downcast_ref::<UInt32Array>()
+                .ok_or(Error::MalformedPayload { field: "votes_up" })?;
+            let recommended = field("voted_up")?
+                .as_any()
+                .downcast_ref::<BooleanArray>()
+                .ok_or(Error::MalformedPayload { field: "voted_up" })?;
+            let created = field("timestamp_created")?
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or(Error::MalformedPayload {
+                    field: "timestamp_created",
+                })?;
+
+            for row in 0..batch.num_rows() {
+                if texts.is_null(row) || texts.value(row).trim().is_empty() {
+                    continue;
+                }
+                let body = texts.value(row);
+                visit(
+                    Row {
+                        recommendationid: ids.value(row).to_owned(),
+                        text_hash: crate::embed::sha256_hex(body),
+                        helpfulness: if helpful.is_null(row) {
+                            0.0
+                        } else {
+                            helpful.value(row)
+                        },
+                        votes_up: if votes.is_null(row) {
+                            0
+                        } else {
+                            votes.value(row)
+                        },
+                        voted_up: !recommended.is_null(row) && recommended.value(row),
+                        language: if languages.is_null(row) {
+                            String::new()
+                        } else {
+                            languages.value(row).to_owned()
+                        },
+                        created: if created.is_null(row) {
+                            0
+                        } else {
+                            created.value(row)
+                        },
+                    },
+                    body,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Streams every review's id, language and text, in capture order.
 ///
 /// Unlike [`texts_for`] this holds nothing: a corpus of a million reviews is several

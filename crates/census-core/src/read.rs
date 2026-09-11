@@ -58,7 +58,7 @@ impl Default for ReadOptions {
     fn default() -> Self {
         Self {
             out_dir: PathBuf::from("data"),
-            top_helpful: crate::classify::DEFAULT_TOP_HELPFUL,
+            top_helpful: crate::capture::DEFAULT_TOP_HELPFUL,
             batch_size: DEFAULT_READ_BATCH,
             language: None,
         }
@@ -331,7 +331,7 @@ fn count_reviews(
     let mut silent = 0_u64;
     let mut positive = 0_u64;
 
-    crate::classify::for_each_review(snapshot, |row, text| {
+    crate::capture::for_each_row(snapshot, |row, text| {
         corpus_reviews += 1;
         *languages.entry(row.language.clone()).or_default() += 1;
         if options

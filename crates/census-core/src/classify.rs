@@ -618,15 +618,7 @@ pub(crate) fn assign(sims: &[f32], margin: f32) -> (usize, u32) {
     (primary, mentions)
 }
 
-pub(crate) struct ReviewRow {
-    pub(crate) recommendationid: String,
-    pub(crate) text_hash: String,
-    pub(crate) helpfulness: f64,
-    pub(crate) votes_up: u32,
-    pub(crate) voted_up: bool,
-    pub(crate) language: String,
-    pub(crate) created: i64,
-}
+pub(crate) type ReviewRow = crate::capture::Row;
 
 #[derive(Default)]
 struct Batch {

@@ -207,8 +207,9 @@ enum Command {
     /// labelled in part cannot say what share of a corpus names no aspect at all, which is
     /// the first thing worth knowing about one.
     SampleClaims {
-        /// Steam app ID to draw from.
-        app_id: u32,
+        /// Steam app IDs to draw from. Each gets its own set.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
         /// Directory holding the capture.
         #[arg(short, long, default_value = "data")]
         out: PathBuf,
@@ -221,9 +222,14 @@ enum Command {
         /// Changing this draws a different sample. The same seed always draws the same one.
         #[arg(long, default_value_t = 1)]
         seed: u64,
-        /// Where to write the sample and its batches. Defaults to reference/claims/<app id>.
-        #[arg(long)]
-        to: Option<PathBuf>,
+        /// Share of each game's draw written in English. The rest is drawn from whatever
+        /// else the corpus holds, so the model is trained on more than one language even
+        /// though reports default to English.
+        #[arg(long, default_value_t = 0.7)]
+        english: f64,
+        /// Where to write the sets. Each game gets a directory under it.
+        #[arg(long, default_value = "reference/claims")]
+        to: PathBuf,
     },
 
     /// Merge returned claim labels into a reference set.
@@ -476,13 +482,14 @@ pub async fn run() -> Result<()> {
         }
         Command::Claims { app_id, out } => run_claims(app_id, &out),
         Command::SampleClaims {
-            app_id,
+            app_ids,
             out,
             reviews,
             batch_size,
             seed,
+            english,
             to,
-        } => run_sample_claims(app_id, &out, reviews, batch_size, seed, to),
+        } => run_sample_claims(&app_ids, &out, reviews, batch_size, seed, english, &to),
         Command::IngestClaims { app_id, from, to } => run_ingest_claims(app_id, &from, to),
         Command::Read {
             app_id,
@@ -1774,37 +1781,48 @@ fn print_classification(report: &census_core::ClassifyReport) {
 }
 
 fn run_sample_claims(
-    app_id: u32,
+    app_ids: &[u32],
     out: &std::path::Path,
     reviews: usize,
     batch_size: usize,
     seed: u64,
-    to: Option<PathBuf>,
+    english: f64,
+    to: &std::path::Path,
 ) -> Result<()> {
-    let dir = to.unwrap_or_else(|| {
-        PathBuf::from("reference")
-            .join("claims")
-            .join(app_id.to_string())
-    });
-    let drawn = census_core::claimset::draw(out, app_id, reviews, seed)?;
-    let report = census_core::claimset::write_set(&dir, &drawn, batch_size)?;
+    let mut languages: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let (mut all_reviews, mut all_claims, mut all_batches) = (0, 0, 0);
 
-    let mut languages: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    for review in &drawn {
-        *languages.entry(review.language.as_str()).or_default() += 1;
+    for &app_id in app_ids {
+        let dir = to.join(app_id.to_string());
+        let drawn = census_core::claimset::draw(out, app_id, reviews, english, seed)?;
+        let report = census_core::claimset::write_set(&dir, &drawn, batch_size)?;
+        for review in &drawn {
+            *languages.entry(review.language.clone()).or_default() += 1;
+        }
+        all_reviews += report.reviews;
+        all_claims += report.claims;
+        all_batches += report.batches;
+        println!(
+            "{app_id:<9} {:>4} reviews  {:>5} claims  {:>3} batches  {:.2} per review",
+            report.reviews,
+            report.claims,
+            report.batches,
+            report.per_review()
+        );
     }
-    let mut ranked: Vec<(&str, usize)> = languages.into_iter().collect();
-    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
 
-    println!("drawn        {} reviews", report.reviews);
-    println!("claims       {}", report.claims);
-    println!("per review   {:.2}", report.per_review());
-    println!("batches      {} in {}", report.batches, dir.display());
+    let mut ranked: Vec<(String, usize)> = languages.into_iter().collect();
+    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
+
+    println!("\ngames        {}", app_ids.len());
+    println!("drawn        {all_reviews} reviews");
+    println!("claims       {all_claims}");
+    println!("batches      {all_batches} under {}", to.display());
     println!(
         "languages    {}",
         ranked
             .iter()
-            .take(6)
+            .take(8)
             .map(|(name, count)| format!("{name} {count}"))
             .collect::<Vec<_>>()
             .join(", ")

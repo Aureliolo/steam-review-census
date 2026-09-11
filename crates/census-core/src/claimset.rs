@@ -70,10 +70,32 @@ impl DrawReport {
 /// # Errors
 ///
 /// Fails if there is no capture for the app.
-pub fn draw(out_dir: &Path, app_id: u32, wanted: usize, seed: u64) -> Result<Vec<DrawnReview>> {
+pub fn draw(
+    out_dir: &Path,
+    app_id: u32,
+    wanted: usize,
+    english_share: f64,
+    seed: u64,
+) -> Result<Vec<DrawnReview>> {
     let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
-    let mut best: crate::bounded::Smallest<[u8; 32], DrawnReview> =
-        crate::bounded::Smallest::new(wanted);
+    // Two draws rather than one, so the mix is decided rather than inherited. A corpus is
+    // whatever languages its players write in, and drawing straight from it would train the
+    // model mostly on whichever one that happens to be. The reports default to English and
+    // the model has to hold up in the rest, so the split is set here and recorded.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a sample is hundreds of reviews, not 2^53 of them"
+    )]
+    #[expect(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        reason = "english_share is a share and wanted is a count"
+    )]
+    let english_wanted = (wanted as f64 * english_share.clamp(0.0, 1.0)).round() as usize;
+    let mut english: crate::bounded::Smallest<[u8; 32], DrawnReview> =
+        crate::bounded::Smallest::new(english_wanted);
+    let mut rest: crate::bounded::Smallest<[u8; 32], DrawnReview> =
+        crate::bounded::Smallest::new(wanted.saturating_sub(english_wanted));
 
     crate::capture::for_each_body(&snapshot, |id, language, text| {
         let found = crate::claims::claims_of(text);
@@ -90,20 +112,26 @@ pub fn draw(out_dir: &Path, app_id: u32, wanted: usize, seed: u64) -> Result<Vec
                 text: claim.into_owned(),
             })
             .collect();
-        best.offer(
-            crate::sample::rank(seed, "claims", id),
-            DrawnReview {
-                id: id.to_owned(),
-                app_id,
-                language: language.to_owned(),
-                subset: "random".to_owned(),
-                claims,
-            },
-        );
+        let drawn = DrawnReview {
+            id: id.to_owned(),
+            app_id,
+            language: language.to_owned(),
+            subset: "random".to_owned(),
+            claims,
+        };
+        let key = crate::sample::rank(seed, "claims", id);
+        if language == "english" {
+            english.offer(key, drawn);
+        } else {
+            rest.offer(key, drawn);
+        }
         Ok(())
     })?;
 
-    Ok(best.take())
+    let mut drawn = english.take();
+    drawn.extend(rest.take());
+    drawn.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(drawn)
 }
 
 /// What a labeller is shown: one review, its claims numbered, and nothing else.
