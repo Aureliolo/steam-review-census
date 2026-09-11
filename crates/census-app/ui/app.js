@@ -201,13 +201,30 @@ function drawTopics(counted) {
   set(el('topics-lede'), `${parts.join(', ')}.`);
 
   const unread = counted.claims > 0 ? counted.unclassified_claims / counted.claims : 0;
+  const silent = counted.reviews > 0 ? counted.silent_reviews / counted.reviews : 0;
+
+  /* Above the table, not below it, once the model has declined more than it answered. Every
+     rate under it is then a floor, and a reader who finds that out in a footnote has already
+     drawn the wrong conclusion. */
+  const caveat = el('topics-caveat');
+  caveat.hidden = unread < 0.5;
+  set(
+    caveat,
+    `The model would not commit to a subject for ${share.format(unread)} of the points ` +
+      `here, and said nothing at all about ${share.format(silent)} of the reviews. Those are ` +
+      `counted as unclassified rather than filed under whatever came closest, so every rate ` +
+      `below is a floor: what it was sure of, not everything that was said.`,
+  );
+
   set(
     el('topics-footnote'),
     `Mention rates count a review once for every subject it raises, however many times it ` +
       `raises it, so they add up to more than 100% and are meant to. ` +
-      `${share.format(unread)} of points name no subject the model would commit to, and ` +
-      `${whole.format(counted.silent_reviews)} reviews name none at all. Those are counted ` +
-      `here rather than filed under whatever came closest.`,
+      (caveat.hidden
+        ? `${share.format(unread)} of points name no subject the model would commit to, and ` +
+          `${whole.format(counted.silent_reviews)} reviews name none at all. Those are ` +
+          `counted here rather than filed under whatever came closest.`
+        : `Every row opens onto the points behind it.`),
   );
 
   const rows = el('topic-rows');

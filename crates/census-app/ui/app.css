@@ -15,6 +15,7 @@
   --accent-soft: #dfe8fb;
   --accent-ink: #ffffff;
   --over: #b4451f;
+  --over-soft: #fbeee9;
   --under: #1f6f6b;
 
   --radius: 10px;
@@ -34,6 +35,7 @@
     --accent-soft: #23304d;
     --accent-ink: #10141c;
     --over: #e8875a;
+    --over-soft: #3a2419;
     --under: #5fbfb8;
   }
 }
@@ -473,6 +475,19 @@ button.quiet-button:hover {
   max-width: 44rem;
   margin: 0 0 1.25rem;
   color: var(--ink-soft);
+}
+
+/* The one thing a reader has to know before reading a rate. Set apart from the lede and
+   above the table because a footnote is where things go to be skipped, and a model that
+   declined most of the corpus is not a footnote. */
+.caveat {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  padding: 0.6rem 0.85rem;
+  border-left: 3px solid var(--over);
+  background: var(--over-soft);
+  color: var(--ink);
+  border-radius: 0 6px 6px 0;
 }
 
 .footnote {
