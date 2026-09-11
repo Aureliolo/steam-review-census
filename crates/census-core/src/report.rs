@@ -518,11 +518,7 @@ fn build_one(app_id: u32, options: &ReportOptions) -> Result<AppReport> {
 /// # Errors
 ///
 /// Fails if the induced set is unreadable or the capture cannot be walked.
-pub fn induced_for(
-    app_id: u32,
-    snapshot: &Path,
-    examples: usize,
-) -> Result<Vec<InducedEvidence>> {
+pub fn induced_for(app_id: u32, snapshot: &Path, examples: usize) -> Result<Vec<InducedEvidence>> {
     let Some(set) = crate::induced::load(&crate::induced::default_path(app_id))? else {
         return Ok(Vec::new());
     };
