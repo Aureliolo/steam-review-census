@@ -126,9 +126,10 @@ const PROGRESS_EVERY_TEXTS: u64 = 5_000;
     name = "steamgauge",
     version,
     about = "Count what Steam reviewers actually say, rather than what the loudest ones say.",
-    after_help = "The first four commands are the pipeline, in order: crawl a game, embed it, \
-                  classify it, read it. The rest are how the classifier is measured and \
-                  improved, and none of them is needed to get a report out.\n\n\
+    after_help = "Three commands get you a page: `crawl <app id>`, `read <app id>`, \
+                  `report <app id>`. `embed` is needed only by `distinct`, and `claims` only \
+                  writes the split out for something else to read. Everything else is how the \
+                  model is measured and improved, and none of it is needed for a report.\n\n\
                   Nothing leaves this machine. Reviews are downloaded from Valve and \
                   everything after that happens locally, including the model."
 )]
