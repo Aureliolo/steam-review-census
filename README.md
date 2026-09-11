@@ -198,6 +198,32 @@ Three things are reported together, and separating them is what makes the number
 - **Contest**, the share the labeller marked as genuinely ambiguous, reported apart from the
   rest. Disagreement there says as much about the taxonomy as about the model.
 
+### What it is worth against the alternatives
+
+Measured 2026-09-11 over frozen games, which chose nothing about the model. Every row abstains
+where it is unsure, and every row is scored only on what it answered, because a score that
+quietly drops the declined claims is a score for a classifier nobody is running.
+
+| | answers | accuracy where it answers |
+|---|---|---|
+| the commonest subject | everything | 23.3% |
+| TF-IDF bag of words | 32% | 44.1% |
+| nearest subject centroid over an untuned encoder | 5% | 42.3% |
+| **this reader** | **61%** | **74.8%** |
+| a frontier model given the same sheet | 99.6% | 87.0% |
+
+The third row is what this project did before it trained anything, and it is why the rebuild
+happened: cosine distance to a prototype cannot say "this is about nothing", so at the accuracy
+it promises it can answer one claim in twenty.
+
+The last row is the one worth being honest about. **A frontier model asked directly is better
+than this, by twelve points of accuracy and thirty-nine of coverage.** What it is not is
+affordable: that comparison cost 405,000 tokens for 471 claims, and a single large game holds
+three million claims. This reader does that game in about two and a half hours on one desktop
+GPU, offline, for the electricity. The claim being made is not that a 278M-parameter model
+beats a frontier one. It is that it gets most of the way there at four orders of magnitude less
+cost, and that it can tell you exactly how far short it falls.
+
 ### How the reference sets are made
 
 They are a **silver standard**, not a gold one, and the distinction decides what every number
