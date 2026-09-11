@@ -229,6 +229,32 @@ points and agreement fell one, which is the threshold moving down the same risk-
 rather than a better or worse model: AURC, the figure that does not depend on where the
 threshold sits, improved from 0.217 to 0.210.
 
+### Eighty per cent of what?
+
+`census ceiling` answers the question every agreement figure in this file begs. A model
+trained on one labeller's reading cannot be more right than two labellers manage with each
+other, so 80% against one labeller is a score out of that ceiling and not out of a hundred.
+Over the claims read twice **and** answered by the model, split by what each game was to it:
+
+| The model | games | claims | two labellers agree | model, where they did | where they split |
+|---|---|---|---|---|---|
+| **never saw** | 6 | 103 | **93.2%** | **81.2%** [0.723, 0.878] | 85.7% of 7 |
+| chose its threshold on | 3 | 64 | 92.2% | 76.3% | 80.0% of 5 |
+| trained on | 17 | 456 | 89.0% | 94.6% | 94.0% of 50 |
+
+Only the first row is a measurement. The third is the model reciting labels it was trained
+on, and it is in the table precisely because the gap between 94.6% and 81.2% is what holding
+whole games back is for: a tool that pooled all three would report 90.4% and mean nothing by
+it. The first pooled figure this was run on did exactly that, before the placement the trainer
+uses was ported into the tool and a test pinned the eight frozen games and the four validation
+ones against it.
+
+So the honest sentence about the current reader is: **on games it has never seen, over claims
+it commits to, where two independent labellers reached the same subject, it agrees with them
+81.2% of the time**, against a ceiling of 93.2%. Ninety-six claims is a thin plank, and the
+interval says so. Widening it is what the hand-adjudicated set is for; more model-written
+second opinions would only move the ceiling, not the floor.
+
 ### The splitter changed under the labels, and the labels held
 
 `claims-4` shipped mid-run after all, which the plan above said not to do. What made it
