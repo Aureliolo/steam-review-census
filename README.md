@@ -322,6 +322,17 @@ These rules keep those figures honest:
   does not apply: the labels were written by a model, so what is measured is consistency
   between two models.
 
+  Measured so far, over 456 claims on ten games: two labellers agree on the subject 86% of the
+  time, kappa 0.85, and on polarity 93%, kappa 0.89. Those are figures a set can stand on.
+
+- **The contested flag measures the labeller as much as the claim.** Two labellers given the
+  same definition reached for it on a fifth and on three fifths of the same claims, kappa 0.28.
+  The flag does find the right claims: where neither reached for it the two agree on the
+  subject every time, and where either did they agree three times in four. What differs is the
+  bar. So a game's contested rate is not compared with another game's, and agreement is
+  reported over the contested claims as a floor on how hard the taxonomy is rather than as a
+  property of the corpus.
+
 - **A labeller is not told which game it is, but is given one game at a time.** Withholding the
   game keeps the label answerable from the same text the model reads. Handing over a whole
   game's batches undermines that where a corpus has a strong accent: a hundred claims about

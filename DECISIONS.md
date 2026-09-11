@@ -125,6 +125,20 @@ Then eleven games, 5,574 claims, measured with games held out whole:
 | Is it calibrated? | Better where it matters least: calibration error 0.066 on the frozen games against 0.132 on validation, but area under the risk-coverage curve 0.543 there against 0.386, so its confidence ranks claims worse on a game it has not seen |
 | What does it still not know? | `gameplay` has 257 labelled claims in one frozen game and the model answers **none** of them. `controls`, `difficulty` and `content` likewise. `accessibility`, `community`, `compatibility` and `language` score zero F1 for want of labels |
 
+Then the set was read a second time, a tenth of it, by a different labeller working blind:
+
+| Question | Answer |
+|---|---|
+| Do two labellers agree on the subject? | **86.4%, kappa 0.85**, over 456 claims read twice across ten games. That is a set two readers agree about, not one reader's habit |
+| On polarity? | 93.0%, kappa 0.89 |
+| On whether a claim is contested? | **60.3%, kappa 0.28.** The first labeller flagged a fifth of claims, the second three fifths. They are not applying the same bar |
+| Does the flag still mean something? | Yes. On the 181 claims neither flagged, the two agree on the subject **100%** of the time; where either flagged, 77.5%. The flag finds the right claims; what differs is how readily each labeller reaches for it |
+| Where do they disagree on subject? | `genre` against `verdict` most of all ("great platformer"), then `gameplay` against `genre`, `content` against `gameplay`, `updates` against `verdict`. Every one is a boundary already in the gap notes |
+
+So a contested rate is a fact about a labeller as much as about a game, and the reports say so
+rather than comparing it across games as though it were the same measure. The per-field
+figures are what `census compare-labels` prints, and the contested check runs every time.
+
 The chain is verified end to end against that last row. Training measures the frozen games in
 Python, on the full-precision weights, from the claim text as labelled. The tool measures them
 in Rust, on the half-precision ONNX graph, over a corpus it split itself and joined back to the
