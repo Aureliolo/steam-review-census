@@ -675,6 +675,53 @@ ul.languages .bar::before {
   min-width: 8rem;
 }
 
+.said {
+  position: relative;
+  min-width: 12rem;
+}
+
+/* Three shares of one row of reviews, so they are drawn as one bar rather than three, and a
+   reader sees the split without reading three numbers and adding them up. */
+.said .mix {
+  position: absolute;
+  left: 0.9rem;
+  right: 0.9rem;
+  bottom: 0.35rem;
+  height: 3px;
+  display: flex;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.said .mix > span {
+  flex: 0 0 calc(var(--part) * 100%);
+}
+
+.said .praise {
+  background: var(--under);
+}
+
+.said .gripe {
+  background: var(--over);
+}
+
+/* Both at once is not halfway between the two, and a blend of their colours would read as
+   exactly that. Neutral, and distinct from the empty track behind it. */
+.said .both {
+  background: var(--line-strong);
+}
+
+.said .value {
+  font-weight: 600;
+}
+
+.said .count {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
 .gauge {
   display: inline-block;
   position: relative;

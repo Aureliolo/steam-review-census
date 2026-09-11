@@ -39,7 +39,7 @@ const ENOUGH_FOR_A_RATE: u64 = 30;
 ///
 /// One list rather than two, so a column cannot reach the table without saying what it means.
 /// `{top}` is how many reviews Steam ranks as most helpful, which is a per-game setting.
-const COLUMNS: [(&str, &str); 5] = [
+const COLUMNS: [(&str, &str); 6] = [
     (
         "Mention rate",
         "The share of all reviews that say something about the category, with the number of \
@@ -59,6 +59,12 @@ const COLUMNS: [(&str, &str); 5] = [
         "Bias",
         "How much the top of the pile overstates a category. 0\u{d7} means none of those few \
          dozen reviews raised it, which is weak evidence rather than proof of absence.",
+    ),
+    (
+        "Said about it",
+        "Of the reviews raising a category, how many praise it, how many complain about it, \
+         and how many do both. A subject half the players love and half hate, and one every \
+         player has mixed feelings about, are different findings that a single share hides.",
     ),
     (
         "Recommended",
@@ -913,11 +919,12 @@ fn category_row(out: &mut String, app: &AppReport, category: &SubjectCount, wide
     rate_cell(out, app.rate(category.primary_reviews));
     rate_cell(out, app.top_rate(category.top_mention_reviews));
     bias_cell(out, app.bias(category));
+    polarity_cell(out, category);
     verdict_cell(out, category, app.positive_baseline());
     out.push_str("</tr>\n");
 
     if has_examples {
-        let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"6\">");
+        let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"7\">");
         if let Some(measured) = measured {
             how_well_this_row_is_known(out, measured);
         }
@@ -1135,6 +1142,46 @@ fn bias_cell(out: &mut String, factor: Option<f64>) {
 /// distance from the baseline. Eight reviews all recommending the game is 100% and says
 /// nothing; a fixed threshold paints it the same green as a thousand reviews at 98%, which
 /// is the one reading the column exists to prevent.
+/// What the reviews raising a subject actually say about it, as three shares in one bar.
+///
+/// The mixed share is the point of the column. A subject a third of players praise and a third
+/// complain about is a fight; one where every review says both is a subject with a real
+/// trade-off in it, and a single positive share renders those two identically.
+///
+/// Sorted on the complaint share, because a table of subjects is read looking for what is
+/// wrong, and sorting on praise puts the answer at the bottom.
+fn polarity_cell(out: &mut String, category: &SubjectCount) {
+    let said = category.praised + category.criticised + category.mixed;
+    if said == 0 {
+        let _ = write!(
+            out,
+            "<td class=\"num\" data-value=\"-1\">{}</td>",
+            nothing("none raised it")
+        );
+        return;
+    }
+
+    let share = |part: u64| share_of(part, said);
+    let (praise, gripe, both) = (
+        share(category.praised),
+        share(category.criticised),
+        share(category.mixed),
+    );
+    let _ = write!(
+        out,
+        "<td class=\"num said\" data-value=\"{gripe:.9}\">\
+         <span class=\"mix\" aria-hidden=\"true\">\
+         <span class=\"praise\" style=\"--part:{praise:.4}\"></span>\
+         <span class=\"gripe\" style=\"--part:{gripe:.4}\"></span>\
+         <span class=\"both\" style=\"--part:{both:.4}\"></span></span>\
+         <span class=\"value\">{} praise</span>\
+         <span class=\"count\">{} gripe, {} both</span></td>",
+        percent(praise),
+        percent(gripe),
+        percent(both)
+    );
+}
+
 fn verdict_cell(out: &mut String, category: &SubjectCount, baseline: Option<f64>) {
     let Some(share) = category.positive_share() else {
         let _ = write!(
@@ -2624,7 +2671,7 @@ mod tests {
         let attribute = declared_in(":root[data-theme='dark']");
 
         // Set on individual elements by the markup rather than by the theme.
-        let inline = ["fill", "heat", "offset"];
+        let inline = ["fill", "heat", "offset", "part"];
         for used in STYLE.split("var(--").skip(1) {
             let name = used.split([')', ',', ' ']).next().unwrap_or_default();
             assert!(
