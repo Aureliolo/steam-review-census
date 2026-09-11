@@ -119,10 +119,10 @@ Then eleven games, 5,574 claims, measured with games held out whole:
 
 | Question | Answer |
 |---|---|
-| How good is it on a game it has never seen? | Accuracy 0.392, macro F1 0.255, and those are the figures that matter. The pilot's 0.46 was within one game, which is the easy question |
-| How much can it answer at a promised 75% accuracy? | **20% of claims**, at threshold 0.42, on the games that chose the threshold |
-| Does that promise transfer? | **No.** On the two frozen games it answers 12% to 19% of claims and agrees on **57%**, not 76%. The threshold was chosen on two validation games and overfits them |
-| Is it calibrated? | Expected calibration error 0.107, area under the risk-coverage curve 0.423 |
+| How good is it on a game it has never seen? | Accuracy **0.318**, macro F1 **0.269**, on the frozen games. The pilot's 0.46 was within one game, which is the easy question; the validation games say 0.427, and they helped build the model |
+| How much can it answer at a promised 75% accuracy? | **24% of claims** at threshold 0.42, on the games that chose the threshold |
+| Does that promise transfer? | **No.** On the two frozen games the same threshold answers **13%** of claims at **0.620**, not 0.756. It was chosen on two validation games and overfits them |
+| Is it calibrated? | Better where it matters least: calibration error 0.066 on the frozen games against 0.132 on validation, but area under the risk-coverage curve 0.543 there against 0.386, so its confidence ranks claims worse on a game it has not seen |
 | What does it still not know? | `gameplay` has 257 labelled claims in one frozen game and the model answers **none** of them. `controls`, `difficulty` and `content` likewise. `accessibility`, `community`, `compatibility` and `language` score zero F1 for want of labels |
 
 So the model card and every report now quote the **frozen** games, never the validation ones.
