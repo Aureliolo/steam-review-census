@@ -936,7 +936,7 @@ fn category_row(out: &mut String, app: &AppReport, category: &SubjectCount, wide
             how_well_this_row_is_known(out, measured, observed);
         }
         sparkline(out, app, &category.id);
-        reviews(out, app, examples);
+        what_they_said(out, app, category, examples);
         out.push_str("</td></tr>");
     }
 }
@@ -1277,6 +1277,46 @@ fn reviews(out: &mut String, app: &AppReport, examples: &[Example]) {
         review(out, app, example);
     }
     out.push_str("</ol>\n");
+}
+
+/// The evidence behind a subject, grouped by what it says.
+///
+/// This is what stands in for a written summary until there is one. A reader opening a row
+/// wants to know what people praise and what they complain about, and eight claims in a
+/// single list make them work that out for themselves. Sorted into praise and complaint, with
+/// the counts of each beside the heading, the list answers the question rather than
+/// containing the answer.
+fn what_they_said(out: &mut String, app: &AppReport, subject: &SubjectCount, examples: &[Example]) {
+    if examples.is_empty() {
+        return;
+    }
+    let sides: [(&str, &str, u64); 3] = [
+        ("praise", "What they praise", subject.praised + subject.mixed),
+        ("complaint", "What they complain about", subject.criticised + subject.mixed),
+        ("neutral", "Said without judging", 0),
+    ];
+    for (polarity, heading, reviews) in sides {
+        let shown: Vec<&Example> = examples
+            .iter()
+            .filter(|example| example.polarity == polarity)
+            .collect();
+        if shown.is_empty() {
+            continue;
+        }
+        let _ = write!(out, "<h4 class=\"side {polarity}\">{}", escape(heading));
+        if reviews > 0 {
+            let _ = write!(
+                out,
+                " <span class=\"count\">{} reviews</span>",
+                thousands(reviews)
+            );
+        }
+        out.push_str("</h4>\n<ol class=\"reviews\">\n");
+        for example in shown {
+            review(out, app, example);
+        }
+        out.push_str("</ol>\n");
+    }
 }
 
 fn review(out: &mut String, app: &AppReport, example: &Example) {

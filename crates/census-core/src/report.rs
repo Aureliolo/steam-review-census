@@ -512,24 +512,38 @@ fn top_of_the_pile(snapshot: &Path, how_many: u64) -> Result<HashSet<String>> {
 /// rather than on where it happened to sit in the file, and a corpus that gains reviews does
 /// not reshuffle the evidence already shown.
 ///
+/// Drawn per polarity, not per subject. A subject that is nine parts praise to one part
+/// complaint would otherwise show nine praises and, often, no complaint at all, and the
+/// complaint is what a reader opening the row came to see. So each side gets its own draw and
+/// the shown evidence says what was said on each, in the proportions the counts beside it
+/// already give.
+///
 /// More are drawn than will be shown. A drawn claim can turn out to be unquotable, because
 /// the splitter that produced the readings and the splitter in this build can disagree about
 /// how many points a review makes, and a subject left with nothing to show is a count nobody
 /// can check.
 fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String, Vec<DrawnClaim>>> {
-    let draw = options.examples * 3;
-    let mut per_subject: HashMap<&'static str, Smallest<[u8; 32], DrawnClaim>> = CORE_SPINE
-        .iter()
-        .map(|subject| (subject.id, Smallest::new(draw)))
-        .collect();
+    let draw = options.examples * 2;
+    let mut per_side: HashMap<(&'static str, &'static str), Smallest<[u8; 32], DrawnClaim>> =
+        HashMap::new();
+    for subject in CORE_SPINE {
+        for side in crate::taxonomy::POLARITY {
+            per_side.insert((subject.id, side), Smallest::new(draw));
+        }
+    }
 
     crate::read::for_each_reading(
         &snapshot.join("readings.parquet"),
         |id, index, subject, confidence, polarity| {
-            let Some(subject) = subject else {
+            let Some(subject) = subject.and_then(|id| CORE_SPINE.iter().find(|c| c.id == id))
+            else {
                 return;
             };
-            if let Some(keep) = per_subject.get_mut(subject) {
+            let Some(side) = crate::taxonomy::POLARITY.iter().find(|side| **side == polarity)
+            else {
+                return;
+            };
+            if let Some(keep) = per_side.get_mut(&(subject.id, *side)) {
                 keep.offer(
                     crate::bounded::rank(options.seed, "report", &format!("{id}:{index}")),
                     DrawnClaim {
@@ -543,10 +557,31 @@ fn shortlist(snapshot: &Path, options: &ReportOptions) -> Result<HashMap<String,
         },
     )?;
 
-    Ok(per_subject
-        .into_iter()
-        .map(|(id, keep)| (id.to_owned(), keep.take()))
-        .collect())
+    // Interleaved praise, complaint, neutral, so taking the first N of a subject's list gives
+    // every side that has anything a turn before any side gets a second.
+    let mut per_subject: HashMap<String, Vec<DrawnClaim>> = HashMap::new();
+    for subject in CORE_SPINE {
+        let mut sides: Vec<std::vec::IntoIter<DrawnClaim>> = crate::taxonomy::POLARITY
+            .iter()
+            .filter_map(|side| per_side.remove(&(subject.id, side)))
+            .map(|keep| keep.take().into_iter())
+            .collect();
+        let mut merged = Vec::new();
+        loop {
+            let mut any = false;
+            for side in &mut sides {
+                if let Some(claim) = side.next() {
+                    merged.push(claim);
+                    any = true;
+                }
+            }
+            if !any {
+                break;
+            }
+        }
+        per_subject.insert(subject.id.to_owned(), merged);
+    }
+    Ok(per_subject)
 }
 
 /// A shortlisted claim, before the review it belongs to has been fetched.

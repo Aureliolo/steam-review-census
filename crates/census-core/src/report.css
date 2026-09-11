@@ -873,11 +873,38 @@ figure.spark figcaption {
 
 ol.reviews {
   list-style: none;
-  margin: 0;
+  margin: 0 0 1rem;
   padding: 0;
   display: grid;
   gap: 0.75rem;
   max-width: var(--measure);
+}
+
+/* One heading per side of a subject, coloured the way the bar above it is, so the list reads
+   as the bar opened up rather than as a second thing. */
+h4.side {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+h4.side.praise {
+  color: var(--under);
+}
+
+h4.side.complaint {
+  color: var(--over);
+}
+
+h4.side.neutral {
+  color: var(--ink-soft);
+}
+
+h4.side .count {
+  color: var(--ink-faint);
+  font-weight: 400;
+  font-size: 0.82rem;
+  margin-left: 0.4rem;
 }
 
 li.review {
