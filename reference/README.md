@@ -22,7 +22,9 @@ not committed.
   in this repository not made by a model, and `steamgauge measure-claims --labels gold` is the
   only measurement here that may be called accuracy rather than agreement. It sits beside the
   set's own labels rather than over them: the point is to compare the two, and overwriting the
-  labeller's answer would destroy the comparison being made.
+  labeller's answer would destroy the comparison being made. Nothing trains on it, and nothing
+  should: these are the claims the model is measured against, and a model trained on its own
+  test set reports a number about itself.
 - **`induced/<app id>.json`** holds the subjects a game's own players raise that the fixed
   taxonomy has no row for, each with the reviews that raise it. A subject with fewer than
   three reviews behind it is refused rather than kept with a note.
