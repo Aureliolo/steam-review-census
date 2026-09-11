@@ -458,3 +458,182 @@ fn counts_the_corpus_no_longer_supports_are_refused_rather_than_drawn() {
 
     std::fs::remove_dir_all(&root).ok();
 }
+
+/// A corpus of two reviews and a reading that declined two claims of the first.
+fn corpus_with_declines(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    let root = std::env::temp_dir().join(format!("steamgauge-{name}-{}", std::process::id()));
+    std::fs::remove_dir_all(&root).ok();
+    let snapshot = root.join("appid=1").join("snapshot=1700000000");
+    std::fs::create_dir_all(&snapshot).unwrap();
+
+    let schema = steamgauge_core::capture::schema();
+    let bodies = [
+        ("10", "The combat is superb. It runs badly. Worth the money."),
+        ("11", "Great game."),
+    ];
+    let mut ids = StringBuilder::new();
+    let mut appids = UInt32Builder::new();
+    let mut languages = StringBuilder::new();
+    let mut texts = StringBuilder::new();
+    let mut created = Int64Builder::new();
+    let mut recommended = BooleanBuilder::new();
+    let mut raw = StringBuilder::new();
+    for (id, text) in bodies {
+        ids.append_value(id);
+        appids.append_value(1);
+        languages.append_value("english");
+        texts.append_value(text);
+        created.append_value(1_700_000_000);
+        recommended.append_value(true);
+        raw.append_value("{}");
+    }
+    let mut columns: HashMap<&str, ArrayRef> = HashMap::new();
+    columns.insert("recommendationid", Arc::new(ids.finish()));
+    columns.insert("appid", Arc::new(appids.finish()));
+    columns.insert("language", Arc::new(languages.finish()));
+    columns.insert("review", Arc::new(texts.finish()));
+    columns.insert("timestamp_created", Arc::new(created.finish()));
+    columns.insert("voted_up", Arc::new(recommended.finish()));
+    columns.insert("raw_json", Arc::new(raw.finish()));
+    let ordered: Vec<ArrayRef> = schema
+        .fields()
+        .iter()
+        .map(|field| {
+            columns
+                .remove(field.name().as_str())
+                .unwrap_or_else(|| arrow::array::new_null_array(field.data_type(), bodies.len()))
+        })
+        .collect();
+    let batch = RecordBatch::try_new(Arc::clone(&schema), ordered).unwrap();
+    let file = std::fs::File::create(snapshot.join("shard-0000.parquet")).unwrap();
+    let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+
+    let reading_schema = Arc::new(Schema::new(vec![
+        Field::new("recommendationid", DataType::Utf8, false),
+        Field::new("claim_index", DataType::UInt16, false),
+        Field::new("subject", DataType::Utf8, true),
+        Field::new("confidence", DataType::Float32, false),
+        Field::new("polarity", DataType::Utf8, false),
+    ]));
+    let mut ids = StringBuilder::new();
+    let mut indexes = arrow::array::UInt16Builder::new();
+    let mut subjects = StringBuilder::new();
+    let mut confidences = Float32Builder::new();
+    let mut polarities = StringBuilder::new();
+    for (id, index, subject) in [
+        ("10", 0_u16, Some(CORE_SPINE[0].id)),
+        ("10", 1, None),
+        ("10", 2, None),
+        ("11", 0, Some(CORE_SPINE[0].id)),
+    ] {
+        ids.append_value(id);
+        indexes.append_value(index);
+        subjects.append_option(subject);
+        confidences.append_value(if subject.is_some() { 0.9 } else { 0.2 });
+        polarities.append_value("praise");
+    }
+    let batch = RecordBatch::try_new(
+        Arc::clone(&reading_schema),
+        vec![
+            Arc::new(ids.finish()),
+            Arc::new(indexes.finish()),
+            Arc::new(subjects.finish()),
+            Arc::new(confidences.finish()),
+            Arc::new(polarities.finish()),
+        ],
+    )
+    .unwrap();
+    let file = std::fs::File::create(snapshot.join("readings.parquet")).unwrap();
+    let mut writer = ArrowWriter::try_new(file, reading_schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+
+    std::fs::write(
+        snapshot.join("reading.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "app_id": 1,
+            "reviews": 2,
+            "corpus_reviews": 2,
+            "language": serde_json::Value::Null,
+            "claims": 4,
+            "unclassified_claims": 2,
+            "silent_reviews": 0,
+            "positive": 2,
+            "top_helpful": 2,
+            "model": MODEL,
+            "spine_version": CORE_SPINE_VERSION,
+            "splitter": steamgauge_core::claims::SPLITTER_VERSION,
+            "threshold": 0.5,
+            "device": "cpu",
+            "subjects": [],
+            "languages": [["english", 2]],
+            "months": [],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    (root, snapshot)
+}
+
+#[test]
+fn a_teaching_draw_asks_only_about_what_the_reader_declined() {
+    let (root, snapshot) = corpus_with_declines("declined");
+    let reference = root.join("reference");
+
+    let drawn = steamgauge_core::claimset::draw_declined(&root, 1, &reference, 10, 1).unwrap();
+
+    assert_eq!(drawn.len(), 1, "only the review holding a declined claim");
+    let review = &drawn[0];
+    assert_eq!(review.id, "10");
+    assert_eq!(review.subset, "declined", "no prevalence figure may count it");
+    assert_eq!(review.asked, Some(vec![1, 2]));
+    assert_eq!(
+        review.claims.len(),
+        3,
+        "the claim the reader answered is still handed over, because it is the review"
+    );
+
+    // A reading cut by another splitter indexes claims that are not there any more, and an
+    // index into it names whatever sentence now sits in that position.
+    let sidecar = snapshot.join("reading.json");
+    let mut stored: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
+    stored["splitter"] = serde_json::Value::String("claims-1".to_owned());
+    std::fs::write(&sidecar, serde_json::to_vec_pretty(&stored).unwrap()).unwrap();
+    let message = steamgauge_core::claimset::draw_declined(&root, 1, &reference, 10, 1)
+        .expect_err("a reading from another splitter must not be drawn from")
+        .to_string();
+    assert!(
+        message.contains("claims-1"),
+        "the refusal should name the cut it found, got: {message}"
+    );
+
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_review_already_in_the_reference_set_is_never_drawn_a_second_time() {
+    let (root, _snapshot) = corpus_with_declines("declined-twice");
+    let reference = root.join("reference");
+    std::fs::create_dir_all(&reference).unwrap();
+    std::fs::write(
+        reference.join("sample.json"),
+        serde_json::to_vec(&serde_json::json!([{
+            "id": "10", "app_id": 1, "language": "english", "subset": "random", "claims": [],
+        }]))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let drawn = steamgauge_core::claimset::draw_declined(&root, 1, &reference, 10, 1).unwrap();
+
+    assert!(
+        drawn.is_empty(),
+        "a review labelled under one draw cannot also be labelled under another"
+    );
+
+    std::fs::remove_dir_all(&root).ok();
+}
