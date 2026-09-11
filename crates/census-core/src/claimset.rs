@@ -254,6 +254,13 @@ pub struct ClaimLabel {
     pub subset: String,
     pub start: u32,
     pub end: u32,
+    /// Which splitter cut the claim this label was written about, and which taxonomy its
+    /// subject comes from. A published row is joined back by its span and read against a
+    /// category sheet, and neither means anything without the version it was made under.
+    #[serde(default)]
+    pub splitter: String,
+    #[serde(default)]
+    pub taxonomy: String,
     pub subject: String,
     pub polarity: String,
     pub ironic: bool,
@@ -407,6 +414,8 @@ pub fn ingest(dir: &Path, from: &Path) -> Result<(Vec<ClaimLabel>, ClaimIngest)>
                 subset: review.subset.clone(),
                 start: claim.start,
                 end: claim.end,
+                splitter: crate::claims::SPLITTER_VERSION.to_owned(),
+                taxonomy: crate::CORE_SPINE_VERSION.to_owned(),
                 subject: label.subject,
                 polarity: label.polarity,
                 ironic: label.ironic,

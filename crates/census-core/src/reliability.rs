@@ -294,6 +294,8 @@ mod tests {
             subset: "random".to_owned(),
             start: 0,
             end: 1,
+            splitter: crate::claims::SPLITTER_VERSION.to_owned(),
+            taxonomy: crate::CORE_SPINE_VERSION.to_owned(),
             subject: subject.to_owned(),
             polarity: "praise".to_owned(),
             ironic: false,
