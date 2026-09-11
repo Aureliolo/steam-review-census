@@ -219,7 +219,7 @@ input::placeholder {
   border-color: var(--accent);
 }
 
-.pip.classified {
+.pip.read {
   border-color: var(--accent);
   background: var(--accent);
 }

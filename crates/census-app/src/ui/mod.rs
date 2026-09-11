@@ -74,8 +74,8 @@ fn stage_of(dir: &Path, app_id: u32) -> &'static str {
     let Ok(snapshot) = embed::latest_snapshot(dir, app_id) else {
         return "crawled";
     };
-    if snapshot.join("classification.json").exists() {
-        "classified"
+    if snapshot.join("reading.json").exists() {
+        "read"
     } else if snapshot.join("embeddings.parquet").exists() {
         "embedded"
     } else {

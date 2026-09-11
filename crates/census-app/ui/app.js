@@ -515,8 +515,8 @@ function openOutside(url) {
 }
 
 function stageName(stage) {
-  if (stage === 'classified') return 'Counted';
-  if (stage === 'embedded') return 'Read';
+  if (stage === 'read') return 'Read';
+  if (stage === 'embedded') return 'Embedded';
   return 'Downloaded';
 }
 
