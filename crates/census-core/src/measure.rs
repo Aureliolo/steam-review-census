@@ -88,6 +88,12 @@ impl ClaimAgreement {
         (self.matched > 0).then(|| self.declined as f64 / self.matched as f64)
     }
 
+    /// The range the agreement rate is entitled to claim, given how few claims it rests on.
+    #[must_use]
+    pub fn interval(&self) -> Option<(f64, f64)> {
+        wilson(self.agreed, self.answered)
+    }
+
     #[must_use]
     #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
     pub fn polarity_rate(&self) -> Option<f64> {
@@ -110,6 +116,101 @@ impl ClaimAgreement {
         #[expect(clippy::cast_precision_loss, reason = "at most a few dozen subjects")]
         (!scored.is_empty()).then(|| scored.iter().sum::<f64>() / scored.len() as f64)
     }
+}
+
+/// 95% Wilson score interval for a proportion.
+///
+/// Reference sets are small: a game contributes a few hundred labelled claims, where six
+/// changing hands moves the headline six points. A bare percentage invites reading such a
+/// swing as an improvement, so every rate reported anywhere in this tool carries the range it
+/// is actually entitled to claim. Wilson rather than the textbook normal interval, which
+/// misbehaves badly at these counts and happily returns bounds outside zero to one.
+#[must_use]
+pub fn wilson(part: u64, whole: u64) -> Option<(f64, f64)> {
+    const Z: f64 = 1.959_963_985;
+    let hits = rate(part, whole)?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are a few hundred claims"
+    )]
+    let n = whole as f64;
+    let denominator = Z.mul_add(Z / n, 1.0);
+    let centre = hits + Z * Z / (2.0 * n);
+    let spread = Z * (hits * (1.0 - hits) / n + Z * Z / (4.0 * n * n)).sqrt();
+    Some((
+        ((centre - spread) / denominator).max(0.0),
+        ((centre + spread) / denominator).min(1.0),
+    ))
+}
+
+#[expect(clippy::cast_precision_loss, reason = "counts are far below 2^53")]
+fn rate(part: u64, whole: u64) -> Option<f64> {
+    (whole > 0).then(|| part as f64 / whole as f64)
+}
+
+/// One figure over several games, by adding the counts rather than averaging the rates.
+///
+/// Averaging per-game rates would give a game with forty labelled claims the same weight as
+/// one with six hundred. Adding the counts first is the figure a reader means by "how often is
+/// it wrong", and the per-game numbers stay available beside it for the spread.
+#[must_use]
+pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
+    let mut total = ClaimAgreement {
+        app_id: 0,
+        matched: 0,
+        answered: 0,
+        agreed: 0,
+        declined: 0,
+        polarity_answered: 0,
+        polarity_agreed: 0,
+        clear_answered: 0,
+        clear_agreed: 0,
+        contested_answered: 0,
+        contested_agreed: 0,
+        subjects: CORE_SPINE
+            .iter()
+            .map(|category| SubjectAgreement {
+                id: category.id,
+                label: category.label,
+                labelled: 0,
+                read: 0,
+                agreed: 0,
+                mistaken_for: None,
+            })
+            .collect(),
+    };
+
+    for game in games {
+        total.matched += game.matched;
+        total.answered += game.answered;
+        total.agreed += game.agreed;
+        total.declined += game.declined;
+        total.polarity_answered += game.polarity_answered;
+        total.polarity_agreed += game.polarity_agreed;
+        total.clear_answered += game.clear_answered;
+        total.clear_agreed += game.clear_agreed;
+        total.contested_answered += game.contested_answered;
+        total.contested_agreed += game.contested_agreed;
+        // By id, not by position. A game scored against an older build's spine has its
+        // subjects in a different order, and adding those up by slot would file one subject's
+        // claims under another's name without anything failing.
+        for from in &game.subjects {
+            if let Some(into) = total
+                .subjects
+                .iter_mut()
+                .find(|subject| subject.id == from.id)
+            {
+                into.labelled += from.labelled;
+                into.read += from.read;
+                into.agreed += from.agreed;
+            }
+        }
+    }
+
+    // `mistaken_for` stays empty here. Which subject one game's `gameplay` is most often read
+    // as instead says something; the same figure summed over games with different mixes of
+    // subjects names whichever subject happened to be commonest, which is not a confusion.
+    total
 }
 
 /// Scores one game's stored readings against its claim labels.
@@ -273,6 +374,124 @@ mod tests {
         assert!(
             (found.declined_share().unwrap() - 0.4).abs() < 1e-9,
             "a score that hides what it refused to answer is not a score"
+        );
+    }
+
+    #[test]
+    fn a_rate_from_few_claims_admits_how_wide_it_is() {
+        let (low, high) = wilson(9, 10).expect("ten claims is a proportion");
+        assert!(low > 0.55 && low < 0.60, "lower bound was {low}");
+        assert!(high > 0.97 && high < 0.99, "upper bound was {high}");
+
+        let (tight_low, tight_high) = wilson(900, 1000).expect("a thousand claims too");
+        assert!(
+            tight_high - tight_low < high - low,
+            "a hundred times the claims must narrow the range"
+        );
+    }
+
+    #[test]
+    fn an_interval_never_leaves_zero_to_one() {
+        let (low, high) = wilson(0, 5).expect("nothing agreed is still a proportion");
+        assert!(low >= 0.0 && high <= 1.0);
+        let (low, high) = wilson(5, 5).expect("everything agreed too");
+        assert!(low >= 0.0 && high <= 1.0);
+    }
+
+    #[test]
+    fn nothing_measured_has_no_interval_rather_than_a_wide_one() {
+        assert_eq!(wilson(0, 0), None);
+    }
+
+    #[test]
+    fn pooling_adds_the_claims_rather_than_averaging_the_rates() {
+        let small = ClaimAgreement {
+            app_id: 1,
+            matched: 10,
+            answered: 10,
+            agreed: 10,
+            declined: 0,
+            polarity_answered: 10,
+            polarity_agreed: 10,
+            clear_answered: 10,
+            clear_agreed: 10,
+            contested_answered: 0,
+            contested_agreed: 0,
+            subjects: vec![subject(10, 10, 10)],
+        };
+        let large = ClaimAgreement {
+            app_id: 2,
+            matched: 990,
+            answered: 990,
+            agreed: 495,
+            declined: 0,
+            polarity_answered: 990,
+            polarity_agreed: 495,
+            clear_answered: 990,
+            clear_agreed: 495,
+            contested_answered: 0,
+            contested_agreed: 0,
+            subjects: vec![subject(990, 990, 495)],
+        };
+
+        let both = pooled(&[small, large]);
+        let rate = both.rate().expect("a thousand answered claims");
+        assert!(
+            (rate - 0.505).abs() < 1e-9,
+            "pooling gave {rate}; averaging the two games' rates would have given 0.75, which \
+             is a game of ten claims outvoting one of nine hundred and ninety"
+        );
+    }
+
+    #[test]
+    fn pooling_nothing_is_empty_rather_than_a_panic() {
+        let none = pooled(&[]);
+        assert_eq!(none.rate(), None);
+        assert_eq!(none.subjects.len(), CORE_SPINE.len());
+    }
+
+    #[test]
+    fn pooling_finds_a_subject_by_name_wherever_it_sits() {
+        let last = CORE_SPINE.last().expect("the spine is not empty");
+        let odd = ClaimAgreement {
+            app_id: 3,
+            matched: 4,
+            answered: 4,
+            agreed: 3,
+            declined: 0,
+            polarity_answered: 4,
+            polarity_agreed: 4,
+            clear_answered: 4,
+            clear_agreed: 3,
+            contested_answered: 0,
+            contested_agreed: 0,
+            subjects: vec![SubjectAgreement {
+                id: last.id,
+                label: last.label,
+                labelled: 4,
+                read: 4,
+                agreed: 3,
+                mistaken_for: None,
+            }],
+        };
+
+        let both = pooled(&[odd]);
+        let landed = both
+            .subjects
+            .iter()
+            .find(|subject| subject.id == last.id)
+            .expect("the spine has this subject");
+        assert_eq!(
+            (landed.labelled, landed.agreed),
+            (4, 3),
+            "a subject given on its own must land under its own name, not in the first slot"
+        );
+        assert!(
+            both.subjects
+                .iter()
+                .filter(|subject| subject.id != last.id)
+                .all(|subject| subject.labelled == 0),
+            "and nowhere else"
         );
     }
 }

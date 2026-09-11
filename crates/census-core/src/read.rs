@@ -213,10 +213,8 @@ fn read_distinct_claims(
     options: &ReadOptions,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<HashMap<[u8; 32], Reading>> {
-    let batch_size = options.batch_size;
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
-    let mut pending: Vec<String> = Vec::with_capacity(batch_size);
-    let mut keys: Vec<[u8; 32]> = Vec::with_capacity(batch_size);
+    let mut window: Vec<([u8; 32], String)> = Vec::with_capacity(LENGTH_WINDOW);
 
     crate::capture::for_each_body(snapshot, |_, language, text| {
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
@@ -230,16 +228,15 @@ fn read_distinct_claims(
         }
         for claim in crate::claims::split(text) {
             let key = crate::embed::sha256_bytes(&claim);
-            if answers.contains_key(&key) || keys.contains(&key) {
+            if answers.contains_key(&key) {
                 continue;
             }
-            keys.push(key);
-            pending.push(claim.into_owned());
-            if pending.len() >= batch_size {
-                for (key, reading) in keys.drain(..).zip(model.read(&pending)?) {
-                    answers.insert(key, reading);
-                }
-                pending.clear();
+            // Reserved immediately, so a claim repeated later in the same window is not
+            // queued twice. The reading is filled in when the window drains.
+            answers.insert(key, Reading::default());
+            window.push((key, claim.into_owned()));
+            if window.len() >= LENGTH_WINDOW {
+                drain(model, options.batch_size, &mut window, &mut answers)?;
                 on_progress(ReadProgress {
                     done: answers.len() as u64,
                     total: 0,
@@ -250,12 +247,38 @@ fn read_distinct_claims(
         Ok(())
     })?;
 
-    if !pending.is_empty() {
-        for (key, reading) in keys.drain(..).zip(model.read(&pending)?) {
-            answers.insert(key, reading);
+    drain(model, options.batch_size, &mut window, &mut answers)?;
+    Ok(answers)
+}
+
+/// Claims held back before a run of batches, so they can be sorted by length first.
+///
+/// Every batch pads to its longest member, so a batch holding one long claim and a hundred
+/// two-word ones costs as much as a hundred long ones. Sorting a window before cutting it
+/// into batches puts claims of a size together, and on a corpus of mostly short claims that
+/// is most of the arithmetic. The embedding pass has done this since a million-review game
+/// took a day; this pass was missing it.
+const LENGTH_WINDOW: usize = 16_384;
+
+fn drain(
+    model: &mut ClaimReader,
+    batch_size: usize,
+    window: &mut Vec<([u8; 32], String)>,
+    answers: &mut HashMap<[u8; 32], Reading>,
+) -> Result<()> {
+    if window.is_empty() {
+        return Ok(());
+    }
+    window.sort_unstable_by_key(|(_, claim)| claim.len());
+
+    for chunk in window.chunks(batch_size.max(1)) {
+        let texts: Vec<String> = chunk.iter().map(|(_, claim)| claim.clone()).collect();
+        for ((key, _), reading) in chunk.iter().zip(model.read(&texts)?) {
+            answers.insert(*key, reading);
         }
     }
-    Ok(answers)
+    window.clear();
+    Ok(())
 }
 
 /// What one review turned out to be about.

@@ -433,9 +433,17 @@ pub fn session_at(path: &Path) -> Result<(Session, &'static str)> {
     Ok((try_session(path, ort::ep::CPU::default().build())?, "cpu"))
 }
 
+/// Loads the graph on exactly one backend, or admits it could not.
+///
+/// `error_on_failure` is the whole point. Left at its default, a provider that cannot
+/// initialise is logged and skipped, the session builds on the CPU anyway, and the caller is
+/// handed a working session it will describe as running on a card. That is how this tool spent
+/// a fortnight reporting "cuda" on a machine with no CUDA runtime installed, at fifty claims a
+/// second, while nvidia-smi showed it was never on the GPU at all. A backend that did not load
+/// has to say so here, so that the fallback below it is a decision rather than an accident.
 fn try_session(path: &Path, provider: ort::ep::ExecutionProviderDispatch) -> Result<Session> {
     let mut builder = Session::builder()?
-        .with_execution_providers([provider])
+        .with_execution_providers([provider.error_on_failure()])
         .map_err(ort::Error::from)?;
     Ok(builder.commit_from_file(path)?)
 }

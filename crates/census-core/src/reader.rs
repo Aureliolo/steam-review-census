@@ -19,10 +19,11 @@ use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
 use crate::{Error, Result, taxonomy::CORE_SPINE_VERSION};
 
 /// What a claim does about its subject.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Polarity {
     Praise,
     Complaint,
+    #[default]
     Neutral,
 }
 
@@ -46,7 +47,10 @@ impl Polarity {
 }
 
 /// What the model said about one claim.
-#[derive(Debug, Clone, Copy)]
+///
+/// The default is "no subject, no confidence", which is what an unfilled slot honestly means
+/// and what a claim the model never reached should count as.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Reading {
     /// Position in [`crate::taxonomy::CORE_SPINE`], or `None` when nothing cleared the
     /// threshold. `None` is an answer and is counted as one.
