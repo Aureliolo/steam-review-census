@@ -427,6 +427,41 @@ it gets most of the way there at four orders of magnitude less cost, offline, an
 say how far short it falls, because it measured it. The gap, twelve points of accuracy and
 thirty-nine of coverage, is the number to close.
 
+## Where the reader loses, and what it says about where labels should go
+
+A twelve-point gap averaged over everything says to work harder. Split by subject, on the
+same 471 stratified frozen claims, it says what to work on. The reader against Opus 5, with
+how much of the set each subject has:
+
+| subject | labels | Opus 5 | the reader | the reader declined |
+|---|---|---|---|---|
+| licensing | 32 | 90% | **0%** | 65% |
+| vr | 57 | 94% | 17% | 44% |
+| accessibility | 62 | 76% | **0%** | 71% |
+| **atmosphere** | **579** | 85% | **5%** | **70%** |
+| language | 64 | 83% | 83% | 17% |
+| mods | 152 | 95% | 80% | 15% |
+| audio | 226 | 100% | 90% | 5% |
+
+Three things fall out of this, and only the first was expected.
+
+**The failure is abstention, not error.** On the rows it loses, the reader is not answering
+wrongly; it is declining 44 to 71% of the claims. That is the design working: it knows it does
+not know. It also means the coverage figure, not the accuracy figure, is what more labels buy.
+
+**A lexically distinctive subject needs almost no labels.** `language` scores 83% on 64
+labels and `mods` 80% on 152, because a claim about either nearly always says "translation" or
+"mod". `licensing` has 32 and scores zero. Label count alone does not predict this; how much
+the subject announces itself does.
+
+**`atmosphere` is the exception that matters: 579 labels, 3% of the set, and it scores 5%.**
+It is not starved. Opus 5 reads it at 85% from the same sheet, so the category is learnable
+and the sheet defines it well enough. What the small model cannot do is separate a diffuse
+subject from its neighbours: atmosphere claims are read as `audio`, `graphics` or `verdict`,
+and it declines seven in ten. More labels of the kind already collected have not fixed it and
+there is no reason to think more will. That is a different problem from `licensing`, and
+spending the same remedy on both would waste the effort.
+
 ## The corpus stopped being a corpus of games people like
 
 Measured 2026-09-11 over all 51 captures, 7.5M reviews. Before the fifteen chosen games
