@@ -55,8 +55,8 @@ State means: **done** is built and in use; **partial** is built for one case and
 | **DuckDB for querying the corpus** | **not built** |
 | `author_steamid` kept for every review, as public data | done |
 | Adaptive, date-sharded crawl with capped concurrency | done |
-| Watermark top-up so a re-crawl does not re-pull old reviews | done |
-| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | order exists, **not wired**, and wiring it is not the work: an edited review's creation date is anywhere, so the sweep cannot be date-sharded, and the capture is append-only with every reader visiting every row once, so a re-fetched review would count twice. It needs a walk in `updated` order that stops at the watermark, and a capture layout where the newest copy of a review id wins for every pass that reads one |
+| Watermark top-up so a re-crawl does not re-pull old reviews | superseded by the sweep below, which finds arrivals and edits in one walk. The top-up wrote a new snapshot holding only the new reviews, and every pass read the newest snapshot, so a topped-up game counted only what had arrived since |
+| **Periodic sweep by last-edit date**, to catch reviews edited since the crawl | done: `census sweep`, and "Bring it up to date" in the window. One walk in `updated` order, newest first, stopping a day past the watermark (the crawl, or the last sweep). Rows land in `sweep-<unix>.parquet` beside the crawl's shards, never over them, and `newest.json` records which copy of each swept id counts; every reader of the capture goes through one walker that skips the rest. The readings record when the capture last changed, and the page and the window say so when a sweep has landed since they were made |
 | Valve's default filters overridden, because they hide 17.3% of negative reviews against 9.6% of positive | done |
 
 ## Distribution
@@ -231,10 +231,10 @@ In the order they matter:
 3. **Induced per-game categories**, so a game's own subjects appear rather than only the
    twenty-five every game shares. Run on one game; the other thirty-five each need one
    agent call of about 70k tokens, so they go one at a time behind the labellers.
-4. **The window behind the page.** The report page shows the timeline, the languages and the
-   induced subjects; the window does not yet.
-5. **The edit sweep**, above, which needs a capture layout before it needs a crawl order.
+4. **A language switch** in the window and on the page, since a read is one language or all
+   of them and the choice is made on the command line today.
 
 Built since this list was first written: the report page on readings, the polarity split,
 corrected prevalence, the second reading and its comparison, the fetch-by-checksum path, the
-words that stand out on each side of a subject, the paragraph, the bake-off.
+words that stand out on each side of a subject, the paragraph, the bake-off, the timeline,
+languages and induced subjects in the window, the sweep.

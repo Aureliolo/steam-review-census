@@ -263,6 +263,10 @@ pub struct ReadReport {
     pub spine_version: String,
     pub threshold: f32,
     pub device: String,
+    /// When the capture this describes was last changed: its crawl, or the last sweep that
+    /// brought it up to date. A capture swept since is one these counts no longer describe.
+    #[serde(default)]
+    pub captured_unix: i64,
     pub subjects: Vec<SubjectCount>,
     /// The terms that separate each subject's praise from its complaints, in taxonomy order.
     #[serde(default)]
@@ -341,6 +345,7 @@ pub fn read_corpus(
 
     let answers = read_distinct_claims(model, &snapshot, options, &mut on_progress)?;
     let counted = count_reviews(app_id, &snapshot, options, &answers, &mut on_progress)?;
+    let captured = crate::report::crawl_facts(&options.out_dir, app_id)?;
 
     Ok(ReadReport {
         elapsed: started.elapsed(),
@@ -350,6 +355,7 @@ pub fn read_corpus(
         trained_on: model.provenance().data_fingerprint.clone(),
         usual_declined: model.provenance().usual_declined,
         spine_version: model.provenance().spine_version.clone(),
+        captured_unix: captured.changed_unix(),
         ..counted
     })
 }
@@ -636,6 +642,7 @@ fn count_reviews(
         spine_version: String::new(),
         threshold: 0.0,
         device: String::new(),
+        captured_unix: 0,
         subjects: CORE_SPINE
             .iter()
             .zip(&tallies)
@@ -840,6 +847,7 @@ mod tests {
             spine_version: String::new(),
             threshold: 0.5,
             device: String::new(),
+            captured_unix: 0,
             subjects: Vec::new(),
             said: Vec::new(),
             languages: Vec::new(),

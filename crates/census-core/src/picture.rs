@@ -219,6 +219,7 @@ mod tests {
             spine_version: String::new(),
             threshold: 0.5,
             device: String::new(),
+            captured_unix: 0,
             subjects,
             said,
             languages: Vec::new(),

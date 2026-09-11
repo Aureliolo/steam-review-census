@@ -82,11 +82,16 @@
             <button type="button" class="primary" id="do-read">Read every review</button>
             <span class="quiet">Splits each review into the points it makes and counts them.</span>
           </div>
+          <div class="row" id="sweep-actions" hidden>
+            <button type="button" class="quiet-button" id="do-sweep">Bring it up to date</button>
+            <span class="quiet">Fetches what was written or edited since, and nothing already held.</span>
+          </div>
 
           <div class="topics" id="topics" hidden>
             <h3>What people talk about</h3>
             <p class="lede" id="topics-lede"></p>
             <p class="in-short" id="in-short" hidden></p>
+            <p class="caveat" id="swept-caveat" hidden></p>
             <p class="caveat" id="topics-caveat" hidden></p>
             <figure class="timeline" id="timeline" hidden>
               <p class="quiet" id="timeline-note"></p>

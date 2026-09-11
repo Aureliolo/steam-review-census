@@ -370,8 +370,9 @@ impl Terms {
             } else {
                 self.close_word(&mut visit);
                 // A pair of words straddling a comma or a bracket is not a phrase anybody
-                // used; only a space carries the chain on.
-                if !ch.is_whitespace() {
+                // used; only a space carries the chain on, and a hyphen, because "full-price"
+                // and "full price" are the same two words.
+                if !ch.is_whitespace() && ch != '-' {
                     self.previous.clear();
                 }
             }

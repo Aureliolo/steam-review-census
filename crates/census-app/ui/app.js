@@ -94,10 +94,59 @@ function choose(appId) {
     ['Stage', stageName(game.stage), null],
   ]);
   set(el('game-note'), '');
+  el('game-note').classList.remove('bad');
   el('work').hidden = true;
+  el('sweep-actions').hidden = busy;
   show('game');
   loadTopics(game);
 }
+
+/* Fetches what was written or edited since the capture was made, then re-reads the game if
+   it had been read, because counts over a corpus that has since changed are counts over a
+   corpus nobody can open. */
+async function sweepGame() {
+  if (busy || chosen === null) return;
+  busy = true;
+  const appId = chosen;
+  el('game-actions').hidden = true;
+  el('sweep-actions').hidden = true;
+  el('work').hidden = false;
+  set(el('work-what'), 'Asking Steam what changed');
+  set(el('work-count'), '');
+  el('work-fill').style.width = '100%';
+  el('work-fill').classList.add('working');
+  set(el('game-note'), '');
+
+  try {
+    const swept = await invoke('sweep', { appId });
+    busy = false;
+    await refresh();
+    if (swept.rows > 0 && !el('topics').hidden) await readGame();
+    if (appId === chosen) {
+      set(
+        el('game-note'),
+        swept.rows === 0
+          ? `Nothing was written or edited since ${day.format(new Date(swept.since * 1000))}.`
+          : `${whole.format(swept.rows)} reviews fetched: ${whole.format(swept.new)} new and ` +
+              `${whole.format(swept.edited)} edited since ${day.format(new Date(swept.since * 1000))}.`,
+      );
+    }
+  } catch (failure) {
+    const note = el('game-note');
+    note.classList.add('bad');
+    set(note, String(failure));
+  } finally {
+    busy = false;
+    el('work').hidden = true;
+    el('sweep-actions').hidden = false;
+  }
+}
+
+listen('sweep', ({ payload }) => {
+  if (payload.app_id !== chosen) return;
+  set(el('work-what'), `Page ${whole.format(payload.pages)}`);
+  set(el('work-count'), `${whole.format(payload.rows)} changed`);
+});
 
 async function loadTopics(game) {
   const panel = el('topics');
@@ -128,6 +177,7 @@ async function readGame() {
   busy = true;
   const appId = chosen;
   el('game-actions').hidden = true;
+  el('sweep-actions').hidden = true;
   el('work').hidden = false;
   set(el('work-what'), 'Starting');
   set(el('work-count'), '');
@@ -145,6 +195,7 @@ async function readGame() {
   } finally {
     busy = false;
     el('work').hidden = true;
+    el('sweep-actions').hidden = false;
   }
 }
 
@@ -393,6 +444,16 @@ function drawTopics(counted) {
   const summary = el('in-short');
   summary.hidden = counted.in_short === '';
   set(summary, counted.in_short);
+
+  const swept = el('swept-caveat');
+  swept.hidden = counted.swept_since === null;
+  if (counted.swept_since !== null) {
+    set(
+      swept,
+      `The capture was brought up to date on ${day.format(new Date(counted.swept_since * 1000))} ` +
+        `and these counts were made before that. Read it again to count what arrived.`,
+    );
+  }
 
   const unread = counted.claims > 0 ? counted.unclassified_claims / counted.claims : 0;
   const silent = counted.reviews > 0 ? counted.silent_reviews / counted.reviews : 0;
@@ -821,6 +882,7 @@ el('start').addEventListener('click', start);
 el('cancel').addEventListener('click', () => (chosen === null ? show('welcome') : choose(chosen)));
 el('back').addEventListener('click', () => choose(chosen));
 el('do-read').addEventListener('click', readGame);
+el('do-sweep').addEventListener('click', sweepGame);
 el('earlier').addEventListener('click', () => {
   if (reading) openClaims(reading.subject, Math.max(0, reading.from - PER_PAGE), reading.narrowed);
 });

@@ -522,46 +522,15 @@ fn for_each_text(
 
 /// Visits the text of every review in a snapshot, one at a time.
 fn for_each_review_text(snapshot: &Path, mut visit: impl FnMut(&str) -> Result<()>) -> Result<()> {
-    let mut shards: Vec<PathBuf> = std::fs::read_dir(snapshot)?
-        .filter_map(std::result::Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("shard-") && n.ends_with(".parquet"))
-        })
-        .collect();
-    shards.sort();
-
-    for shard in shards {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&shard)?)?
-            .with_batch_size(8192)
-            .build()?;
-        for batch in reader {
-            let batch = batch?;
-            let Some(column) = batch.column_by_name("review") else {
-                continue;
-            };
-            let texts = column
-                .as_any()
-                .downcast_ref::<arrow::array::StringArray>()
-                .ok_or(Error::MalformedPayload { field: "review" })?;
-            for i in 0..texts.len() {
-                if texts.is_null(i) {
-                    continue;
-                }
-                // A review with no text says nothing about any category, and its vector is
-                // whatever the model makes of an empty string. Embedding it puts a
-                // meaningless point in the space that the nearest anchor then collects.
-                let text = texts.value(i);
-                if text.trim().is_empty() {
-                    continue;
-                }
-                visit(text)?;
-            }
+    crate::capture::for_each_body(snapshot, |_, _, text| {
+        // A review with no text says nothing about any category, and its vector is whatever
+        // the model makes of an empty string. Embedding it puts a meaningless point in the
+        // space that the nearest neighbour search then collects.
+        if text.trim().is_empty() {
+            return Ok(());
         }
-    }
-    Ok(())
+        visit(text)
+    })
 }
 
 /// How many reviews share each distinct text, keyed by the hash rather than by the text.

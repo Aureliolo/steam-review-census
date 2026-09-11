@@ -26,10 +26,12 @@ The only way to remove the argument is to hold every review and count.
 ## What it does
 
 - Take one Steam app ID, or a whole list of them.
-- Download **every** review for those games, not a sample.
-- Sort each review into a category. Use the built-in set of categories or define your own.
-- Summarise, per category, what people are praising or complaining about.
-- Build an overall picture of the game from those category summaries.
+- Download **every** review for those games, not a sample, and bring the capture up to date
+  later without downloading it again.
+- Split each review into the points it makes and sort each point into a subject, with a
+  measured error and an honest "cannot tell".
+- Show, per subject, the words the praise uses and the complaints use, counted by reviewer.
+- Build a picture of the game in a paragraph from those counts.
 - Click through from any number, anywhere, to the actual reviews behind it.
 
 Results come out as one self-contained page: every rate, the reviews behind it, and what the
@@ -407,10 +409,12 @@ These rules keep those figures honest:
   window complete while it stays short. Coverage is reported per corpus either way, because
   the first number is the one worth doubting.
 
-- **The target moves.** New reviews arrive constantly, so a corpus is a snapshot with a
-  timestamp, and it can be topped up rather than rebuilt. Reviews are also edited and deleted
-  after the fact, and vote counts drift, so a top-up is periodically followed by a full
-  re-crawl.
+- **The target moves.** New reviews arrive constantly and old ones are edited, so a corpus is
+  a snapshot with a timestamp, and it is brought up to date rather than rebuilt: one walk in
+  last-edit order fetches everything written or changed since, and stops there. Nothing
+  already captured is overwritten. An edited review is held in both forms, with a record of
+  which one counts, so a capture never loses what a review used to say. Deleted reviews and
+  drifting vote counts are what a sweep cannot see, and only a full re-crawl catches those.
 
 - **A category with no labelled examples is only as good as its description.** Fitting cannot
   invent evidence. Where a game barely discusses something, that category stays weak for that

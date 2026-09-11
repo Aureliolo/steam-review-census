@@ -91,6 +91,14 @@ pub struct CrawlFacts {
     pub snapshot_unix: i64,
     #[serde(default)]
     pub shards: u64,
+    /// When the capture was last brought up to date, where it has been.
+    #[serde(default)]
+    pub swept_unix: Option<i64>,
+    #[serde(default)]
+    pub sweeps: u64,
+    /// Rows the sweeps added: reviews that arrived since the crawl and reviews edited since.
+    #[serde(default)]
+    pub rows_swept: u64,
 }
 
 impl CrawlFacts {
@@ -102,6 +110,12 @@ impl CrawlFacts {
         } else {
             self.name.clone()
         }
+    }
+
+    /// When the capture last changed: its last sweep, or the crawl where there has been none.
+    #[must_use]
+    pub fn changed_unix(&self) -> i64 {
+        self.swept_unix.unwrap_or(self.snapshot_unix)
     }
 }
 
@@ -719,6 +733,9 @@ mod tests {
                 coverage: 1.0,
                 snapshot_unix: 0,
                 shards: 1,
+                swept_unix: None,
+                sweeps: 0,
+                rows_swept: 0,
             },
             reading: crate::read::ReadReport {
                 app_id: 1,
@@ -737,6 +754,7 @@ mod tests {
                 spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                 threshold: 0.5,
                 device: "cpu".to_owned(),
+                captured_unix: 0,
                 subjects: categories
                     .into_iter()
                     .map(|(id, mentions, top)| crate::read::SubjectCount {

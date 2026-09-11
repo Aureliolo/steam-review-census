@@ -1,12 +1,13 @@
 use std::{
     io::{IsTerminal, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
 use anyhow::Result;
 use census_core::{
-    CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET, SteamClient, crawl,
+    CrawlOptions, CrawlReport, DEFAULT_BATCH_SIZE, DEFAULT_SHARD_TARGET, SteamClient, StopReason,
+    crawl,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -135,9 +136,25 @@ enum Command {
         /// Plan a fresh crawl instead of continuing an unfinished one.
         #[arg(long)]
         restart: bool,
-        /// Fetch only reviews newer than the last completed crawl.
-        #[arg(long)]
-        top_up: bool,
+    },
+
+    /// Bring a capture up to date: fetch every review written or edited since it was
+    /// crawled, or since it was last brought up to date, and write them beside what is held.
+    ///
+    /// One walk in last-edit order finds both arrivals and edits and stops at the watermark,
+    /// so this is a few pages rather than a crawl. Nothing already captured is overwritten:
+    /// an edited review is held in both forms, and every pass that reads the capture counts
+    /// the newer one. Read the corpus again afterwards, since the readings describe the
+    /// capture as it was.
+    Sweep {
+        /// Steam app ID, as it appears in the store URL.
+        app_id: u32,
+        /// Directory holding the captures.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Milliseconds between requests.
+        #[arg(long, default_value_t = 250)]
+        pace_ms: u64,
     },
 
     /// Split every review into the separate points it makes.
@@ -397,17 +414,20 @@ pub async fn run() -> Result<()> {
             concurrency,
             shard_target,
             restart,
-            top_up,
         } => {
             let options = CrawlOptions {
                 out_dir: out,
                 concurrency,
                 shard_target,
                 resume: !restart,
-                top_up,
             };
             run_crawl(app_id, &options, Duration::from_millis(pace_ms)).await
         }
+        Command::Sweep {
+            app_id,
+            out,
+            pace_ms,
+        } => run_sweep(app_id, &out, Duration::from_millis(pace_ms)).await,
         Command::Claims { app_id, out } => run_claims(app_id, &out),
         Command::Read {
             app_ids,
@@ -1370,11 +1390,68 @@ async fn run_crawl(app_id: u32, options: &CrawlOptions, pace: Duration) -> Resul
     Ok(())
 }
 
+async fn run_sweep(app_id: u32, out: &Path, pace: Duration) -> Result<()> {
+    let client = SteamClient::new(pace)?;
+    let interactive = std::io::stderr().is_terminal();
+
+    eprintln!("bringing app {app_id} up to date");
+    let report = census_core::crawl::sweep(&client, app_id, out, |progress| {
+        if interactive {
+            let mut err = std::io::stderr();
+            let _ = write!(
+                err,
+                "\r  page {}  {} reviews   ",
+                progress.pages,
+                thousands(progress.rows)
+            );
+            let _ = err.flush();
+        }
+    })
+    .await?;
+    if interactive {
+        eprintln!();
+    }
+
+    println!("app {}", report.app_id);
+    println!(
+        "  since        {}",
+        census_core::time::day(report.watermark)
+    );
+    println!("  pages        {}", report.pages);
+    println!(
+        "  fetched      {} reviews, {} new and {} edited",
+        thousands(report.rows),
+        thousands(report.new),
+        thousands(report.edited)
+    );
+    println!(
+        "  held         {} of Valve's {}, {}",
+        thousands(report.unique),
+        thousands(report.valve_total),
+        report.coverage().map_or_else(
+            || "coverage not applicable".to_owned(),
+            census_core::report::coverage
+        )
+    );
+    if report.stop != StopReason::Exhausted {
+        println!(
+            "  stopped      {}, so the tail past the watermark was not fully walked",
+            report.stop.as_str()
+        );
+    }
+    println!("  elapsed      {}", elapsed(report.elapsed));
+    println!("  capture      {}", report.dir.display());
+    if report.rows > 0 {
+        println!(
+            "\nThe readings describe the capture as it was. Read it again to count what arrived."
+        );
+    }
+    Ok(())
+}
+
 fn print_report(report: &CrawlReport) {
     println!("app {}  ({})", report.app_id, report.review_score_desc);
-    if let Some(from) = report.top_up_from {
-        println!("  mode         top-up, reviews created after {from}");
-    } else if report.resumed {
+    if report.resumed {
         println!("  mode         resumed an unfinished crawl");
     }
     println!("  shards       {}", report.shards);

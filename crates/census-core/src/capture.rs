@@ -4,22 +4,149 @@
 //! typed columns. That redundancy is deliberate: a corpus is expensive to rebuild and, for
 //! reviews deleted since the crawl, impossible. Re-parsing must always be an option, and a
 //! fixed set of typed columns would silently discard fields Valve adds later.
+//!
+//! Immutable means append-only, not frozen. A sweep fetches what was written or edited since
+//! the capture and writes it beside the original rows, never over them, so a review that was
+//! changed is held in both versions. Which version counts is decided once, in [`Newest`], and
+//! every pass that reads the capture goes through it.
 
-use std::{fs::File, path::Path, sync::Arc};
+use std::{collections::HashMap, fs::File, path::Path, sync::Arc};
 
 use arrow::{
-    array::{ArrayRef, BooleanBuilder, Float64Builder, Int64Builder, StringBuilder, UInt32Builder},
+    array::{
+        Array, ArrayRef, BooleanBuilder, Float64Builder, Int64Array, Int64Builder, StringArray,
+        StringBuilder, UInt32Builder,
+    },
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
 use parquet::{
-    arrow::ArrowWriter,
+    arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder},
     basic::{Compression, ZstdLevel},
     file::properties::WriterProperties,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{Error, Result};
+
+/// Which copy of a review counts, where a sweep has fetched one that was already captured.
+///
+/// The newest copy of every id a sweep has written, by its last-edit time and the sweep that
+/// wrote it. A row whose id is here counts only if it is that copy; a row whose id is not here
+/// was captured once and counts as it is. The map holds one entry per swept review, which is
+/// what changed since the crawl rather than the corpus, so it fits in memory where the corpus
+/// would not.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Newest {
+    /// Id to the last-edit time of the copy that counts and the sweep holding it.
+    #[serde(default)]
+    pub copies: HashMap<String, (i64, i64)>,
+}
+
+impl Newest {
+    pub const FILE: &'static str = "newest.json";
+
+    /// What the capture records, or nothing where no sweep has run.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file exists and cannot be parsed.
+    pub fn load(snapshot: &Path) -> Result<Self> {
+        match std::fs::read(snapshot.join(Self::FILE)) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Fails if the capture directory cannot be written to.
+    pub fn save(&self, snapshot: &Path) -> Result<()> {
+        std::fs::write(snapshot.join(Self::FILE), serde_json::to_vec(self)?)?;
+        Ok(())
+    }
+
+    /// Notes a copy a sweep wrote. A later edit wins; the same edit fetched twice belongs to
+    /// the later sweep, so exactly one copy counts however often it was fetched.
+    pub fn record(&mut self, id: &str, updated: i64, sweep: i64) {
+        match self.copies.get_mut(id) {
+            Some(held) if (updated, sweep) <= *held => {}
+            Some(held) => *held = (updated, sweep),
+            None => {
+                self.copies.insert(id.to_owned(), (updated, sweep));
+            }
+        }
+    }
+
+    /// Whether a row is the copy of its review that counts. `file` is the sweep that wrote
+    /// the row, or zero for the crawl's own shards.
+    #[must_use]
+    pub fn counts(&self, id: &str, updated: i64, file: i64) -> bool {
+        self.copies
+            .get(id)
+            .is_none_or(|&(newest, sweep)| (updated, file) == (newest, sweep))
+    }
+}
+
+/// The rows of one batch that count, given the sweeps that came after the file they are in.
+struct Kept<'a> {
+    newest: &'a Newest,
+    ids: &'a StringArray,
+    updated: Option<&'a Int64Array>,
+    file: i64,
+}
+
+impl Kept<'_> {
+    fn row(&self, row: usize) -> bool {
+        if self.newest.copies.is_empty() {
+            return true;
+        }
+        let updated = self
+            .updated
+            .filter(|column| !column.is_null(row))
+            .map_or(0, |column| column.value(row));
+        self.newest.counts(self.ids.value(row), updated, self.file)
+    }
+}
+
+/// Walks every batch of the capture, crawl shards first and then each sweep in order, with
+/// the rows that count marked. Every reader of the capture comes through here, so there is
+/// one place that knows what a capture is made of.
+fn each_batch(
+    snapshot: &Path,
+    mut visit: impl FnMut(&RecordBatch, &Kept<'_>) -> Result<()>,
+) -> Result<()> {
+    let newest = Newest::load(snapshot)?;
+    for (shard, file) in shards_of(snapshot)? {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in reader {
+            let batch = batch?;
+            let ids = batch
+                .column_by_name("recommendationid")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                .ok_or(Error::MalformedPayload {
+                    field: "recommendationid",
+                })?;
+            let updated = batch
+                .column_by_name("timestamp_updated")
+                .and_then(|column| column.as_any().downcast_ref::<Int64Array>());
+            visit(
+                &batch,
+                &Kept {
+                    newest: &newest,
+                    ids,
+                    updated,
+                    file,
+                },
+            )?;
+        }
+    }
+    Ok(())
+}
 
 /// Reviews per Parquet row group, which is what the writer buffers before flushing.
 const REVIEWS_PER_ROW_GROUP: usize = 65_536;
@@ -275,36 +402,28 @@ impl RowBuilders {
 pub fn texts_for<S: std::hash::BuildHasher>(
     snapshot: &Path,
     ids: &std::collections::HashSet<String, S>,
-) -> Result<std::collections::HashMap<String, String>> {
-    use arrow::array::{Array, StringArray};
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
-    let mut found = std::collections::HashMap::new();
-    for shard in shards_of(snapshot)? {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
-            .with_batch_size(8192)
-            .build()?;
-        for batch in reader {
-            let batch = batch?;
-            let column = |name: &'static str| -> Result<&StringArray> {
-                batch
-                    .column_by_name(name)
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let review_ids = column("recommendationid")?;
-            let bodies = column("review")?;
-            for row in 0..batch.num_rows() {
-                if bodies.is_null(row) {
-                    continue;
-                }
-                let id = review_ids.value(row);
-                if ids.contains(id) {
-                    found.insert(id.to_owned(), bodies.value(row).to_owned());
-                }
+) -> Result<HashMap<String, String>> {
+    let mut found = HashMap::new();
+    each_batch(snapshot, |batch, kept| {
+        let column = |name: &'static str| -> Result<&StringArray> {
+            batch
+                .column_by_name(name)
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let review_ids = column("recommendationid")?;
+        let bodies = column("review")?;
+        for row in 0..batch.num_rows() {
+            if bodies.is_null(row) || !kept.row(row) {
+                continue;
+            }
+            let id = review_ids.value(row);
+            if ids.contains(id) {
+                found.insert(id.to_owned(), bodies.value(row).to_owned());
             }
         }
-    }
+        Ok(())
+    })?;
     Ok(found)
 }
 
@@ -335,88 +454,81 @@ pub struct Row {
 ///
 /// Fails if a shard cannot be read, or if the visitor does.
 pub fn for_each_row(snapshot: &Path, mut visit: impl FnMut(Row, &str) -> Result<()>) -> Result<()> {
-    use arrow::array::{Array, BooleanArray, Float64Array, Int64Array, StringArray, UInt32Array};
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use arrow::array::{BooleanArray, Float64Array, UInt32Array};
 
-    for shard in shards_of(snapshot)? {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
-            .with_batch_size(8192)
-            .build()?;
-        for batch in reader {
-            let batch = batch?;
-            let field = |name: &'static str| -> Result<&dyn Array> {
-                batch
-                    .column_by_name(name)
-                    .map(AsRef::as_ref)
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let cast = |name: &'static str| -> Result<&StringArray> {
-                field(name)?
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let ids = cast("recommendationid")?;
-            let texts = cast("review")?;
-            let languages = cast("language")?;
-            let helpful = field("weighted_vote_score")?
+    each_batch(snapshot, |batch, kept| {
+        let field = |name: &'static str| -> Result<&dyn Array> {
+            batch
+                .column_by_name(name)
+                .map(AsRef::as_ref)
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let cast = |name: &'static str| -> Result<&StringArray> {
+            field(name)?
                 .as_any()
-                .downcast_ref::<Float64Array>()
-                .ok_or(Error::MalformedPayload {
-                    field: "weighted_vote_score",
-                })?;
-            let votes = field("votes_up")?
-                .as_any()
-                .downcast_ref::<UInt32Array>()
-                .ok_or(Error::MalformedPayload { field: "votes_up" })?;
-            let recommended = field("voted_up")?
-                .as_any()
-                .downcast_ref::<BooleanArray>()
-                .ok_or(Error::MalformedPayload { field: "voted_up" })?;
-            let created = field("timestamp_created")?
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .ok_or(Error::MalformedPayload {
-                    field: "timestamp_created",
-                })?;
+                .downcast_ref::<StringArray>()
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let ids = cast("recommendationid")?;
+        let texts = cast("review")?;
+        let languages = cast("language")?;
+        let helpful = field("weighted_vote_score")?
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or(Error::MalformedPayload {
+                field: "weighted_vote_score",
+            })?;
+        let votes = field("votes_up")?
+            .as_any()
+            .downcast_ref::<UInt32Array>()
+            .ok_or(Error::MalformedPayload { field: "votes_up" })?;
+        let recommended = field("voted_up")?
+            .as_any()
+            .downcast_ref::<BooleanArray>()
+            .ok_or(Error::MalformedPayload { field: "voted_up" })?;
+        let created = field("timestamp_created")?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or(Error::MalformedPayload {
+                field: "timestamp_created",
+            })?;
 
-            for row in 0..batch.num_rows() {
-                if texts.is_null(row) || texts.value(row).trim().is_empty() {
-                    continue;
-                }
-                let body = texts.value(row);
-                visit(
-                    Row {
-                        recommendationid: ids.value(row).to_owned(),
-                        text_hash: crate::embed::sha256_hex(body),
-                        helpfulness: if helpful.is_null(row) {
-                            0.0
-                        } else {
-                            helpful.value(row)
-                        },
-                        votes_up: if votes.is_null(row) {
-                            0
-                        } else {
-                            votes.value(row)
-                        },
-                        voted_up: !recommended.is_null(row) && recommended.value(row),
-                        language: if languages.is_null(row) {
-                            String::new()
-                        } else {
-                            languages.value(row).to_owned()
-                        },
-                        created: if created.is_null(row) {
-                            0
-                        } else {
-                            created.value(row)
-                        },
-                    },
-                    body,
-                )?;
+        for row in 0..batch.num_rows() {
+            if texts.is_null(row) || texts.value(row).trim().is_empty() || !kept.row(row) {
+                continue;
             }
+            let body = texts.value(row);
+            visit(
+                Row {
+                    recommendationid: ids.value(row).to_owned(),
+                    text_hash: crate::embed::sha256_hex(body),
+                    helpfulness: if helpful.is_null(row) {
+                        0.0
+                    } else {
+                        helpful.value(row)
+                    },
+                    votes_up: if votes.is_null(row) {
+                        0
+                    } else {
+                        votes.value(row)
+                    },
+                    voted_up: !recommended.is_null(row) && recommended.value(row),
+                    language: if languages.is_null(row) {
+                        String::new()
+                    } else {
+                        languages.value(row).to_owned()
+                    },
+                    created: if created.is_null(row) {
+                        0
+                    } else {
+                        created.value(row)
+                    },
+                },
+                body,
+            )?;
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Streams every review's id, language and text, in capture order.
@@ -432,38 +544,29 @@ pub fn for_each_body(
     snapshot: &Path,
     mut visit: impl FnMut(&str, &str, &str) -> Result<()>,
 ) -> Result<()> {
-    use arrow::array::{Array, StringArray};
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
-    for shard in shards_of(snapshot)? {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
-            .with_batch_size(8192)
-            .build()?;
-        for batch in reader {
-            let batch = batch?;
-            let column = |name: &'static str| -> Result<&StringArray> {
-                batch
-                    .column_by_name(name)
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let ids = column("recommendationid")?;
-            let languages = column("language")?;
-            let bodies = column("review")?;
-            for row in 0..batch.num_rows() {
-                if bodies.is_null(row) {
-                    continue;
-                }
-                let language = if languages.is_null(row) {
-                    ""
-                } else {
-                    languages.value(row)
-                };
-                visit(ids.value(row), language, bodies.value(row))?;
+    each_batch(snapshot, |batch, kept| {
+        let column = |name: &'static str| -> Result<&StringArray> {
+            batch
+                .column_by_name(name)
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let ids = column("recommendationid")?;
+        let languages = column("language")?;
+        let bodies = column("review")?;
+        for row in 0..batch.num_rows() {
+            if bodies.is_null(row) || !kept.row(row) {
+                continue;
             }
+            let language = if languages.is_null(row) {
+                ""
+            } else {
+                languages.value(row)
+            };
+            visit(ids.value(row), language, bodies.value(row))?;
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// One captured review, with everything a reader needs to judge it for themselves.
@@ -493,102 +596,108 @@ pub struct CapturedReview {
 pub fn reviews_for<S: std::hash::BuildHasher>(
     snapshot: &Path,
     ids: &std::collections::HashSet<String, S>,
-) -> Result<std::collections::HashMap<String, CapturedReview>> {
-    use arrow::array::{Array, BooleanArray, Int64Array, StringArray, UInt32Array};
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+) -> Result<HashMap<String, CapturedReview>> {
+    use arrow::array::{BooleanArray, UInt32Array};
 
-    let mut found = std::collections::HashMap::new();
-    for shard in shards_of(snapshot)? {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&shard)?)?
-            .with_batch_size(8192)
-            .build()?;
-        for batch in reader {
-            let batch = batch?;
-            let strings = |name: &'static str| -> Result<&StringArray> {
-                batch
-                    .column_by_name(name)
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let counts = |name: &'static str| -> Result<&UInt32Array> {
-                batch
-                    .column_by_name(name)
-                    .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
-                    .ok_or(Error::MalformedPayload { field: name })
-            };
-            let review_ids = strings("recommendationid")?;
-            let bodies = strings("review")?;
-            let languages = strings("language")?;
-            let authors = strings("author_steamid")?;
-            let votes_up = counts("votes_up")?;
-            let votes_funny = counts("votes_funny")?;
-            let playtime = counts("author_playtime_at_review")?;
-            let recommended = batch
-                .column_by_name("voted_up")
-                .and_then(|c| c.as_any().downcast_ref::<BooleanArray>())
-                .ok_or(Error::MalformedPayload { field: "voted_up" })?;
-            let created = batch
-                .column_by_name("timestamp_created")
-                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
-                .ok_or(Error::MalformedPayload {
-                    field: "timestamp_created",
-                })?;
+    let mut found = HashMap::new();
+    each_batch(snapshot, |batch, kept| {
+        let strings = |name: &'static str| -> Result<&StringArray> {
+            batch
+                .column_by_name(name)
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let counts = |name: &'static str| -> Result<&UInt32Array> {
+            batch
+                .column_by_name(name)
+                .and_then(|c| c.as_any().downcast_ref::<UInt32Array>())
+                .ok_or(Error::MalformedPayload { field: name })
+        };
+        let review_ids = strings("recommendationid")?;
+        let bodies = strings("review")?;
+        let languages = strings("language")?;
+        let authors = strings("author_steamid")?;
+        let votes_up = counts("votes_up")?;
+        let votes_funny = counts("votes_funny")?;
+        let playtime = counts("author_playtime_at_review")?;
+        let recommended = batch
+            .column_by_name("voted_up")
+            .and_then(|c| c.as_any().downcast_ref::<BooleanArray>())
+            .ok_or(Error::MalformedPayload { field: "voted_up" })?;
+        let created = batch
+            .column_by_name("timestamp_created")
+            .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+            .ok_or(Error::MalformedPayload {
+                field: "timestamp_created",
+            })?;
 
-            for row in 0..batch.num_rows() {
-                if bodies.is_null(row) {
-                    continue;
+        for row in 0..batch.num_rows() {
+            if bodies.is_null(row) || !kept.row(row) {
+                continue;
+            }
+            let id = review_ids.value(row);
+            if !ids.contains(id) {
+                continue;
+            }
+            let string = |array: &StringArray| {
+                if array.is_null(row) {
+                    String::new()
+                } else {
+                    array.value(row).to_owned()
                 }
-                let id = review_ids.value(row);
-                if !ids.contains(id) {
-                    continue;
+            };
+            let count = |array: &UInt32Array| {
+                if array.is_null(row) {
+                    0
+                } else {
+                    array.value(row)
                 }
-                let string = |array: &StringArray| {
-                    if array.is_null(row) {
-                        String::new()
-                    } else {
-                        array.value(row).to_owned()
-                    }
-                };
-                let count = |array: &UInt32Array| {
-                    if array.is_null(row) {
+            };
+            found.insert(
+                id.to_owned(),
+                CapturedReview {
+                    id: id.to_owned(),
+                    text: bodies.value(row).to_owned(),
+                    language: string(languages),
+                    author_steamid: string(authors),
+                    voted_up: !recommended.is_null(row) && recommended.value(row),
+                    votes_up: count(votes_up),
+                    votes_funny: count(votes_funny),
+                    playtime_at_review_minutes: count(playtime),
+                    created: if created.is_null(row) {
                         0
                     } else {
-                        array.value(row)
-                    }
-                };
-                found.insert(
-                    id.to_owned(),
-                    CapturedReview {
-                        id: id.to_owned(),
-                        text: bodies.value(row).to_owned(),
-                        language: string(languages),
-                        author_steamid: string(authors),
-                        voted_up: !recommended.is_null(row) && recommended.value(row),
-                        votes_up: count(votes_up),
-                        votes_funny: count(votes_funny),
-                        playtime_at_review_minutes: count(playtime),
-                        created: if created.is_null(row) {
-                            0
-                        } else {
-                            created.value(row)
-                        },
+                        created.value(row)
                     },
-                );
-            }
+                },
+            );
         }
-    }
+        Ok(())
+    })?;
     Ok(found)
 }
 
-/// The capture's shard files, in a fixed order.
-fn shards_of(snapshot: &Path) -> Result<Vec<std::path::PathBuf>> {
-    let mut shards: Vec<std::path::PathBuf> = std::fs::read_dir(snapshot)?
+/// The name of the file a sweep writes, from when it started.
+#[must_use]
+pub fn sweep_file(started: i64) -> String {
+    format!("sweep-{started}.parquet")
+}
+
+/// The capture's files in the order they count: the crawl's shards, then each sweep from the
+/// earliest, each with the sweep that wrote it, or zero for the crawl's own.
+fn shards_of(snapshot: &Path) -> Result<Vec<(std::path::PathBuf, i64)>> {
+    let mut shards: Vec<(std::path::PathBuf, i64)> = std::fs::read_dir(snapshot)?
         .filter_map(std::result::Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("shard-") && name.ends_with(".parquet"))
+        .filter_map(|path| {
+            let name = path.file_name()?.to_str()?;
+            let stem = name.strip_suffix(".parquet")?;
+            if stem.starts_with("shard-") {
+                Some((path, 0))
+            } else {
+                let started = stem.strip_prefix("sweep-")?.parse::<i64>().ok()?;
+                Some((path, started))
+            }
         })
         .collect();
     shards.sort();
@@ -671,5 +780,146 @@ mod tests {
             .unwrap()
             .value(0);
         assert!(raw.contains("some_future_field"), "{raw}");
+    }
+
+    /// A scratch capture directory, removed on drop.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "census-capture-{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_nanos())
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn review(id: &str, text: &str, created: i64, updated: i64) -> Value {
+        json!({
+            "recommendationid": id,
+            "review": text,
+            "language": "english",
+            "timestamp_created": created,
+            "timestamp_updated": updated,
+            "voted_up": true,
+            "votes_up": 1,
+        })
+    }
+
+    fn write(path: &Path, reviews: &[Value]) {
+        let mut writer = CaptureWriter::create(path, 1).unwrap();
+        let borrowed: Vec<&Value> = reviews.iter().collect();
+        writer.write(&borrowed).unwrap();
+        writer.close().unwrap();
+    }
+
+    #[test]
+    fn every_reader_counts_the_newest_copy_of_a_swept_review_and_only_that() {
+        let scratch = Scratch::new("newest");
+        let dir = &scratch.0;
+        write(
+            &dir.join("shard-0000.parquet"),
+            &[
+                review("1", "crashes on launch", 100, 100),
+                review("2", "great game", 100, 100),
+            ],
+        );
+        // The first sweep fetches an edit of 1 and a new review 3; the second sweep fetches
+        // review 3 again, unchanged, because it was written while the first was running.
+        write(
+            &dir.join(sweep_file(500)),
+            &[
+                review("1", "fixed now, runs fine", 100, 450),
+                review("3", "arrived later", 420, 420),
+            ],
+        );
+        write(
+            &dir.join(sweep_file(600)),
+            &[review("3", "arrived later", 420, 420)],
+        );
+        let mut newest = Newest::default();
+        newest.record("1", 450, 500);
+        newest.record("3", 420, 500);
+        newest.record("3", 420, 600);
+        newest.save(dir).unwrap();
+
+        let mut seen: Vec<(String, String)> = Vec::new();
+        for_each_row(dir, |row, text| {
+            seen.push((row.recommendationid, text.to_owned()));
+            Ok(())
+        })
+        .unwrap();
+        seen.sort();
+        assert_eq!(
+            seen,
+            [
+                ("1".to_owned(), "fixed now, runs fine".to_owned()),
+                ("2".to_owned(), "great game".to_owned()),
+                ("3".to_owned(), "arrived later".to_owned()),
+            ]
+        );
+
+        let mut bodies = 0;
+        for_each_body(dir, |_, _, _| {
+            bodies += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(bodies, 3);
+
+        let wanted: std::collections::HashSet<String> = ["1", "3"].map(str::to_owned).into();
+        let fetched = reviews_for(dir, &wanted).unwrap();
+        assert_eq!(fetched["1"].text, "fixed now, runs fine");
+        assert_eq!(texts_for(dir, &wanted).unwrap()["3"], "arrived later");
+    }
+
+    #[test]
+    fn a_capture_nobody_has_swept_counts_every_row_it_holds() {
+        let scratch = Scratch::new("unswept");
+        write(
+            &scratch.0.join("shard-0000.parquet"),
+            &[review("1", "one", 1, 1), review("2", "two", 2, 2)],
+        );
+        let mut rows = 0;
+        for_each_row(&scratch.0, |_, _| {
+            rows += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(rows, 2);
+        assert!(Newest::load(&scratch.0).unwrap().copies.is_empty());
+    }
+
+    #[test]
+    fn a_later_edit_wins_and_the_same_edit_belongs_to_the_later_sweep() {
+        let mut newest = Newest::default();
+        newest.record("1", 300, 10);
+        newest.record("1", 200, 20);
+        assert_eq!(
+            newest.copies["1"],
+            (300, 10),
+            "an older edit does not displace a newer"
+        );
+        newest.record("1", 300, 30);
+        assert_eq!(
+            newest.copies["1"],
+            (300, 30),
+            "the same edit fetched again moves file"
+        );
+        assert!(newest.counts("1", 300, 30));
+        assert!(!newest.counts("1", 300, 10));
+        assert!(!newest.counts("1", 100, 0));
+        assert!(newest.counts("never swept", 0, 0));
     }
 }

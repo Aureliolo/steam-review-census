@@ -36,11 +36,6 @@ CREATE TABLE IF NOT EXISTS shard (
     max_created INTEGER,
     PRIMARY KEY (crawl_id, idx)
 );
-CREATE TABLE IF NOT EXISTS watermark (
-    app_id       INTEGER PRIMARY KEY,
-    max_created  INTEGER NOT NULL,
-    updated_unix INTEGER NOT NULL
-);
 ";
 
 #[derive(Debug)]
@@ -273,42 +268,12 @@ impl CrawlState {
     /// # Errors
     ///
     /// Fails if the rows cannot be updated.
-    pub fn finish_crawl(&self, crawl_id: i64, app_id: u32) -> Result<()> {
-        let conn = self.lock();
-        let now = now_unix();
-        conn.execute(
+    pub fn finish_crawl(&self, crawl_id: i64) -> Result<()> {
+        self.lock().execute(
             "UPDATE crawl SET finished_unix = ?2 WHERE id = ?1",
-            params![crawl_id, now],
-        )?;
-        // The watermark is what a later top-up starts from, so it only advances once every
-        // shard has landed. Advancing it on a partial crawl would skip the missing reviews
-        // permanently.
-        conn.execute(
-            "INSERT INTO watermark (app_id, max_created, updated_unix)
-             SELECT ?2, COALESCE(MAX(max_created), 0), ?3 FROM shard WHERE crawl_id = ?1
-             ON CONFLICT(app_id) DO UPDATE SET
-                 max_created = MAX(excluded.max_created, watermark.max_created),
-                 updated_unix = excluded.updated_unix",
-            params![crawl_id, app_id, now],
+            params![crawl_id, now_unix()],
         )?;
         Ok(())
-    }
-
-    /// Newest review already captured for an app, which is where a top-up begins.
-    ///
-    /// # Errors
-    ///
-    /// Fails if the query cannot be run.
-    pub fn watermark(&self, app_id: u32) -> Result<Option<i64>> {
-        let found = self
-            .lock()
-            .query_row(
-                "SELECT max_created FROM watermark WHERE app_id = ?1",
-                params![app_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()?;
-        Ok(found.filter(|&ts| ts > 0))
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
@@ -365,7 +330,6 @@ mod tests {
     fn a_fresh_database_has_nothing_to_resume() {
         let (state, _d) = state();
         assert!(state.resumable(1).unwrap().is_none());
-        assert!(state.watermark(1).unwrap().is_none());
     }
 
     #[test]
@@ -400,46 +364,23 @@ mod tests {
     }
 
     #[test]
-    fn the_watermark_only_advances_once_every_shard_has_landed() {
+    fn a_crawl_is_finished_once_every_shard_has_landed() {
         let (state, _d) = state();
         let id = state.begin_crawl(7, 1000, "url", 30).unwrap();
         state.record_shards(id, &shards()).unwrap();
         state
             .mark_done(id, 0, 10, 1, "Exhausted", Some(400))
             .unwrap();
-
-        assert!(state.watermark(7).unwrap().is_none());
+        assert!(!state.all_shards_done(id).unwrap());
 
         state
             .mark_done(id, 1, 20, 1, "Exhausted", Some(900))
             .unwrap();
         assert!(state.all_shards_done(id).unwrap());
-        state.finish_crawl(id, 7).unwrap();
+        state.finish_crawl(id).unwrap();
 
-        assert_eq!(state.watermark(7).unwrap(), Some(900));
         assert!(state.resumable(7).unwrap().is_none());
         assert_eq!(state.completed_totals(id).unwrap(), (30, 2));
-    }
-
-    #[test]
-    fn a_top_up_that_finds_nothing_does_not_reset_the_watermark() {
-        let (state, _d) = state();
-        let first = state.begin_crawl(7, 1000, "url", 30).unwrap();
-        state.record_shards(first, &shards()).unwrap();
-        state
-            .mark_done(first, 0, 10, 1, "Exhausted", Some(400))
-            .unwrap();
-        state
-            .mark_done(first, 1, 20, 1, "Exhausted", Some(900))
-            .unwrap();
-        state.finish_crawl(first, 7).unwrap();
-        assert_eq!(state.watermark(7).unwrap(), Some(900));
-
-        // A top-up finding nothing new plans no shards, so MAX over an empty set is null.
-        // Writing that through would rewind the watermark to zero and re-fetch the corpus.
-        let empty = state.begin_crawl(7, 2000, "url", 30).unwrap();
-        state.finish_crawl(empty, 7).unwrap();
-        assert_eq!(state.watermark(7).unwrap(), Some(900));
     }
 
     /// Minimal scratch directory, removed on drop, so tests never touch a shared path.

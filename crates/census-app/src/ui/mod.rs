@@ -167,7 +167,6 @@ async fn crawl(app: AppHandle, app_id: u32) -> Result<Shelf, String> {
         concurrency: SHARDS_AT_ONCE,
         shard_target: DEFAULT_SHARD_TARGET,
         resume: true,
-        top_up: false,
     };
     let client = SteamClient::new(DEFAULT_PACE).map_err(text)?;
     let window = app.clone();
@@ -186,6 +185,51 @@ async fn crawl(app: AppHandle, app_id: u32) -> Result<Shelf, String> {
     .await
     .map_err(text)?;
     Ok(shelf(&out_dir))
+}
+
+/// How far a sweep has got, as the window draws it.
+#[derive(Debug, Clone, Serialize)]
+struct SweepStep {
+    app_id: u32,
+    pages: u32,
+    rows: u64,
+}
+
+/// What a sweep brought in, as the window reports it.
+#[derive(Debug, Clone, Serialize)]
+struct Swept {
+    app_id: u32,
+    rows: u64,
+    new: u64,
+    edited: u64,
+    since: i64,
+}
+
+/// Brings a held capture up to date with what was written or edited since.
+#[tauri::command]
+async fn sweep(app: AppHandle, app_id: u32) -> Result<Swept, String> {
+    let out_dir = library_dir(&app);
+    let client = SteamClient::new(DEFAULT_PACE).map_err(text)?;
+    let window = app.clone();
+    let report = census_core::crawl::sweep(&client, app_id, &out_dir, move |progress| {
+        let _ = window.emit(
+            "sweep",
+            SweepStep {
+                app_id,
+                pages: progress.pages,
+                rows: progress.rows,
+            },
+        );
+    })
+    .await
+    .map_err(text)?;
+    Ok(Swept {
+        app_id,
+        rows: report.rows,
+        new: report.new,
+        edited: report.edited,
+        since: report.watermark,
+    })
 }
 
 /// How far a reading has got, as the window draws it.
@@ -314,6 +358,9 @@ struct Reading {
     threshold: f32,
     /// The game in a paragraph, assembled from the same counts the table shows.
     in_short: String,
+    /// When the capture was last brought up to date after these counts were made, so the
+    /// window can say the counts describe the corpus as it was.
+    swept_since: Option<i64>,
     subjects: Vec<Subject>,
     measured: Option<Measured>,
     /// Oldest first. Fewer than two and there is no line to draw.
@@ -349,6 +396,42 @@ fn share_of(part: u64, whole: u64) -> Option<f64> {
     (whole > 0).then(|| part as f64 / whole as f64)
 }
 
+/// One subject's row, with its measured error where the game has labels for it.
+fn subject_row(
+    found: &census_core::read::ReadReport,
+    subject: &census_core::read::SubjectCount,
+    agreement: Option<&census_core::ClaimAgreement>,
+) -> Subject {
+    let rate = share_of(subject.mention_reviews, found.reviews);
+    let top_rate = share_of(subject.top_mention_reviews, found.top_helpful);
+    let measured = agreement
+        .and_then(|found| found.subjects.iter().find(|s| s.id == subject.id))
+        .filter(|s| s.labelled >= 10);
+    let said = found.said.iter().find(|said| said.subject == subject.id);
+    Subject {
+        id: subject.id.clone(),
+        label: subject.label.clone(),
+        reviews: subject.mention_reviews,
+        rate,
+        praised: subject.praised,
+        criticised: subject.criticised,
+        mixed: subject.mixed,
+        claims: subject.claims,
+        top_rate,
+        bias: match (rate, top_rate) {
+            (Some(overall), Some(top)) if overall > 0.0 => Some(top / overall),
+            _ => None,
+        },
+        positive: share_of(subject.positive_mentions, subject.mention_reviews),
+        corrected: measured.and_then(|s| {
+            share_of(subject.claims, found.claims).and_then(|observed| s.corrected(observed))
+        }),
+        found: measured.and_then(census_core::measure::SubjectAgreement::recall),
+        praised_terms: said.map(|said| said.praised.clone()).unwrap_or_default(),
+        criticised_terms: said.map(|said| said.criticised.clone()).unwrap_or_default(),
+    }
+}
+
 #[tauri::command]
 #[expect(
     clippy::needless_pass_by_value,
@@ -372,44 +455,10 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         .is_file()
         .then(|| census_core::measure::agreement(&dir, app_id, &reference).ok())
         .flatten();
-    let scored = |id: &str| {
-        agreement
-            .as_ref()
-            .and_then(|found| found.subjects.iter().find(|s| s.id == id))
-    };
-
     let subjects = found
         .subjects
         .iter()
-        .map(|subject| {
-            let rate = share_of(subject.mention_reviews, found.reviews);
-            let top_rate = share_of(subject.top_mention_reviews, found.top_helpful);
-            let measured = scored(&subject.id).filter(|s| s.labelled >= 10);
-            let said = found.said.iter().find(|said| said.subject == subject.id);
-            Subject {
-                id: subject.id.clone(),
-                label: subject.label.clone(),
-                reviews: subject.mention_reviews,
-                rate,
-                praised: subject.praised,
-                criticised: subject.criticised,
-                mixed: subject.mixed,
-                claims: subject.claims,
-                top_rate,
-                bias: match (rate, top_rate) {
-                    (Some(overall), Some(top)) if overall > 0.0 => Some(top / overall),
-                    _ => None,
-                },
-                positive: share_of(subject.positive_mentions, subject.mention_reviews),
-                corrected: measured.and_then(|s| {
-                    share_of(subject.claims, found.claims)
-                        .and_then(|observed| s.corrected(observed))
-                }),
-                found: measured.and_then(census_core::measure::SubjectAgreement::recall),
-                praised_terms: said.map(|said| said.praised.clone()).unwrap_or_default(),
-                criticised_terms: said.map(|said| said.criticised.clone()).unwrap_or_default(),
-            }
-        })
+        .map(|subject| subject_row(&found, subject, agreement.as_ref()))
         .collect();
 
     let measured = agreement.as_ref().map(|found| {
@@ -437,6 +486,9 @@ fn reading(app: AppHandle, app_id: u32) -> Result<Reading, String> {
         model: found.model.clone(),
         threshold: found.threshold,
         in_short: census_core::picture::in_short(&found),
+        swept_since: facts
+            .swept_unix
+            .filter(|swept| found.captured_unix < *swept),
         subjects,
         measured,
         months: found
@@ -749,7 +801,8 @@ pub fn run() -> anyhow::Result<()> {
             reading,
             claims_behind,
             induced,
-            read_game
+            read_game,
+            sweep
         ])
         .run(tauri::generate_context!())?;
     Ok(())

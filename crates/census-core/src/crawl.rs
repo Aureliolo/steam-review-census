@@ -13,7 +13,7 @@ use tokio::{sync::Semaphore, task::JoinSet};
 use crate::{
     CaptureWriter, Result,
     api::SteamClient,
-    query::ReviewQuery,
+    query::{ReviewQuery, SortOrder},
     shard::{self, CORPUS_EPOCH, DEFAULT_SHARD_TARGET, Shard},
     state::CrawlState,
 };
@@ -26,8 +26,6 @@ pub struct CrawlOptions {
     pub concurrency: usize,
     pub shard_target: u64,
     pub resume: bool,
-    /// Fetch only reviews newer than the last completed crawl's watermark.
-    pub top_up: bool,
 }
 
 impl Default for CrawlOptions {
@@ -37,7 +35,6 @@ impl Default for CrawlOptions {
             concurrency: 4,
             shard_target: DEFAULT_SHARD_TARGET,
             resume: true,
-            top_up: false,
         }
     }
 }
@@ -90,7 +87,6 @@ pub struct CrawlReport {
     pub dir: PathBuf,
     pub complete: bool,
     pub resumed: bool,
-    pub top_up_from: Option<i64>,
     /// Windows Steam stopped serving early, which a second walk then completed.
     pub shards_restarted: usize,
     /// Windows still short of Valve's stated count after every walk. These stay unfinished.
@@ -101,19 +97,19 @@ impl CrawlReport {
     /// Share of Valve's own stated total that was actually retrieved.
     ///
     /// This is the figure that makes the census claim checkable rather than asserted. It is
-    /// only meaningful against a total reported for the same request parameters, and it is
-    /// meaningless for a top-up, which deliberately fetches only part of the corpus.
+    /// only meaningful against a total reported for the same request parameters.
     #[must_use]
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "review counts are far below 2^53"
-    )]
     pub fn coverage(&self) -> Option<f64> {
-        if self.top_up_from.is_some() || self.valve_total == 0 {
-            return None;
-        }
-        Some(self.unique as f64 / self.valve_total as f64)
+        coverage_of(self.unique, self.valve_total)
     }
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "review counts are far below 2^53"
+)]
+fn coverage_of(unique: u64, valve_total: u64) -> Option<f64> {
+    (valve_total > 0).then(|| unique as f64 / valve_total as f64)
 }
 
 /// Downloads every review Valve will serve for `app_id` into an immutable Parquet capture.
@@ -137,15 +133,8 @@ pub async fn crawl(
         .query_summary;
     let valve_total = summary.as_ref().map_or(0, |s| s.total_reviews);
 
-    let top_up_from = if options.top_up {
-        state.watermark(app_id)?
-    } else {
-        None
-    };
-    let range_start = top_up_from.map_or(CORPUS_EPOCH, |ts| ts + 1);
-
     let (crawl_id, snapshot, resumed) =
-        prepare(client, app_id, options, &state, range_start, valve_total).await?;
+        prepare(client, app_id, options, &state, valve_total).await?;
 
     let dir = options
         .out_dir
@@ -182,7 +171,7 @@ pub async fn crawl(
 
     let complete = state.all_shards_done(crawl_id)?;
     if complete {
-        state.finish_crawl(crawl_id, app_id)?;
+        state.finish_crawl(crawl_id)?;
     }
     let (unique, pages) = state.completed_totals(crawl_id)?;
     let summary = summary.unwrap_or(crate::QuerySummary {
@@ -207,7 +196,6 @@ pub async fn crawl(
         dir,
         complete,
         resumed,
-        top_up_from,
         shards_restarted,
         shards_short,
     };
@@ -224,7 +212,6 @@ async fn prepare(
     app_id: u32,
     options: &CrawlOptions,
     state: &CrawlState,
-    range_start: i64,
     valve_total: u64,
 ) -> Result<(i64, i64, bool)> {
     if options.resume
@@ -236,7 +223,7 @@ async fn prepare(
     let shards = shard::plan(
         client,
         app_id,
-        range_start,
+        CORPUS_EPOCH,
         now_unix(),
         options.shard_target,
     )
@@ -493,7 +480,6 @@ fn write_sidecar(report: &CrawlReport, snapshot: i64) -> Result<()> {
         "coverage": report.coverage(),
         "complete": report.complete,
         "resumed": report.resumed,
-        "top_up_from": report.top_up_from,
         "shards_restarted": report.shards_restarted,
         "shards_short": report.shards_short,
         "elapsed_secs": report.elapsed.as_secs_f64(),
@@ -503,6 +489,247 @@ fn write_sidecar(report: &CrawlReport, snapshot: i64) -> Result<()> {
         serde_json::to_vec_pretty(&meta)?,
     )?;
     Ok(())
+}
+
+/// How far a sweep has got.
+#[derive(Debug, Clone, Copy)]
+pub struct SweepProgress {
+    pub pages: u32,
+    pub rows: u64,
+}
+
+/// What a sweep brought in.
+#[derive(Debug, Clone)]
+pub struct SweepReport {
+    pub app_id: u32,
+    pub dir: PathBuf,
+    /// When the sweep started, which is the file it wrote and the next sweep's watermark.
+    pub started: i64,
+    /// Everything written or edited since this moment was fetched.
+    pub watermark: i64,
+    pub pages: u32,
+    /// Rows written: reviews new since the watermark plus reviews edited since it.
+    pub rows: u64,
+    /// Of those, reviews the capture had never held.
+    pub new: u64,
+    /// Of those, reviews the capture already held in an older form.
+    pub edited: u64,
+    /// The capture's unique reviews after the sweep, against Valve's total now.
+    pub unique: u64,
+    pub valve_total: u64,
+    pub stop: StopReason,
+    pub elapsed: Duration,
+}
+
+impl SweepReport {
+    /// Share of Valve's total the capture now holds.
+    #[must_use]
+    pub fn coverage(&self) -> Option<f64> {
+        coverage_of(self.unique, self.valve_total)
+    }
+}
+
+/// How far past the watermark a sweep reads before trusting that it has seen everything.
+///
+/// Valve orders by last edit but not exactly: a review can arrive a few places later than
+/// its time says. A day of slack costs a few pages and misses nothing a cursor can reach.
+const SWEEP_SLACK: i64 = 24 * 60 * 60;
+
+/// Brings a capture up to date: every review written or edited since it was last brought
+/// up to date, or since it was crawled, is fetched again and written beside what is there.
+///
+/// One walk in last-edit order serves for both. A new review's last edit is its creation,
+/// so the same walk that finds edits finds arrivals, and it stops at the watermark rather
+/// than at the end of the corpus, which is what makes a sweep a few pages rather than a
+/// crawl. The rows land in a sweep file of their own and [`crate::capture::Newest`] records
+/// which copy of each review now counts, so nothing already captured is touched.
+///
+/// # Errors
+///
+/// Fails if the capture is missing, the network does, or the files cannot be written.
+pub async fn sweep(
+    client: &SteamClient,
+    app_id: u32,
+    out_dir: &std::path::Path,
+    mut on_progress: impl FnMut(SweepProgress),
+) -> Result<SweepReport> {
+    let begun = Instant::now();
+    let dir = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let mut facts: Value = serde_json::from_slice(&std::fs::read(dir.join("crawl.json"))?)?;
+    let watermark = facts
+        .get("swept_unix")
+        .and_then(Value::as_i64)
+        .or_else(|| facts.get("snapshot_unix").and_then(Value::as_i64))
+        .ok_or(crate::Error::MalformedPayload {
+            field: "snapshot_unix",
+        })?;
+    let started = now_unix();
+
+    let mut newest = crate::capture::Newest::load(&dir)?;
+    let path = dir.join(crate::capture::sweep_file(started));
+    let walked = walk_since(
+        client,
+        app_id,
+        watermark,
+        started,
+        &path,
+        &mut newest,
+        &mut on_progress,
+    )
+    .await?;
+    if walked.rows == 0 {
+        std::fs::remove_file(&path)?;
+    } else {
+        newest.save(&dir)?;
+    }
+
+    // Valve's total moves with the corpus, so coverage is re-read against today's figure
+    // rather than the one the crawl saw.
+    let summary = client
+        .fetch(&ReviewQuery::new(app_id).per_page(0), app_id)
+        .await?
+        .query_summary;
+    let unique = facts
+        .get("rows_unique")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .saturating_add(walked.new);
+    let valve_total = summary.as_ref().map_or(0, |s| s.total_reviews);
+    let sweeps = facts.get("sweeps").and_then(Value::as_u64).unwrap_or(0) + 1;
+    let swept_rows = facts
+        .get("rows_swept")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .saturating_add(walked.rows);
+    if let Some(object) = facts.as_object_mut() {
+        object.insert("swept_unix".to_owned(), json!(started));
+        object.insert("sweeps".to_owned(), json!(sweeps));
+        object.insert("rows_swept".to_owned(), json!(swept_rows));
+        object.insert("rows_unique".to_owned(), json!(unique));
+        if let Some(summary) = &summary {
+            object.insert(
+                "valve_total_reviews".to_owned(),
+                json!(summary.total_reviews),
+            );
+            object.insert(
+                "valve_total_positive".to_owned(),
+                json!(summary.total_positive),
+            );
+            object.insert(
+                "valve_total_negative".to_owned(),
+                json!(summary.total_negative),
+            );
+            object.insert(
+                "review_score_desc".to_owned(),
+                json!(summary.review_score_desc),
+            );
+            object.insert(
+                "coverage".to_owned(),
+                json!(coverage_of(unique, valve_total)),
+            );
+        }
+    }
+    std::fs::write(dir.join("crawl.json"), serde_json::to_vec_pretty(&facts)?)?;
+
+    Ok(SweepReport {
+        app_id,
+        dir,
+        started,
+        watermark,
+        pages: walked.pages,
+        rows: walked.rows,
+        new: walked.new,
+        edited: walked.edited,
+        unique,
+        valve_total,
+        stop: walked.stop,
+        elapsed: begun.elapsed(),
+    })
+}
+
+/// What one walk in last-edit order brought in.
+struct Walked {
+    pages: u32,
+    rows: u64,
+    new: u64,
+    edited: u64,
+    stop: StopReason,
+}
+
+/// Walks the corpus newest edit first, writing every review touched since `watermark` to
+/// `path` and noting each in `newest`, until it is safely past the watermark.
+async fn walk_since(
+    client: &SteamClient,
+    app_id: u32,
+    watermark: i64,
+    started: i64,
+    path: &std::path::Path,
+    newest: &mut crate::capture::Newest,
+    on_progress: &mut impl FnMut(SweepProgress),
+) -> Result<Walked> {
+    let mut writer = CaptureWriter::create(path, app_id)?;
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut cursor = "*".to_owned();
+    let mut pages: u32 = 0;
+    let (mut new, mut edited) = (0_u64, 0_u64);
+
+    let stop = loop {
+        let query = ReviewQuery::new(app_id)
+            .order(SortOrder::Updated)
+            .cursor(cursor.clone());
+        let page = client.fetch(&query, app_id).await?;
+        pages = pages.saturating_add(1);
+        if page.reviews.is_empty() {
+            break StopReason::Exhausted;
+        }
+
+        let mut newest_on_page = i64::MIN;
+        let mut fresh: Vec<&Value> = Vec::new();
+        for review in &page.reviews {
+            let Some(id) = review.get("recommendationid").and_then(Value::as_str) else {
+                continue;
+            };
+            let stamp = |field: &str| review.get(field).and_then(Value::as_i64).unwrap_or(0);
+            let updated = stamp("timestamp_updated");
+            newest_on_page = newest_on_page.max(updated);
+            if updated < watermark || !seen.insert(id.to_owned()) {
+                continue;
+            }
+            // Created since the watermark and never swept before is a review the capture
+            // has not seen; anything else is a copy of one it has.
+            if stamp("timestamp_created") >= watermark && !newest.copies.contains_key(id) {
+                new += 1;
+            } else {
+                edited += 1;
+            }
+            newest.record(id, updated, started);
+            fresh.push(review);
+        }
+        writer.write(&fresh)?;
+        on_progress(SweepProgress {
+            pages,
+            rows: writer.rows(),
+        });
+
+        if newest_on_page < watermark - SWEEP_SLACK {
+            break StopReason::Exhausted;
+        }
+        let Some(next) = page.cursor else {
+            break StopReason::NoCursor;
+        };
+        if next == cursor {
+            break StopReason::CursorRepeated;
+        }
+        cursor = next;
+    };
+
+    Ok(Walked {
+        pages,
+        rows: writer.close()?,
+        new,
+        edited,
+        stop,
+    })
 }
 
 fn count(n: usize) -> u64 {
@@ -523,7 +750,7 @@ fn now_unix() -> i64 {
 mod tests {
     use super::*;
 
-    fn report(unique: u64, total: u64, top_up: Option<i64>) -> CrawlReport {
+    fn report(unique: u64, total: u64) -> CrawlReport {
         CrawlReport {
             app_id: 1,
             shards: 1,
@@ -539,7 +766,6 @@ mod tests {
             dir: PathBuf::new(),
             complete: true,
             resumed: false,
-            top_up_from: top_up,
             shards_restarted: 0,
             shards_short: 0,
         }
@@ -579,19 +805,14 @@ mod tests {
 
     #[test]
     fn coverage_is_the_share_of_valves_own_total() {
-        assert_eq!(report(2909, 2909, None).coverage(), Some(1.0));
-        let partial = report(21, 2909, None);
+        assert_eq!(report(2909, 2909).coverage(), Some(1.0));
+        let partial = report(21, 2909);
         assert!((partial.coverage().unwrap() - 0.007_218).abs() < 1e-6);
     }
 
     #[test]
-    fn a_top_up_reports_no_coverage_because_it_is_not_a_census() {
-        assert_eq!(report(12, 2909, Some(1_700_000_000)).coverage(), None);
-    }
-
-    #[test]
     fn coverage_is_unknown_rather_than_perfect_when_valve_reports_nothing() {
-        assert_eq!(report(100, 0, None).coverage(), None);
+        assert_eq!(report(100, 0).coverage(), None);
     }
 
     #[test]

@@ -547,7 +547,32 @@ fn facts(out: &mut String, app: &AppReport) {
         fact(out, "Steam calls it", &crawl.review_score_desc);
     }
     fact(out, "Snapshot", &crate::time::day(crawl.snapshot_unix));
+    if let Some(swept) = crawl.swept_unix {
+        fact(
+            out,
+            "Brought up to date",
+            &format!(
+                "{}, {} added or edited since the snapshot",
+                crate::time::day(swept),
+                thousands(crawl.rows_swept)
+            ),
+        );
+    }
     out.push_str("</dl>\n");
+    // A count of a corpus that has since changed is a count of a corpus nobody can open,
+    // and the page has to say so before a reader trusts a rate over it.
+    if let Some(swept) = crawl.swept_unix
+        && app.reading.captured_unix < swept
+    {
+        let _ = writeln!(
+            out,
+            "<p class=\"warn\">The capture was brought up to date on {} and these counts \
+             were made before that, on the corpus as it stood on {}. Read it again to count \
+             what arrived.</p>",
+            crate::time::day(swept),
+            crate::time::day(app.reading.captured_unix.max(crawl.snapshot_unix))
+        );
+    }
 }
 
 fn fact(out: &mut String, term: &str, value: &str) {
@@ -2053,6 +2078,9 @@ mod tests {
                     coverage: 1.0,
                     snapshot_unix: 1_700_000_000,
                     shards: 1,
+                    swept_unix: None,
+                    sweeps: 0,
+                    rows_swept: 0,
                 },
                 reading: crate::read::ReadReport {
                     app_id: 7,
@@ -2071,6 +2099,7 @@ mod tests {
                     usual_declined: Some(0.1),
                     threshold: 0.5,
                     device: "cpu".to_owned(),
+                    captured_unix: 1_700_000_000,
                     subjects: vec![
                         category("bugs", "Bugs and crashes", 400, 30),
                         category("performance", "Performance", 100, 2),
