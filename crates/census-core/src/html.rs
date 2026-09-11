@@ -926,7 +926,14 @@ fn category_row(out: &mut String, app: &AppReport, category: &SubjectCount, wide
     if has_examples {
         let _ = writeln!(out, "<tr class=\"panel\" id=\"{panel}\"><td colspan=\"7\">");
         if let Some(measured) = measured {
-            how_well_this_row_is_known(out, measured);
+            // The share of all claims the model filed here, declined ones included, because
+            // the labels the correction rests on were measured over declined claims too.
+            let observed = (app.reading.claims > 0).then(|| {
+                #[expect(clippy::cast_precision_loss, reason = "claim counts are far below 2^53")]
+                let share = category.claims as f64 / app.reading.claims as f64;
+                share
+            });
+            how_well_this_row_is_known(out, measured, observed);
         }
         sparkline(out, app, &category.id);
         reviews(out, app, examples);
@@ -970,7 +977,11 @@ fn thinly_measured(measured: &crate::measure::SubjectAgreement) -> String {
 /// The page carries one figure for how often the model agrees overall, and that figure is no
 /// guide at all to a particular row: the same run finds nine claims in ten of one subject and
 /// one in twenty of another.
-fn how_well_this_row_is_known(out: &mut String, measured: &crate::measure::SubjectAgreement) {
+fn how_well_this_row_is_known(
+    out: &mut String,
+    measured: &crate::measure::SubjectAgreement,
+    observed_claim_share: Option<f64>,
+) {
     if measured.labelled == 0 {
         let _ = writeln!(
             out,
@@ -1010,6 +1021,36 @@ fn how_well_this_row_is_known(out: &mut String, measured: &crate::measure::Subje
                 )
             })
     );
+
+    // The measured errors are not only a warning, they are an estimate of the true rate. The
+    // observed share is too high by what was filed here wrongly and too low by what was missed
+    // or declined, and both are measured, so the arithmetic is the one every prevalence study
+    // does. Only where the model finds the subject clearly better than chance: otherwise the
+    // observed share carries no information about the true one and the figure is invented.
+    if measured.labelled >= ENOUGH_TO_JUDGE_A_ROW
+        && let Some(observed) = observed_claim_share
+    {
+        match measured.corrected(observed) {
+            Some(corrected) => {
+                let _ = writeln!(
+                    out,
+                    "<p class=\"note\">Corrected for those errors, the share of claims about \
+                     this is about <strong>{}</strong>, against the {} the model read. That is \
+                     an estimate from a few hundred labels, and it moves with them.</p>",
+                    percent(corrected),
+                    percent(observed)
+                );
+            }
+            None => {
+                let _ = writeln!(
+                    out,
+                    "<p class=\"note\">The model finds this subject little better than chance, \
+                     so its rate cannot be corrected: the share it read says almost nothing \
+                     about the share there is.</p>"
+                );
+            }
+        }
+    }
 }
 
 /// One category's mention rate month by month.
@@ -2017,6 +2058,7 @@ mod tests {
             labelled,
             read: agreed,
             agreed,
+            seen: labelled * 4,
             mistaken_for: None,
         };
 
@@ -2034,16 +2076,28 @@ mod tests {
         );
 
         let mut out = String::new();
-        how_well_this_row_is_known(&mut out, &scored(100, 4));
+        how_well_this_row_is_known(&mut out, &scored(100, 4), Some(0.05));
         assert!(out.contains("found 4.0%"), "{out}");
         assert!(out.contains("100 labelled claims"), "{out}");
         assert!(
             out.contains("note warn"),
             "a row this thin should look thin: {out}"
         );
+        assert!(
+            out.contains("cannot be corrected"),
+            "a subject found in 4% of its claims is chance, and a corrected rate from it would \
+             be invented: {out}"
+        );
+
+        let mut well = String::new();
+        how_well_this_row_is_known(&mut well, &scored(100, 80), Some(0.2));
+        assert!(
+            well.contains("Corrected for those errors"),
+            "a subject found four times in five earns a corrected rate: {well}"
+        );
 
         let mut none = String::new();
-        how_well_this_row_is_known(&mut none, &scored(0, 0));
+        how_well_this_row_is_known(&mut none, &scored(0, 0), Some(0.1));
         assert!(none.contains("nothing here is measured"), "{none}");
     }
 

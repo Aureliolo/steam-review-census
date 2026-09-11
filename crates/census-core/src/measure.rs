@@ -29,6 +29,10 @@ pub struct SubjectAgreement {
     pub read: u64,
     /// Claims both put here.
     pub agreed: u64,
+    /// Labelled claims the model saw at all, here or elsewhere, answered or declined. The
+    /// denominator a corrected rate needs, because the rate it corrects is over every claim
+    /// in the corpus and not only the ones the model chose to answer.
+    pub seen: u64,
     /// The subject this one is most often read as instead, where they disagree. A subject
     /// read as one particular other subject is a boundary the taxonomy has not settled, and
     /// no amount of training settles it for the taxonomy.
@@ -53,7 +57,53 @@ impl SubjectAgreement {
         let (precision, recall) = (self.precision()?, self.recall()?);
         (precision + recall > 0.0).then(|| 2.0 * precision * recall / (precision + recall))
     }
+
+    /// Of the labelled claims about this subject, the share the model filed here. Declined
+    /// claims count against it, because they count against the corpus rate it corrects.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn sensitivity(&self) -> Option<f64> {
+        (self.labelled > 0).then(|| self.agreed as f64 / self.labelled as f64)
+    }
+
+    /// Of the labelled claims about anything else, the share the model filed here anyway.
+    #[must_use]
+    #[expect(clippy::cast_precision_loss, reason = "label counts are small")]
+    pub fn false_positive_rate(&self) -> Option<f64> {
+        let others = self.seen.saturating_sub(self.labelled);
+        (others > 0).then(|| (self.read - self.agreed) as f64 / others as f64)
+    }
+
+    /// What the corpus rate would be if the model made no errors, from the errors it is
+    /// measured to make.
+    ///
+    /// An observed rate is what the model said. It is too high by the claims about something
+    /// else it filed here, and too low by the claims about this it filed elsewhere or
+    /// declined. Both are measured on the labelled claims, and the correction is the one
+    /// every prevalence study makes: subtract the false-positive rate and divide by the gap
+    /// between sensitivity and false positives.
+    ///
+    /// `None` when the model finds this subject no more often in claims about it than in
+    /// claims about anything else, because then the observed rate carries no information
+    /// about the true one and any number produced from it would be invented. That is the
+    /// honest answer for a subject with a handful of labels, and it is printed as such.
+    #[must_use]
+    pub fn corrected(&self, observed: f64) -> Option<f64> {
+        let (sensitivity, false_positives) = (self.sensitivity()?, self.false_positive_rate()?);
+        let gap = sensitivity - false_positives;
+        if gap <= CORRECTABLE_GAP {
+            return None;
+        }
+        Some(((observed - false_positives) / gap).clamp(0.0, 1.0))
+    }
 }
+
+/// How much better than chance the model must find a subject before its rate is corrected.
+///
+/// Dividing by a gap near zero turns a rounding error in the measured rates into a corrected
+/// prevalence of anything at all. A tenth is far enough from zero that a claim rate moves by
+/// at most ten times its own measurement error, which is already a wide answer.
+const CORRECTABLE_GAP: f64 = 0.1;
 
 /// How well the model and the labels agree over one game.
 #[derive(Debug, Clone, Serialize)]
@@ -175,6 +225,7 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
                 labelled: 0,
                 read: 0,
                 agreed: 0,
+                seen: 0,
                 mistaken_for: None,
             })
             .collect(),
@@ -203,6 +254,7 @@ pub fn pooled(games: &[ClaimAgreement]) -> ClaimAgreement {
                 into.labelled += from.labelled;
                 into.read += from.read;
                 into.agreed += from.agreed;
+                into.seen += from.seen;
             }
         }
     }
@@ -302,6 +354,9 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
         found.polarity_agreed += u64::from(polarity == &label.polarity);
     }
 
+    // Every labelled claim with a known subject, which is what a subject's false-positive rate
+    // is measured over: the claims about anything else that the model could have filed here.
+    let seen: u64 = labelled.iter().sum();
     found.subjects = CORE_SPINE
         .iter()
         .enumerate()
@@ -311,6 +366,7 @@ pub fn agreement(out_dir: &Path, app_id: u32, reference: &Path) -> Result<ClaimA
             labelled: labelled[index],
             read: said[index],
             agreed: agreed_per[index],
+            seen,
             mistaken_for: confused[index]
                 .iter()
                 .max_by_key(|(_, count)| **count)
@@ -334,8 +390,55 @@ mod tests {
             labelled,
             read,
             agreed,
+            seen: labelled * 5,
             mistaken_for: None,
         }
+    }
+
+    #[test]
+    fn a_rate_is_corrected_by_the_errors_the_model_is_measured_to_make() {
+        // A hundred labelled about gameplay of five hundred seen. The model found seventy of
+        // them and filed forty claims about other things here too, so it reads gameplay at
+        // 22% of claims when the truth is 20%. Sensitivity 0.7, false positives 0.1.
+        let scored = SubjectAgreement {
+            id: "gameplay",
+            label: "Gameplay",
+            labelled: 100,
+            read: 110,
+            agreed: 70,
+            seen: 500,
+            mistaken_for: None,
+        };
+        let corrected = scored.corrected(0.22).expect("a gap of 0.6 is correctable");
+        assert!(
+            (corrected - 0.2).abs() < 1e-9,
+            "(0.22 - 0.1) / (0.7 - 0.1) is the true rate, got {corrected}"
+        );
+    }
+
+    #[test]
+    fn a_subject_the_model_cannot_find_gets_no_corrected_rate_rather_than_a_wild_one() {
+        // Finds it in 12% of claims about it and files 10% of everything else here: barely
+        // better than chance. Dividing by the 0.02 gap would turn 0.11 observed into 50%.
+        let scored = SubjectAgreement {
+            id: "gameplay",
+            label: "Gameplay",
+            labelled: 100,
+            read: 52,
+            agreed: 12,
+            seen: 500,
+            mistaken_for: None,
+        };
+        assert_eq!(scored.corrected(0.11), None);
+    }
+
+    #[test]
+    fn a_corrected_rate_stays_a_rate() {
+        // Observed below the false-positive rate, which a small corpus can produce by chance.
+        // The arithmetic says negative; a rate cannot be.
+        let scored = subject(100, 90, 80);
+        assert_eq!(scored.corrected(0.0), Some(0.0));
+        assert_eq!(scored.corrected(1.0), Some(1.0));
     }
 
     #[test]
@@ -471,6 +574,7 @@ mod tests {
                 labelled: 4,
                 read: 4,
                 agreed: 3,
+                seen: 4,
                 mistaken_for: None,
             }],
         };
