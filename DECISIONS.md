@@ -120,9 +120,16 @@ Then eleven games, 5,574 claims, measured with games held out whole:
 | Question | Answer |
 |---|---|
 | How good is it on a game it has never seen? | Accuracy 0.392, macro F1 0.255, and those are the figures that matter. The pilot's 0.46 was within one game, which is the easy question |
-| How much can it answer at a promised 75% accuracy? | **20% of claims**, at threshold 0.42. The other 80% are declined and counted |
+| How much can it answer at a promised 75% accuracy? | **20% of claims**, at threshold 0.42, on the games that chose the threshold |
+| Does that promise transfer? | **No.** On the two frozen games it answers 12% to 19% of claims and agrees on **57%**, not 76%. The threshold was chosen on two validation games and overfits them |
 | Is it calibrated? | Expected calibration error 0.107, area under the risk-coverage curve 0.423 |
-| What does it still not know? | `accessibility`, `community`, `compatibility` and `language` score zero F1: too few labelled claims to learn from |
+| What does it still not know? | `gameplay` has 257 labelled claims in one frozen game and the model answers **none** of them. `controls`, `difficulty` and `content` likewise. `accessibility`, `community`, `compatibility` and `language` score zero F1 for want of labels |
+
+So the model card and every report now quote the **frozen** games, never the validation ones.
+A card is read by somebody deciding whether to run this on a game of their own, and the
+validation figure answers a different question: how well it does on the games that chose its
+settings. The two differ by eighteen points, and quoting the flattering one would be the same
+kind of lie as a classifier that never abstains.
 
 The first honest measurement of abstention came from fixing how the threshold is picked. Under
 the old objective the model answered every claim at 39% accuracy and declined nothing, which

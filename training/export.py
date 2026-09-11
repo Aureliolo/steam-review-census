@@ -186,7 +186,19 @@ def main():
 
     card = run / "MODEL_CARD.md"
     metrics = record["validation"]
-    weakest = sorted(metrics["per_subject"].items(), key=lambda pair: pair[1]["f1"])[:5]
+
+    # The card quotes the frozen games. A card is read by somebody deciding whether to run this
+    # on a game of their own, and the validation figure answers a different question: how well
+    # it does on the games that chose its settings. Measured, the two differ by eighteen points.
+    frozen = record.get("test", metrics)
+    at_threshold = frozen.get(
+        "at_validation_threshold",
+        {
+            "coverage": metrics.get("threshold_coverage", 0),
+            "accuracy": metrics.get("threshold_accuracy"),
+        },
+    )
+    weakest = sorted(frozen["per_subject"].items(), key=lambda pair: pair[1]["f1"])[:5]
     card.write_text(
         "\n".join(
             [
@@ -198,21 +210,24 @@ def main():
                 "",
                 "## Measured",
                 "",
-                f"- Accuracy {metrics['accuracy']:.3f}, macro F1 {metrics['macro_f1']:.3f}",
-                f"- Polarity macro F1 {metrics['polarity_macro_f1']:.3f}",
-                f"- Calibration error {metrics['calibration_error']:.3f}",
+                f"- Accuracy {frozen.get('accuracy', 0):.3f}, macro F1 "
+                f"{frozen.get('macro_f1', 0):.3f}",
+                f"- Polarity macro F1 {frozen.get('polarity_macro_f1', 0):.3f}",
+                f"- Calibration error {frozen.get('calibration_error', 0):.3f}",
                 f"- Below {threshold:.2f} confidence it says nothing, which leaves it answering "
-                f"{metrics.get('threshold_coverage', 0):.0%} of claims at "
-                f"{metrics.get('threshold_accuracy') or 0:.3f} accuracy"
-                + ("" if metrics.get("threshold_met", True) else ", short of what was asked of it"),
-                f"- Area under the risk-coverage curve {metrics.get('aurc', 0):.3f} (lower is "
+                f"{at_threshold.get('coverage', 0):.0%} of claims at "
+                f"{at_threshold.get('accuracy') or 0:.3f} accuracy",
+                f"- Area under the risk-coverage curve {frozen.get('aurc', 0):.3f} (lower is "
                 f"better; it says whether the model knows when it does not know)",
                 f"- Trained on {record['claims']['train']} claims, validated on "
-                f"{record['claims']['validation']}, held out {record['claims']['test']}",
+                f"{record['claims']['validation']}, measured on {record['claims']['test']}",
                 f"- Data fingerprint `{record['data_fingerprint']}`, code `{record['git_sha'][:12]}`",
                 "",
-                "Games are split whole, never claims, so these figures are about a game the model",
-                "never saw. Weakest subjects here: "
+                "**Every figure above is from the frozen games**, which the model never saw and",
+                "which chose nothing about it, not even the threshold. The validation games it was",
+                f"tuned against report {metrics.get('threshold_accuracy') or 0:.3f} at the same",
+                "threshold; that number describes games used to build this model and is not what a",
+                "new game gets. Weakest subjects here: "
                 + ", ".join(f"`{name}` {row['f1']:.2f}" for name, row in weakest)
                 + ".",
                 "",

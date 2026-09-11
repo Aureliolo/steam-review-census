@@ -161,6 +161,33 @@ def risk_coverage(confidence, correct, min_accuracy):
     return curve, {**best, "met": False}
 
 
+def selective(confidence_and_predictions, truth, threshold):
+    """How much a threshold answers, and how often it is right when it does."""
+    confidence, predicted = confidence_and_predictions
+    truth = np.asarray(truth)
+    sure = confidence >= threshold
+    if not sure.any():
+        return {"coverage": 0.0, "accuracy": None, "answered": 0}
+    correct = (predicted[sure] == truth[sure]).astype(float)
+    return {
+        "coverage": float(sure.mean()),
+        "accuracy": float(correct.mean()),
+        "answered": int(sure.sum()),
+    }
+
+
+@torch.no_grad()
+def confidence_of(model, loader, device):
+    """Each claim's best subject and how sure the model is of it."""
+    model.eval()
+    logits = []
+    for batch in loader:
+        subject, _, _ = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
+        logits.append(subject.float().cpu())
+    probabilities = torch.softmax(torch.cat(logits), dim=1).numpy()
+    return probabilities.max(axis=1), probabilities.argmax(axis=1)
+
+
 def area_under_risk_coverage(confidence, correct):
     """How good the confidence ordering is, without reference to any threshold.
 
@@ -271,7 +298,7 @@ def run(args) -> dict:
             shuffle=name == "train",
             num_workers=0,
         )
-        for name, part in (("train", train), ("validation", validation))
+        for name, part in (("train", train), ("validation", validation), ("test", test))
     }
 
     steps = len(loaders["train"]) * args.epochs
@@ -338,6 +365,37 @@ def run(args) -> dict:
         model, loaders["validation"], device, subjects, validation, args.min_accuracy
     )
 
+    # The frozen games, read once, with the threshold the validation games chose. Nothing here
+    # picks anything: the moment a number from this set changes a setting, the set stops being
+    # able to answer the only question it exists for.
+    #
+    # It is asked because the validation figure was not transferring. Measured on eleven games,
+    # a threshold promising 0.756 on the validation games delivered 0.571 on the frozen ones,
+    # and a model card quoting the first would have been advertising an accuracy the tool does
+    # not have on a game it has never seen.
+    held = evaluate(model, loaders["test"], device, subjects, test, args.min_accuracy)
+    kept = confidence_of(model, loaders["test"], device)
+    truth = [subjects.index(claim.subject) for claim in test]
+    at_threshold = selective(kept, truth, metrics["threshold"])
+    held["at_validation_threshold"] = at_threshold
+    print(
+        f"frozen games: {at_threshold['coverage']:.0%} of claims answered at "
+        f"{at_threshold['accuracy']:.3f}"
+        if at_threshold["coverage"] > 0
+        else "frozen games: nothing cleared the threshold"
+    )
+    if (
+        metrics["threshold_met"]
+        and at_threshold["accuracy"] is not None
+        and at_threshold["accuracy"] < args.min_accuracy
+    ):
+        print(
+            f"  WARNING: the threshold promised {args.min_accuracy:.2f} and delivers "
+            f"{at_threshold['accuracy']:.3f} on games it has never seen. The promise was "
+            f"chosen on {len({claim.app_id for claim in validation})} validation games and "
+            f"does not transfer; quote the frozen figure, not the validation one."
+        )
+
     elapsed = time.time() - started
     record = {
         "backbone": args.backbone,
@@ -351,9 +409,15 @@ def run(args) -> dict:
         "git_sha": git_sha(),
         "data_fingerprint": claimdata.fingerprint(claims),
         "claims": {"train": len(train), "validation": len(validation), "test": len(test)},
+        "games": {
+            "train": sorted({claim.app_id for claim in train}),
+            "validation": sorted({claim.app_id for claim in validation}),
+            "test": sorted({claim.app_id for claim in test}),
+        },
         "subjects": subjects,
         "seconds": round(elapsed),
         "validation": metrics,
+        "test": held,
     }
 
     run_id = args.run_id or f"{args.backbone.replace('/', '-')}-{int(time.time())}"

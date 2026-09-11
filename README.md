@@ -291,10 +291,18 @@ These rules keep those figures honest:
   about the corpus rather than a footnote.
 
   **Right now that share is most of the corpus.** Trained on eleven games, the model answers
-  about a fifth of claims at the accuracy it promises, so four in five come back unclassified
-  and a mention rate is a floor rather than a count. Every report says so on its face. The only
-  cure is more labelled claims, which is what the reference sets are for; a threshold moved to
-  make the number look better would be the old classifier again.
+  between a tenth and a fifth of claims and agrees with a labeller on 57% of those, so four in
+  five claims come back unclassified and a mention rate is a floor rather than a count. Every
+  report says so on its face. The only cure is more labelled claims, which is what the
+  reference sets are for; a threshold moved to make the number look better would be the old
+  classifier again.
+
+- **A threshold chosen on a few games does not transfer to a new one.** The threshold promises
+  an accuracy, and that promise is measured on the games that chose it. On the frozen games it
+  has never seen, the same threshold delivers eighteen points less. So every figure in the
+  model card comes from the frozen games, and the validation figures stay in the run record
+  where they belong. With eleven games there are two of each, which is thin; the fix is more
+  games, not a better estimator.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool
