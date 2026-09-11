@@ -172,8 +172,8 @@ Three things are reported together, and separating them is what makes the number
 
 They are a **silver standard**, not a gold one, and the distinction decides what every number
 downstream may be called. A gold standard is adjudicated by people. These labels are written by
-a language model reading one review at a time, which makes the set good enough to fit anchors
-from and to measure against, and never good enough to quote as truth. Every manifest records
+a language model reading one claim at a time, which makes the set good enough to train a model
+on and to measure against, and never good enough to quote as truth. Every manifest records
 `human_verified: false`, and until that changes the tool reports **agreement** and refuses the
 word accuracy.
 
@@ -292,12 +292,19 @@ These rules keep those figures honest:
   between two models.
 
 - **A labeller is not told which game it is, but is given one game at a time.** Withholding the
-  game keeps the label answerable from the same text the classifier reads. Handing over a whole
-  game's batches undermines that where a corpus has a strong accent: thirty-five reviews about
+  game keeps the label answerable from the same text the model reads. Handing over a whole
+  game's batches undermines that where a corpus has a strong accent: a hundred claims about
   tracking and room scale identify a headset game whatever the sheet says. The effect runs one
-  way, towards labels the classifier cannot reproduce, so it understates the classifier rather
-  than flattering it. Shuffling reviews from several games into each batch would remove it, at
-  the cost of routing the labels back per game before they can be ingested.
+  way, towards labels the model cannot reproduce, so it understates the model rather than
+  flattering it. Shuffling reviews from several games into each batch would remove it, at the
+  cost of routing the labels back per game before they can be ingested.
+
+- **A claim is split mechanically, and the splitting is sometimes wrong.** Labellers report it
+  on 9% to 20% of claims depending on the game, and every rule in the splitter came from one of
+  those reports. The commonest remaining failure is a sentence that names three subjects at
+  once: "stunning visuals, calm music, epic story" is one claim carrying three, so two of them
+  go uncounted. The rate is measured rather than assumed, because it is the one error in this
+  pipeline that no amount of training fixes.
 
 - **"Every review" means every review Valve will serve, and the request parameters decide how
   many that is.** Two API defaults quietly remove a large and biased slice. `purchase_type`
