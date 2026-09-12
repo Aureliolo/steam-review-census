@@ -1191,6 +1191,35 @@ Then, in order:
    median game holds 60. Nine games cover all eight rows, and a draw of 200 claims from each
    returns **1,800 candidates balanced 205 to 231 per subject**, against label counts that
    today run from 32 to 214. Drawn 2026-09-12 and waiting on the labeller.
+
+   **The first six games labelled, 2026-09-12: half of every mined claim lands on a starved
+   row.** 1,200 labels, 595 on the eight rows the draw was cast for, against roughly 3% for a
+   random draw. `mods` gained 186 labels on 146 held before, `compatibility` 97 on 164,
+   `policy` 91 on 214, `language` 85 on 63. Two things the yield says that the candidate
+   counts did not:
+
+   - **`licensing` is 12 labels from one game and none from five**, because the line fires on
+     adaptation vocabulary and only 990080 adapts anything. The row cannot be filled from games
+     picked for other rows; it needs a sports game or a tie-in, and a draw aimed at it alone.
+   - **`vr` is rare even in headset games.** 546560 holds 73,096 candidates and gave 8 labels;
+     629730 held 14,102 and gave 5. In a game that only exists in a headset, mentioning the
+     headset is not a claim about it: "the VR combat is tight" is `gameplay`. What the sheet
+     calls `vr` is comfort, tracking and which headsets work, and reviewers of a headset game
+     say those things about as rarely as anyone else. 45 labels from six games doubles the row,
+     and it is not going to be filled by mining headset games harder.
+
+   **The retrieval half is built and it needed the common subjects to work.** `steamgauge mine
+   --by-neighbour` embeds every labelled claim and walks the corpus for the ones that sit nearer
+   a starved subject's labelled claims than any common subject's. The first version fished with
+   the starved subjects alone, and a quarter of what it caught was "great game": a short generic
+   claim sits near every short claim, and one short query on a line pulled in every short claim
+   in the corpus. Putting `verdict` and `gameplay` in the water fixed it outright, which is the
+   whole difference between "nearest to `vr`" and "nearer to `vr` than to anything else". It
+   crosses languages the probes cannot: the same run caught "we need chinese", "我们需要中文"
+   and "Necesitamos chino" for `language`, and "Ryzen 2700, RTX 2070, 16GB RAM" for
+   `compatibility`, which no word list holds. The narrowest margin per line is printed and is
+   the figure to read: negative means the line scraped the floor for a subject the game does
+   not hold, and its catch will mostly say `gameplay`.
 7. **Publishing**, which is the user's decision and not near.
 8. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.
