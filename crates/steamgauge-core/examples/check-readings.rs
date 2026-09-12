@@ -71,6 +71,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         checked += 1;
+        let said = reconcile(&snapshot, &rows, &reading)?;
+        if said.is_empty() {
+            continue;
+        }
+        complained += 1;
+        println!("{}: {}", reading.app_id, said.join("; "));
+    }
+
+    println!("\n{checked} readings checked, {complained} with something to say");
+    if stale > 0 {
+        println!("{stale} cut by an older splitter, which no arithmetic here can reconcile");
+    }
+    Ok(())
+}
+
+/// Everything one reading has to be able to say about its own rows.
+fn reconcile(
+    snapshot: &std::path::Path,
+    rows: &std::path::Path,
+    reading: &ReadReport,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    {
         let mut said: Vec<String> = Vec::new();
         let mut counted = 0_u64;
         let mut unclassified = 0_u64;
@@ -80,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut last: Option<String> = None;
         let mut expected = 0_usize;
 
-        steamgauge_core::read::for_each_reading(&rows, |id, index, subject, _, _| {
+        steamgauge_core::read::for_each_reading(rows, |id, index, subject, _, _| {
             counted += 1;
             if subject.is_none() {
                 unclassified += 1;
@@ -121,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Counted from the capture rather than read out of the reading: an auditor that takes
         // the audited pass's word for the one number that reconciles it is not checking
         // anything. A reading made before the count existed is reconciled the same way.
-        let walk = capture(&snapshot, &reading, &seen)?;
+        let walk = capture(snapshot, reading, &seen)?;
         if walk.walked != reading.reviews {
             said.push(format!(
                 "the capture holds {} reviews to read where the reading counted {}",
@@ -153,18 +175,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ));
         }
 
-        if said.is_empty() {
-            continue;
-        }
-        complained += 1;
-        println!("{}: {}", reading.app_id, said.join("; "));
+        Ok(said)
     }
-
-    println!("\n{checked} readings checked, {complained} with something to say");
-    if stale > 0 {
-        println!("{stale} cut by an older splitter, which no arithmetic here can reconcile");
-    }
-    Ok(())
 }
 
 /// What a walk of the capture finds, counted the way the reading pass counts reviews: in the
