@@ -625,14 +625,18 @@ pub struct Mined {
     pub by_line: Vec<(&'static str, usize)>,
 }
 
-/// The reviews a game's reference set already holds, so no review is drawn twice under two
-/// different draws.
+/// The reviews a game's reference set already holds, under any draw, so no review is drawn
+/// twice under two different ones.
+///
+/// Every teaching set counts, not only the random draw. A review drawn as `mined` and again
+/// as `retrieved` would be labelled twice and trained on twice, and where the two labellers
+/// disagreed the model would be trained on both answers.
 pub(crate) fn already_drawn(dir: &Path) -> std::collections::HashSet<String> {
-    std::fs::read(dir.join("sample.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Vec<DrawnReview>>(&bytes).ok())
-        .unwrap_or_default()
-        .into_iter()
+    std::iter::once(dir.to_path_buf())
+        .chain(TEACHING_SETS.iter().map(|name| dir.join(name)))
+        .filter_map(|set| std::fs::read(set.join("sample.json")).ok())
+        .filter_map(|bytes| serde_json::from_slice::<Vec<DrawnReview>>(&bytes).ok())
+        .flatten()
         .map(|review| review.id)
         .collect()
 }

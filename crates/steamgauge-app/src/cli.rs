@@ -2350,10 +2350,12 @@ async fn run_mine_by_neighbour(
     let mut embedder = load_encoder(model_dir, encoder, precision).await?;
 
     let lines = steamgauge_core::mine::Lines::cast(&mut embedder, reference, embed_batch)?;
+    let (cast, against) = lines.cast_count();
     eprintln!("fishing with the labelled claims of each starved subject:");
-    for (subject, count) in lines.cast_count() {
+    for (subject, count) in cast {
         eprintln!("  {subject:<16} {count:>5}");
     }
+    eprintln!("  and {against} labelled claims of the common subjects voting against");
 
     let (mut reviews, mut asked, mut batches) = (0, 0, 0);
     let mut by_line: std::collections::BTreeMap<&str, (usize, f32, f32)> =
@@ -2385,15 +2387,15 @@ async fn run_mine_by_neighbour(
         if interactive {
             eprintln!();
         }
-        for (subject, count, nearest, furthest) in &found.by_line {
-            let entry = by_line.entry(subject).or_insert((0, 0.0, 1.0));
+        for (subject, count, widest, narrowest) in &found.by_line {
+            let entry = by_line
+                .entry(subject)
+                .or_insert((0, f32::NEG_INFINITY, f32::INFINITY));
             entry.0 += count;
-            entry.1 = entry.1.max(*nearest);
-            entry.2 = if *count > 0 {
-                entry.2.min(*furthest)
-            } else {
-                entry.2
-            };
+            if *count > 0 {
+                entry.1 = entry.1.max(*widest);
+                entry.2 = entry.2.min(*narrowest);
+            }
         }
         if found.drawn.is_empty() {
             println!("{app_id:<10} nothing that is not already labelled");
@@ -2419,16 +2421,20 @@ async fn run_mine_by_neighbour(
     }
     println!("\ndrawn      {reviews:>4} reviews {asked:>5} claims {batches:>3} batches");
     println!(
-        "\nwhat each line caught, and how near: the furthest is the figure to read, and a line\n\
-         whose last catch sits far below its first was scraping the floor for a subject this\n\
-         game does not hold"
+        "\nwhat each line caught, and by what margin over the nearest common subject. The\n\
+         narrowest is the figure to read: below zero, the line was scraping the floor for a\n\
+         subject this game does not hold, and those labels will mostly say `gameplay`"
     );
     println!(
-        "  {:<16} {:>6} {:>8} {:>9}",
-        "line", "caught", "nearest", "furthest"
+        "  {:<16} {:>6} {:>8} {:>10}",
+        "line", "caught", "widest", "narrowest"
     );
-    for (subject, (count, nearest, furthest)) in &by_line {
-        println!("  {subject:<16} {count:>6} {nearest:>8.3} {furthest:>9.3}");
+    for (subject, (count, widest, narrowest)) in &by_line {
+        if *count == 0 {
+            println!("  {subject:<16} {count:>6}");
+        } else {
+            println!("  {subject:<16} {count:>6} {widest:>+8.3} {narrowest:>+10.3}");
+        }
     }
     println!(
         "\nA neighbour is a candidate and the labeller decides. Ingest each with `steamgauge\n\

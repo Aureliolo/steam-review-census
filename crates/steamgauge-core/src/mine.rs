@@ -365,7 +365,7 @@ fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
 }
 
-/// The labelled claims of the starved subjects, embedded, to fish with.
+/// Every labelled claim, embedded, to fish with.
 ///
 /// This is the other half of the method, and the stronger one. A probe lists words; a labelled
 /// `policy` claim about Denuvo sits near every other complaint about copy protection whatever
@@ -373,19 +373,28 @@ fn is_word_byte(byte: u8) -> bool {
 /// subtitles is near an English one. The published form of this selects by retrieval for
 /// exactly that reason ([arXiv:2307.14899](https://arxiv.org/pdf/2307.14899)).
 ///
-/// Every labelled claim of a starved subject is a query, not a centroid of them. `policy`
-/// spans DRM, region locks, account requirements and delistings, and the mean of those points
-/// is near none of them.
+/// Every labelled claim is a query, not a centroid of them. `policy` spans DRM, region locks,
+/// account requirements and delistings, and the mean of those points is near none of them.
+///
+/// **The common subjects' claims are queries too, and they are what makes this work.** Fishing
+/// with the starved subjects alone was tried first and a quarter of what it caught was "great
+/// game": a short generic claim sits near every short claim, so one short query on a line
+/// pulls in every short claim in the corpus. What a claim is nearest to among the starved
+/// subjects is not the question. The question is whether it is nearer a starved subject than
+/// it is to `verdict` or `gameplay`, and answering that needs `verdict` and `gameplay` in the
+/// water as well. That is a nearest-neighbour vote, with every labelled claim voting.
 #[derive(Debug)]
 pub struct Lines {
     /// Subject id, one per probe, in [`PROBES`] order.
     subjects: Vec<&'static str>,
-    /// Which line each query belongs to, and its unit vector.
-    queries: Vec<(usize, Vec<f32>)>,
+    /// Every query's unit vector, one row each.
+    matrix: ndarray::Array2<f32>,
+    /// Which line a query belongs to, or `None` for a query of a common subject.
+    owner: Vec<Option<usize>>,
 }
 
 impl Lines {
-    /// Embeds every labelled claim under `reference_root` whose subject has a probe.
+    /// Embeds every labelled claim under `reference_root`.
     ///
     /// # Errors
     ///
@@ -399,80 +408,110 @@ impl Lines {
         let labelled = crate::claimset::labelled_claims(reference_root)?;
 
         let mut texts: Vec<String> = Vec::new();
-        let mut owners: Vec<usize> = Vec::new();
+        let mut owner: Vec<Option<usize>> = Vec::new();
         for claim in labelled {
-            let Some(at) = subjects
-                .iter()
-                .position(|subject| *subject == claim.label.subject)
-            else {
-                continue;
-            };
-            // A claim the labeller called contested is one two subjects fit, and a query
-            // that fits two subjects fishes for both.
+            // A claim the labeller called contested is one two subjects fit, and a vote from
+            // it is a vote for both.
             if claim.label.ambiguous || claim.text.trim().is_empty() {
                 continue;
             }
+            owner.push(
+                subjects
+                    .iter()
+                    .position(|subject| *subject == claim.label.subject),
+            );
             texts.push(claim.text);
-            owners.push(at);
         }
-        if texts.is_empty() {
+        if texts.is_empty() || owner.iter().all(Option::is_none) {
             return Err(Error::NoReferenceSet {
                 path: reference_root.to_path_buf(),
             });
         }
 
-        let mut queries = Vec::with_capacity(texts.len());
-        for (chunk, who) in texts
-            .chunks(batch_size.max(1))
-            .zip(owners.chunks(batch_size.max(1)))
-        {
-            for (vector, owner) in embedder.embed(chunk)?.into_iter().zip(who) {
-                queries.push((*owner, vector));
+        let mut rows: Vec<f32> = Vec::new();
+        let mut dimensions = 0;
+        for chunk in texts.chunks(batch_size.max(1)) {
+            for vector in embedder.embed(chunk)? {
+                dimensions = vector.len();
+                rows.extend(vector);
             }
         }
-        Ok(Self { subjects, queries })
+        let matrix = ndarray::Array2::from_shape_vec((texts.len(), dimensions), rows)?;
+        Ok(Self {
+            subjects,
+            matrix,
+            owner,
+        })
     }
 
-    /// How many queries each line holds, in [`PROBES`] order.
+    /// How many queries each line holds, in [`PROBES`] order, and how many vote against.
     #[must_use]
-    pub fn cast_count(&self) -> Vec<(&'static str, usize)> {
+    pub fn cast_count(&self) -> (Vec<(&'static str, usize)>, usize) {
         let mut counts = vec![0; self.subjects.len()];
-        for (owner, _) in &self.queries {
-            counts[*owner] += 1;
-        }
-        self.subjects.iter().copied().zip(counts).collect()
-    }
-
-    /// The line a claim's vector sits nearest, and how near.
-    ///
-    /// Nearest to any single query of the line rather than to their mean, for the reason the
-    /// queries are kept separately: the subjects being fished for are the ones with several
-    /// unrelated senses.
-    fn nearest(&self, vector: &[f32]) -> Option<(usize, f32)> {
-        let mut best: Option<(usize, f32)> = None;
-        for (owner, query) in &self.queries {
-            let similarity: f32 = vector.iter().zip(query).map(|(a, b)| a * b).sum();
-            if best.is_none_or(|(_, found)| similarity > found) {
-                best = Some((*owner, similarity));
+        let mut against = 0;
+        for owner in &self.owner {
+            match owner {
+                Some(line) => counts[*line] += 1,
+                None => against += 1,
             }
         }
-        best
+        (self.subjects.iter().copied().zip(counts).collect(), against)
+    }
+
+    /// For each claim in a batch: the line it sits nearest, and by what margin over the
+    /// nearest common subject.
+    ///
+    /// The margin is the figure. Positive means the claim is nearer some labelled claim of
+    /// that starved subject than it is to any labelled claim of any common one, which is what
+    /// "looks like a `vr` claim" has to mean when `verdict` is a fifth of the corpus. One
+    /// matrix product for the batch rather than a loop of dot products, because a large game
+    /// is three million claims against twenty thousand queries.
+    fn margins(&self, batch: &[Vec<f32>]) -> Result<Vec<Option<(usize, f32)>>> {
+        if batch.is_empty() {
+            return Ok(Vec::new());
+        }
+        let dimensions = self.matrix.ncols();
+        let flat: Vec<f32> = batch.iter().flat_map(|row| row.iter().copied()).collect();
+        let claims = ndarray::Array2::from_shape_vec((batch.len(), dimensions), flat)?;
+        let similarities = claims.dot(&self.matrix.t());
+
+        Ok(similarities
+            .rows()
+            .into_iter()
+            .map(|row| {
+                let mut best_line: Vec<f32> = vec![f32::NEG_INFINITY; self.subjects.len()];
+                let mut best_common = f32::NEG_INFINITY;
+                for (similarity, owner) in row.iter().zip(&self.owner) {
+                    match owner {
+                        Some(line) => best_line[*line] = best_line[*line].max(*similarity),
+                        None => best_common = best_common.max(*similarity),
+                    }
+                }
+                best_line
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, near)| near.is_finite())
+                    .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                    .map(|(line, near)| (line, near - best_common))
+            })
+            .collect())
     }
 }
 
-/// What a retrieval draw found: the claims, and how near each line's catch was.
+/// What a retrieval draw found: the claims, and by what margin each line's catch was caught.
 #[derive(Debug)]
 pub struct Retrieved {
     pub drawn: Vec<crate::claimset::DrawnReview>,
-    /// Per line: how many were taken, the nearest similarity and the furthest, in [`PROBES`]
-    /// order. The furthest is the figure to read. A line whose two-hundredth catch sits at
-    /// 0.6 is scraping the floor of the corpus for a subject it does not hold, and those two
-    /// hundred labels will mostly say `gameplay`.
+    /// Per line: how many were taken, the widest margin and the narrowest, in [`PROBES`]
+    /// order. The narrowest is the figure to read. A margin is how much nearer a claim sits
+    /// to the line's labelled claims than to any common subject's, so a line whose
+    /// two-hundredth catch has a negative one was scraping the floor of the corpus for a
+    /// subject it does not hold, and those labels will mostly say `gameplay`.
     pub by_line: Vec<(&'static str, usize, f32, f32)>,
     pub claims_seen: u64,
 }
 
-/// Draws the claims nearest to the labelled claims of each starved subject.
+/// Draws the claims that sit nearer a starved subject's labelled claims than any common one's.
 ///
 /// Embeds the corpus as it goes rather than reading stored vectors, for two reasons. Stored
 /// claim vectors exist for no game yet, and the splitter changes: a vector file cut by one
@@ -480,10 +519,10 @@ pub struct Retrieved {
 /// and a draw that re-embeds cannot suffer it. The cost is a forward pass over the corpus per
 /// draw, minutes on a card for a large game, which a draw of two hundred claims can afford.
 ///
-/// A claim goes to the line it sits nearest, and each line keeps its nearest `wanted`. There
-/// is deliberately no similarity floor: a floor that suits `vr` starves `licensing`, and the
-/// per-line furthest similarity in [`Retrieved::by_line`] is what says whether a line was worth
-/// casting in this game.
+/// A claim goes to the starved line it sits nearest, keyed by its margin over the nearest
+/// common subject, and each line keeps its widest `wanted`. There is deliberately no floor on
+/// the margin: a floor that suits `vr` starves `licensing`, and the per-line narrowest margin
+/// in [`Retrieved::by_line`] is what says whether a line was worth casting in this game.
 ///
 /// Every review carries `subset: "retrieved"`, and no prevalence figure may count one.
 ///
@@ -517,7 +556,8 @@ pub fn draw_by_neighbour(
 
     let already = crate::claimset::already_drawn(dir);
 
-    // The key is the distance, quantised, so the bounded keeper's "smallest" is "nearest".
+    // The key is the margin turned upside down and quantised, so the bounded keeper's
+    // "smallest" is "widest".
     let mut kept: Vec<crate::bounded::Smallest<u32, (String, u16, f32)>> = lines
         .subjects
         .iter()
@@ -534,11 +574,12 @@ pub fn draw_by_neighbour(
         }
         let texts: Vec<String> = pending.iter().map(|(_, _, text)| text.clone()).collect();
         let vectors = embedder.embed(&texts)?;
-        for ((id, index, _), vector) in pending.drain(..).zip(vectors) {
-            let Some((line, similarity)) = lines.nearest(&vector) else {
+        let margins = lines.margins(&vectors)?;
+        for ((id, index, _), found) in pending.drain(..).zip(margins) {
+            let Some((line, margin)) = found else {
                 continue;
             };
-            kept[line].offer(distance_key(similarity), (id, index, similarity));
+            kept[line].offer(margin_key(margin), (id, index, margin));
         }
         Ok(())
     };
@@ -594,17 +635,18 @@ pub fn draw_by_neighbour(
     })
 }
 
-/// A cosine similarity as a key the bounded keeper sorts ascending, nearest first.
+/// A margin as a key the bounded keeper sorts ascending, widest first.
 ///
-/// Quantised to a millionth, which is finer than an fp16 forward pass can tell two claims
-/// apart by, so nothing is lost in the ordering.
-fn distance_key(similarity: f32) -> u32 {
+/// A margin is a difference of two cosines and lies in [-2, 2]. Quantised to a millionth,
+/// which is finer than an fp16 forward pass can tell two claims apart by, so nothing is lost
+/// in the ordering.
+fn margin_key(margin: f32) -> u32 {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "clamped to [0, 2] and scaled to fit"
+        reason = "clamped to [0, 4] and scaled to fit"
     )]
-    let key = ((1.0 - similarity.clamp(-1.0, 1.0)) * 1_000_000.0) as u32;
+    let key = ((2.0 - margin.clamp(-2.0, 2.0)) * 1_000_000.0) as u32;
     key
 }
 
