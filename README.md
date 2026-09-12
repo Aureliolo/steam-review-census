@@ -217,10 +217,11 @@ The third row is what this project did before it trained anything, and it is why
 happened: cosine distance to a prototype cannot say "this is about nothing", so at the accuracy
 it promises it can answer one claim in twenty.
 
-The fourth and fifth rows are the same labels, the same schedule and the same claims, with a
-backbone of twice the size. Twenty-four points of coverage and a tenth of a point of macro F1
-for one training run, which is more than every other setting in a twenty-five-configuration
-sweep put together.
+The fourth and fifth rows are the same labels and the same claims, and what separates them is
+reading each claim inside its review and a backbone of twice the size. Twenty-four points of
+coverage and a tenth of a point of macro F1, for two training runs and no new labelling. A
+forty-configuration sweep of everything else, measured the same way, moved nothing outside its
+own noise: `DECISIONS.md` has the table and what each change was worth on its own.
 
 The last row is the one worth being honest about. **A frontier model asked directly is better
 than this, by thirteen points of accuracy and fifteen of coverage.** What it is not is
