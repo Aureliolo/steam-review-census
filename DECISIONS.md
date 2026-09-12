@@ -460,7 +460,8 @@ games that chose nothing:
 | commonest subject | 0.233 | 0.015 | 0.731 | never reaches the promise |
 | bag of words (TF-IDF, word and character n-grams) | 0.441 | 0.347 | 0.339 | 32% |
 | nearest subject centroid, untuned backbone | 0.423 | 0.372 | 0.442 | **5%** |
-| the trained reader, claim alone | 0.605 | 0.504 | 0.216 | 58% |
+| the trained reader, claim alone, 278M | 0.605 | 0.504 | 0.216 | 58% |
+| the trained reader, claim in review, 560M | **0.709** | **0.611** | **0.127** | **84%** |
 
 The third row is what this project did before it trained anything, and the last column is why
 it stopped. Cosine distance to a prototype has no way to say "this is about nothing", so its
@@ -492,11 +493,14 @@ a quarter `verdict`, and two numbers from two distributions are not a comparison
 | on the same 471 claims | answers | accuracy where it answers | macro F1 | polarity |
 |---|---|---|---|---|
 | Claude Opus 5, zero-shot, given the sheet | **99.6%** | **87.0%** [83.6, 89.7] | **0.873** | 94.1% |
-| the shipped reader, claim alone | 60.7% | 74.8% [69.5, 79.5] | 0.525 | 87.4% |
+| the reader, claim alone, 278M (2026-09-11) | 60.7% | 74.8% [69.5, 79.5] | 0.525 | 87.4% |
+| the reader, claim in review, 560M (2026-09-12) | 85.4% | 73.6% [69.1, 77.7] | 0.648 | 87.2% |
 
-It is not close. The reader delivers 74.8% against a threshold that promised 75%, so its
-calibration is honest, but it answers three claims in five and the frontier model answers
-essentially all of them, more accurately.
+It is not close, and the gap that closed is coverage rather than accuracy. The bigger backbone
+answers a quarter more of the claims at the same accuracy, which the intervals say is the same
+accuracy and not a worse one, and reaches two thirds of the frontier model's macro F1 where the
+small one reached three fifths. What has not moved is the frontier model answering essentially
+every claim, more accurately, on a sheet it was handed once.
 
 Two things to hold onto rather than explain away:
 
@@ -512,8 +516,8 @@ Two things to hold onto rather than explain away:
 
 So the claim this project can honestly make is not that it beats a frontier model. It is that
 it gets most of the way there at four orders of magnitude less cost, offline, and that it can
-say how far short it falls, because it measured it. The gap, twelve points of accuracy and
-thirty-nine of coverage, is the number to close.
+say how far short it falls, because it measured it. The gap is now thirteen points of accuracy
+and fifteen of coverage, from twelve and thirty-nine, and it is the number to close.
 
 ## Where the reader loses, and what it says about where labels should go
 

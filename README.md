@@ -200,29 +200,35 @@ Three things are reported together, and separating them is what makes the number
 
 ### What it is worth against the alternatives
 
-Measured 2026-09-11 over frozen games, which chose nothing about the model. Every row abstains
-where it is unsure, and every row is scored only on what it answered, because a score that
-quietly drops the declined claims is a score for a classifier nobody is running.
+Measured over frozen games, which chose nothing about the model. Every row abstains where it is
+unsure, and every row is scored only on what it answered, because a score that quietly drops
+the declined claims is a score for a classifier nobody is running.
 
-| | answers | accuracy where it answers |
-|---|---|---|
-| the commonest subject | everything | 23.3% |
-| TF-IDF bag of words | 32% | 44.1% |
-| nearest subject centroid over an untuned encoder | 5% | 42.3% |
-| **this reader** | **61%** | **74.8%** |
-| Claude Opus 5, given the same sheet | 99.6% | 87.0% |
+| | answers | accuracy where it answers | macro F1 |
+|---|---|---|---|
+| the commonest subject | everything | 23.3% | 0.015 |
+| TF-IDF bag of words | 32% | 44.1% | 0.347 |
+| nearest subject centroid over an untuned encoder | 5% | 42.3% | 0.372 |
+| this reader, 278M parameters (2026-09-11) | 61% | 74.8% | 0.525 |
+| **this reader, 560M parameters** | **85%** | **73.6%** | **0.648** |
+| Claude Opus 5, given the same sheet | 99.6% | 87.0% | 0.873 |
 
 The third row is what this project did before it trained anything, and it is why the rebuild
 happened: cosine distance to a prototype cannot say "this is about nothing", so at the accuracy
 it promises it can answer one claim in twenty.
 
+The fourth and fifth rows are the same labels, the same schedule and the same claims, with a
+backbone of twice the size. Twenty-four points of coverage and a tenth of a point of macro F1
+for one training run, which is more than every other setting in a twenty-five-configuration
+sweep put together.
+
 The last row is the one worth being honest about. **A frontier model asked directly is better
-than this, by twelve points of accuracy and thirty-nine of coverage.** What it is not is
+than this, by thirteen points of accuracy and fifteen of coverage.** What it is not is
 affordable: that comparison cost 405,000 tokens for 471 claims, and a single large game holds
-three million claims. This reader does that game in about two and a half hours on one desktop
-GPU, offline, for the electricity. The claim being made is not that a 278M-parameter model
-beats a frontier one. It is that it gets most of the way there at four orders of magnitude less
-cost, and that it can tell you exactly how far short it falls.
+three million claims. This reader does that game on one desktop GPU, offline, for the
+electricity. The claim being made is not that a 560M-parameter model beats a frontier one. It
+is that it gets most of the way there at four orders of magnitude less cost, and that it can
+tell you exactly how far short it falls.
 
 ### How a person turns silver into gold
 
@@ -370,14 +376,13 @@ These rules keep those figures honest:
   would commit to. The share it declined is printed beside it, and a large one is a finding
   about the corpus rather than a footnote.
 
-  **Right now that share is most of the corpus.** Trained on twenty-seven games, the model
-  answers 47% of the labelled claims in games it has never seen and agrees with a labeller on
-  80% of those, so half of the claims come back unclassified and a mention rate is a floor
-  rather than a count. Every report says so on its face. The only cure is more labelled
-  claims, which is what the reference sets are for; a threshold moved to make the number look
-  better would be the old classifier again. Sixteen games earlier the figures were an eighth
-  and 62%, and the backbone has since been chosen by bake-off rather than by reputation, so
-  the labels and the measurements are doing what they are for.
+  **That share used to be most of the corpus and is now a sixth of it.** Trained on
+  thirty-six games, the model answers **84%** of the labelled claims in games it has never seen
+  and agrees with a labeller on **76%** of those. Sixteen games and three backbones ago it
+  answered an eighth of them at 62%. What moved it, in order: labels, then reading each claim
+  inside the review it came from, then a backbone twice the size. A threshold moved to make the
+  number look better would be the old classifier again, and the share it declines is still
+  printed beside every rate.
 
 - **A threshold chosen on a few games may not transfer to a new one.** The threshold promises
   an accuracy, and that promise is measured on the games that chose it. On eleven games the
