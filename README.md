@@ -391,13 +391,16 @@ These rules keep those figures honest:
   frozen ones delivered eighteen points less than promised; on twenty-seven they deliver four
   points more. So every figure in the model card comes from the frozen games, and the
   validation figures stay in the run record where they belong. Which games are frozen is fixed
-  by a hash of each game's id, so adding games never moves one across the line. And the tool
-  reproduced the training measurement to the claim while the two were reading the same cut of
-  the reviews: 1,071 answered at 80.8% in Python on the full-precision weights, 1,070 at 80.7%
-  in Rust on the half-precision graph over five corpora it split and joined back itself. Since
-  the splitter moved under the labels the two read different cuts, and the tool now answers
-  1,218 at 80.4% where training says 1,315 at 79.8%, a difference `steamgauge measure-claims`
-  reports claim by claim rather than smoothing.
+  by a hash of each game's id, so adding games never moves one across the line.
+
+- **The tool has to reproduce the training measurement, and when it does not the tool is
+  wrong.** They are separate implementations of one question: the trainer builds the window
+  around a claim in Python, the tool builds it in Rust over a corpus it split itself. Three
+  ways of asking exist so that any two can disagree, and each removes a suspect: Rust over the
+  exported claims, Python over the same, and the tool over its own reading of the game. On
+  2026-09-12 the first two agreed to a fifth of a point and the third was eight below, which
+  turned out to be the reader building its window out of the padding inside a tokenizer file.
+  Nothing about the output looked wrong, which is the argument for keeping all three.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool
