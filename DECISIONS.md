@@ -1081,6 +1081,14 @@ Then, in order:
    four narrowings cut the `mods` line from 5,513 claims to 778 and the `policy` line from 367
    to 60, and what is left reads like the subject it is aimed at. The test
    `the_wrong_sense_of_a_word_does_not_take_a_line` holds each of them.
+
+   **Which games to mine is most of the yield, and `mine-check` answers that too.** Run over
+   all 35 training games it found the rows are not spread thinly across the library, they are
+   concentrated: 546560 holds 73,096 `vr` candidates where 548430 holds 150, 553850 holds
+   11,916 `policy` where most games hold under 50, 990080 holds 5,139 `licensing` where the
+   median game holds 60. Nine games cover all eight rows, and a draw of 200 claims from each
+   returns **1,800 candidates balanced 205 to 231 per subject**, against label counts that
+   today run from 32 to 214. Drawn 2026-09-12 and waiting on the labeller.
 7. **Publishing**, which is the user's decision and not near.
 8. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.
