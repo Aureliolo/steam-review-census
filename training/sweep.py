@@ -222,9 +222,17 @@ def spread(found: list[dict], against: dict | None) -> None:
     print(f"\na configuration has to beat {widest:.1%} of coverage to have changed anything")
 
 
-def subjects(run: dict, against: dict | None) -> None:
-    mine = run["validation"]["per_subject"]
-    theirs = against["validation"]["per_subject"] if against else {}
+def subjects(run: dict, against: dict | None, frozen: bool) -> None:
+    """One run's score for each subject, and what another run scored on the same ones.
+
+    On the frozen games where a run has them, because a subject that reads well on the games
+    the threshold was chosen from is not a subject that reads well.
+    """
+    where = "test" if frozen else "validation"
+    if frozen and not run.get("test", {}).get("per_subject"):
+        raise SystemExit(f"{run['id']} was trained without the frozen games evaluated")
+    mine = run[where]["per_subject"]
+    theirs = (against or {}).get(where, {}).get("per_subject", {})
     width = max(len(subject) for subject in mine)
     print(f"{'subject':<{width}}  labels       F1" + ("   against" if theirs else ""))
     for subject, scores in sorted(mine.items(), key=lambda pair: -pair[1]["f1"]):
@@ -290,7 +298,7 @@ def main() -> None:
         run = by_id.get(arguments.subjects)
         if run is None:
             raise SystemExit(f"no run {arguments.subjects} on these labels")
-        subjects(run, against)
+        subjects(run, against, arguments.frozen)
         return
 
     if arguments.frozen:
