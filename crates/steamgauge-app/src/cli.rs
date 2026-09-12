@@ -948,14 +948,16 @@ fn run_declined(
         .collect();
     if !held_back.is_empty() {
         anyhow::bail!(
-            "{} are held back from training, so teaching the model on them would end the only \
+            "{} {} held back from training, so teaching the model on {} would end the only \
              honest measurement this project has. Draw from a game the model already learns \
              from.",
             held_back
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join(", "),
+            if held_back.len() == 1 { "is" } else { "are" },
+            if held_back.len() == 1 { "it" } else { "them" }
         );
     }
 
