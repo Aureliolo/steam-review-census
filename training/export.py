@@ -140,10 +140,14 @@ def main():
         half.load_state_dict(torch.load(run / "model.bin", map_location="cpu"))
         exported = InFullPrecisionOut(half.eval().half()).eval()
 
+    # Traced on a handful rather than on the whole check batch. The batch axis is dynamic, so
+    # the graph is the same either way, and tracing a 560M model on 256 sequences at once
+    # crashes the exporter outright rather than reporting anything.
+    TRACE = 8
     graph = run / "model.onnx"
     torch.onnx.export(
         exported,
-        (encoded["input_ids"], encoded["attention_mask"]),
+        (encoded["input_ids"][:TRACE], encoded["attention_mask"][:TRACE]),
         graph,
         input_names=["input_ids", "attention_mask"],
         output_names=["subject_logits", "polarity_logits", "pooled"],
@@ -177,13 +181,19 @@ def main():
     # Half precision has no CPU kernels worth the name, so it is checked where it will run.
     providers = ["CUDAExecutionProvider"] if args.fp16 else ["CPUExecutionProvider"]
     session = onnxruntime.InferenceSession(str(graph), providers=providers)
-    got = session.run(
-        ["subject_logits"],
-        {
-            "input_ids": encoded["input_ids"].numpy(),
-            "attention_mask": encoded["attention_mask"].numpy(),
-        },
-    )[0]
+    # In batches, for the same reason the trace is: the check is over hundreds of sequences and
+    # a bigger model has to fit them all on the card at once to answer in one go.
+    ids = encoded["input_ids"].numpy()
+    mask = encoded["attention_mask"].numpy()
+    got = np.concatenate(
+        [
+            session.run(
+                ["subject_logits"],
+                {"input_ids": ids[at : at + 32], "attention_mask": mask[at : at + 32]},
+            )[0]
+            for at in range(0, len(ids), 32)
+        ]
+    )
 
     got = got.astype(np.float32)
     drift = float(np.abs(wanted - got).max())
