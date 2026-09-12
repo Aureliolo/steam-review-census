@@ -505,6 +505,21 @@ answer 86.7%, 86.5% and 84.7% against 2e-5's 84.9%, 84.1% and 82.8%: a two-point
 is exactly what running the same thing twice is worth. It is not a finding, `wave9` stays, and
 nothing was re-exported, re-installed or re-read on the strength of it.
 
+The second is the one worth keeping as a lesson, because it looked like a finding for half an
+hour. `multilingual-e5-large` was pre-trained on pairs written as `query: ` and `passage: `, and
+a fine-tune that drops them is asking the encoder a differently shaped question from the one it
+learned, so writing them back in should help. The first run answered **88.9%**, two points clear
+of the best run without them and the top of the whole table. Two more seeds answered 86.4% and
+85.3%, against 86.7%, 86.5% and 84.7% without: **a mean gap of nine tenths of a point**, and a
+spread inside the prefixed configuration of 3.6. The prefixes buy nothing. A well-motivated
+change with a mechanism to explain it is exactly the kind that gets adopted on one run.
+
+What was kept from it is the plumbing rather than the setting. The pair was being built in four
+places, each repeating the same two lines: the trainer, the export, the frontier comparison and
+the confidence sweep, with the Rust reader as a fifth. `Claims.pair` is now the only place that
+decides how a claim is written, `--prefix` is an option on it that defaults to off, and the
+reader honours the same flag from `reader.json`.
+
 Against that bar, almost nothing the small model was asked changed anything. Everything here
 lands inside the band and bought nothing at all: batch 16, every window length from 96 to 256,
 marking the claim inside its window, a polarity weight of 0.2, down-weighting the contested and
