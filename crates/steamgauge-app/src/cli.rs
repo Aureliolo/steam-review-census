@@ -1739,6 +1739,7 @@ fn run_measure_claims(
 ) -> Result<()> {
     let pct =
         |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+    let mut every = Vec::new();
 
     for &app_id in app_ids {
         let mut set = reference.join(app_id.to_string());
@@ -1832,10 +1833,46 @@ fn run_measure_claims(
                     .map_or_else(String::new, |(label, count)| format!("{label} ({count})"))
             );
         }
+        every.push(found);
     }
 
+    if every.len() > 1 {
+        print_pooled(&every);
+    }
     print_what_these_figures_are(labels);
     Ok(())
+}
+
+/// The figure that has to match what training reported for the same games.
+///
+/// Per game it cannot: each is a few hundred claims and they range twenty points apart.
+/// Pooled, a gap of more than a point or so means the tool and the trainer are not asking the
+/// model the same question, and that has happened, silently, with every answer looking
+/// plausible.
+fn print_pooled(every: &[steamgauge_core::measure::ClaimAgreement]) {
+    let pct =
+        |value: Option<f64>| value.map_or_else(|| "-".to_owned(), |v| format!("{:.1}%", v * 100.0));
+    let found = steamgauge_core::measure::pooled(every);
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "reference sets are thousands of claims"
+    )]
+    let answered = (found.matched > 0).then(|| found.answered as f64 / found.matched as f64);
+    println!(
+        "\npooled over {} games: {} labelled claims, {} answered ({}), {} agreement, macro F1 {}",
+        every.len(),
+        thousands(found.matched),
+        thousands(found.answered),
+        pct(answered),
+        pct(found.rate()),
+        found
+            .macro_f1()
+            .map_or_else(|| "-".to_owned(), |v| format!("{v:.3}"))
+    );
+    println!(
+        "  training reports the same thing for the same games; more than a point apart means\n  \
+         the two are not asking the model the same question."
+    );
 }
 
 /// The one paragraph that decides whether a reader may call these numbers accuracy.
