@@ -294,9 +294,17 @@ def main():
 
     # The reader wants three files beside each other, and so does publishing. The tokenizer
     # directory the trainer saved holds more than the one file the tool reads.
-    import shutil
-
-    shutil.copyfile(run / "tokenizer" / "tokenizer.json", run / "tokenizer.json")
+    #
+    # Padding and truncation are stripped on the way out. A tokenizer file saved from a run
+    # that padded to 128 carries that instruction, so anything that loads it to ask a question
+    # other than "encode this pair" gets 128 entries whatever the text says, the tail of them
+    # padding at offset (0, 0). That has already cost this project a reader that built its
+    # window out of padding and answered anyway. What a batch needs is the caller's business,
+    # not the file's.
+    shipped = json.loads((run / "tokenizer" / "tokenizer.json").read_text(encoding="utf-8"))
+    shipped["padding"] = None
+    shipped["truncation"] = None
+    (run / "tokenizer.json").write_text(json.dumps(shipped, ensure_ascii=False), encoding="utf-8")
 
     card = run / "MODEL_CARD.md"
     metrics = record["validation"]
