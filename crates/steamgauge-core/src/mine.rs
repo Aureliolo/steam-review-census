@@ -463,9 +463,12 @@ impl Lines {
     ///
     /// The margin is the figure. Positive means the claim is nearer some labelled claim of
     /// that starved subject than it is to any labelled claim of any common one, which is what
-    /// "looks like a `vr` claim" has to mean when `verdict` is a fifth of the corpus. One
-    /// matrix product for the batch rather than a loop of dot products, because a large game
-    /// is three million claims against twenty thousand queries.
+    /// "looks like a `vr` claim" has to mean when `verdict` is a fifth of the corpus.
+    ///
+    /// A large game is three million claims against twenty thousand queries, forty-five
+    /// teraflops, and the card is busy embedding. Single-threaded that product took longer
+    /// than the forward pass it followed, so the batch is cut across every core and each
+    /// slice takes its own product against the whole query matrix.
     fn margins(&self, batch: &[Vec<f32>]) -> Result<Vec<Option<(usize, f32)>>> {
         if batch.is_empty() {
             return Ok(Vec::new());
@@ -473,9 +476,28 @@ impl Lines {
         let dimensions = self.matrix.ncols();
         let flat: Vec<f32> = batch.iter().flat_map(|row| row.iter().copied()).collect();
         let claims = ndarray::Array2::from_shape_vec((batch.len(), dimensions), flat)?;
-        let similarities = claims.dot(&self.matrix.t());
 
-        Ok(similarities
+        let workers = std::thread::available_parallelism().map_or(1, usize::from);
+        let slice = batch.len().div_ceil(workers).max(1);
+        let found: Vec<Vec<Option<(usize, f32)>>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = claims
+                .axis_chunks_iter(ndarray::Axis(0), slice)
+                .map(|rows| scope.spawn(move || self.margins_of(&rows)))
+                .collect();
+            // A slice that panicked would leave the batch's answers misaligned with its
+            // claims, and every claim after it labelled by the wrong margin. A crash is the
+            // honest outcome.
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("a margin slice panicked"))
+                .collect()
+        });
+        Ok(found.into_iter().flatten().collect())
+    }
+
+    fn margins_of(&self, claims: &ndarray::ArrayView2<'_, f32>) -> Vec<Option<(usize, f32)>> {
+        let similarities = claims.dot(&self.matrix.t());
+        similarities
             .rows()
             .into_iter()
             .map(|row| {
@@ -494,7 +516,7 @@ impl Lines {
                     .max_by(|(_, a), (_, b)| a.total_cmp(b))
                     .map(|(line, near)| (line, near - best_common))
             })
-            .collect())
+            .collect()
     }
 }
 
