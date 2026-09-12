@@ -446,12 +446,13 @@ channel one batch deep is enough to overlap them.
 
 `nvidia-smi` still says the card is half busy, and that is the last place this section was
 wrong. `cargo run --release -p steamgauge-core --example encoder-cost` times the processor half
-on its own: 16,384 claims prepared in 5.7 seconds, **2,886 claims a second**, of which cutting
-the windows is 5.0 seconds and turning the pairs into token ids is 0.7. The whole reading does
-about 530 a second. The processor half is therefore off the critical path with five times the
-headroom, however busy the card reports itself to be, and parallelising it across the other
-thirty cores would buy nothing. What is left is the graph, at about 240 milliseconds a batch of
-128, which is roughly what 560M parameters over 16,384 tokens costs on this card.
+on its own: **2,886 claims a second** on a game of ordinary reviews and **2,295** on one whose
+reviews run long, of which cutting the windows is seven eighths and turning the pairs into token
+ids is the rest. A whole reading does 530 to 840 a second depending on the game. The processor
+half is therefore off the critical path with three to five times the headroom, however busy the
+card reports itself to be, and parallelising it across the other thirty cores would buy nothing.
+What is left is the graph, at about 240 milliseconds a batch of 128, which is roughly what 560M
+parameters over 16,384 tokens costs on this card.
 
 None of this changes what the reader is asked or what it answers, and a change that did would
 have to earn it against the measurement above rather than against an argument about where the
