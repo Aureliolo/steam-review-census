@@ -589,11 +589,11 @@ fn read_and_count(
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<(ReadReport, u64)> {
     let counting = Counting::new(snapshot, options.top_helpful)?;
-    // Adding up what a review said is term extraction on every claim of it, which is enough
-    // work to leave the card waiting between batches. It needs nothing the next batch needs,
-    // so it happens on a thread of its own and the card never sees it.
-    let (send, receive) = std::sync::mpsc::sync_channel::<Vec<Counted>>(2);
     std::thread::scope(|scope| -> Result<(ReadReport, u64)> {
+        // Adding up what a review said is term extraction on every claim of it, which is
+        // enough work to leave the card waiting between batches. It needs nothing the next
+        // batch needs, so it happens on a thread of its own and the card never sees it.
+        let (send, receive) = std::sync::mpsc::sync_channel::<Vec<Counted>>(2);
         let adding = scope.spawn(move || -> Result<Counting> {
             let mut counting = counting;
             for batch in receive {
@@ -603,11 +603,19 @@ fn read_and_count(
             }
             Ok(counting)
         });
-        let (corpus, forward_passes) = walk(model, snapshot, options, context, &send, on_progress)?;
+
+        let walked = walk(model, snapshot, options, context, &send, on_progress);
+        // Before anything is propagated, and on every path: the thread ends when the last
+        // sender goes, and a scope does not return until its threads do, so a `?` with this
+        // still alive is a read that hangs rather than fails.
         drop(send);
         let counted = adding
             .join()
-            .map_err(|_| Error::Tokenizer("the pass adding up the reviews stopped".to_owned()))??;
+            .map_err(|_| Error::Tokenizer("the pass adding up the reviews stopped".to_owned()))?;
+        // Its error first: when it stops, the walk fails next sending to it, and saying the
+        // channel closed instead of why would hide the only interesting half.
+        let counted = counted?;
+        let (corpus, forward_passes) = walked?;
         Ok((counted.finish(app_id, options, corpus)?, forward_passes))
     })
 }
