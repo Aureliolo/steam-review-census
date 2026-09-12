@@ -444,19 +444,24 @@ larger share is that tokenising and the forward pass were taking turns. Tokenisi
 most of what a reading spends its processor on, the card waited through all of it, and a
 channel one batch deep is enough to overlap them.
 
-`nvidia-smi` still says the card is half busy, and that is the last place this section was
-wrong. `cargo run --release -p steamgauge-core --example encoder-cost` times the processor half
-on its own: **2,886 claims a second** on a game of ordinary reviews and **2,295** on one whose
-reviews run long, of which cutting the windows is seven eighths and turning the pairs into token
-ids is the rest. A whole reading does 530 to 840 a second depending on the game. The processor
-half is therefore off the critical path with three to five times the headroom, however busy the
-card reports itself to be, and parallelising it across the other thirty cores would buy nothing.
-What is left is the graph, at about 240 milliseconds a batch of 128, which is roughly what 560M
-parameters over 16,384 tokens costs on this card.
+`cargo run --release -p steamgauge-core --example encoder-cost` times the processor half on its
+own: **2,886 claims a second** on a game of ordinary reviews and **2,295** on one whose reviews
+run long, of which cutting the windows is seven eighths and turning the pairs into token ids is
+the rest. A whole reading does 530 to 840 a second, so tokenising has three to five times the
+headroom it needs and parallelising it across the other thirty cores would buy nothing. What is
+left of the processor's share is not tokenising at all.
 
-None of this changes what the reader is asked or what it answers, and a change that did would
-have to earn it against the measurement above rather than against an argument about where the
-time goes.
+**It is the bookkeeping.** Adding up what a review said means extracting the terms of every
+claim of it, hashing them, and writing a row each: real work, once per claim, and it sat between
+the model's batches. On a game of short reviews the card was **22% busy** while one core did it.
+It needs nothing the next batch needs, so the walk now resolves each review's answers and hands
+it to a thread of its own; on that same game the card runs at **80 to 100%**. A reading is three
+stages deep now: tokenise the next batch, run this one, add up the last one, and the card waits
+for none of it.
+
+None of this changes what the reader is asked or what it answers. Every build in this section
+was checked by reading the same game and hashing the rows, and a change to how a reading is
+scheduled that changes a reading is not a scheduling change.
 
 A figure taken before a correctness fix is not a figure. The first reading of this comparison
 was 1.45x, measured while the reader was cutting its window out of padding: it was tokenising
