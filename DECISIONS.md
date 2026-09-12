@@ -541,6 +541,11 @@ Three more on the Python side, run against a model directory rather than a captu
 | `training/sweep.py` | which configuration won, and is the gap bigger than the seed spread? |
 | `training/confidence.py` | what should confidence be scored by, and where does the line go, subject by subject? |
 | `training/confusion.py` | what does the reader mistake for what, and is a weak subject starved or badly bounded? |
+| `training/adjust.py` | does shifting the logits by the class priors buy anything? |
+
+The last three read out-of-fold logits with `--oof` and should be run that way. Four validation
+games give intervals eight points wide and figures that move; five folds
+(`crossval.sh`, seven minutes each) give all twenty-eight non-frozen games and intervals of two.
 
 ## Most of a sweep is the seed
 
@@ -719,63 +724,88 @@ claim in twenty. The bag of words is the honest floor, it takes seconds to fit, 
 
 ### One threshold for twenty-six subjects is the wrong shape, and it hides the worst of it
 
-Measured 2026-09-12 by `training/confidence.py`, which now answers two separate questions:
-what to score confidence by, and where to put the line. Every figure below is **cross-fitted
-by game**: each of the four validation games is scored by a rule fitted on the other three,
-the held-out answers are pooled, and the interval resamples whole games rather than claims,
-because 935 claims from one game are not 935 independent observations. A threshold fitted and
-reported on the same claims flatters itself, and every threshold figure recorded before this
-one was fitted that way.
+Measured 2026-09-12 by `training/confidence.py`, which answers two separate questions: what to
+score confidence by, and where to put the line.
 
-**The score barely matters. Nothing beats max probability by more than a point.**
+**Read it on twenty-eight games, not four, and this is why.** The first run of this study used
+the four validation games and 2,615 claims, and every number came back with a game-blocked
+interval about **eight points wide**, which is wider than every difference the study exists to
+decide. Worse than imprecise, it was misleading: that run put `story` precision at 0.32 and
+`genre` at 0.50, and both were small-sample artefacts. On twenty-eight games they are 0.58 and
+0.65. Four games can tell you a subject is weak and cannot tell you how weak, and a figure
+quoted from four games is a figure that will move.
 
-| confidence score, on the shipped reader | AUGRC | AURC | held out, one line |
+So `train.py --fold` holds out a cross-validation fold over the non-frozen games instead of the
+usual validation set, the frozen games stay frozen in every fold, and `--save-logits` writes
+what each fold held out. Five folds, seven minutes each, and every claim of all twenty-eight
+non-frozen games comes back answered by a model that never saw its game: **15,138 out-of-fold
+claims, and the interval closes to 2.3 points.** No test set was spent to get it. The thresholds
+are still cross-fitted on top of that, leave-one-game-out, because a threshold fitted and
+reported on the same claims flatters itself.
+
+**The score barely matters. Nothing beats max probability by two points.**
+
+| confidence score, out of fold over 28 games | AUGRC | AURC | one line |
 |---|---|---|---|
-| max probability (shipped) | 0.0968 | 0.1402 | 83.9% at 0.741 |
-| margin over the runner-up | 0.0975 | 0.1412 | 82.9% at 0.746 |
-| negative entropy | **0.0960** | **0.1392** | 85.0% at 0.746 |
-| max logit | 0.0982 | 0.1465 | 85.0% at 0.745 |
-| max logit over its 2-norm | 0.0973 | 0.1412 | **85.7%** at 0.744 |
-| max logit over its 8-norm | 0.0994 | 0.1451 | 82.1% at 0.744 |
+| max probability (shipped) | 0.0926 | 0.1367 | 85.8% at 0.750 |
+| margin over the runner-up | 0.0931 | 0.1372 | 85.4% at 0.750 |
+| negative entropy | **0.0920** | 0.1361 | 86.6% at 0.750 |
+| max logit | 0.0939 | 0.1424 | 86.7% at 0.749 |
+| max logit over its 1-norm | 0.0944 | 0.1403 | **86.9%** at 0.749 |
+| max logit over its 2-norm | 0.0927 | 0.1360 | **86.9%** at 0.750 |
+| max logit over its 3-norm | 0.0927 | **0.1356** | 86.7% at 0.750 |
+| max logit over its 8-norm | 0.0948 | 0.1392 | 84.9% at 0.750 |
 
-The 2-norm row is the one that was expected to win. Normalising the logit vector by its p-norm
-and taking the max is the best-replicated post-hoc result in selective prediction: Cattelan and
-Silva (arXiv:2305.15508) ran it across 84 pretrained classifiers and found many of them have
-confidence estimators that are simply broken, with ordering far worse than their accuracy
-implies, and that this fixes it outright. It buys **1.8 points of coverage here, inside the
-game-blocked interval of [81.9%, 89.9%]**, and it is worse than max probability on AUGRC. The
+The p-norm rows are the ones that were expected to win. Normalising the logit vector by its
+p-norm and taking the max is the best-replicated post-hoc result in selective prediction:
+Cattelan and Silva (arXiv:2305.15508) ran it across 84 pretrained classifiers and found a good
+many have confidence estimators that are simply broken, with ordering far worse than their
+accuracy implies, and that this fixes it outright. It buys **1.1 points of coverage, against an
+interval of [85.7%, 88.0%]**, and the best p is worse than max probability on AUGRC. The
 conclusion is the useful one: this reader's confidence estimator is not one of the broken ones,
-and the whole p grid from 0.3 to 8 is a flat line. Max probability stays, now for a reason
-rather than for want of trying.
+and the whole grid from 0.3 to 8 is flat. Max probability stays, now for a reason rather than
+for want of trying.
 
-**AUGRC is reported beside AURC from here.** AURC divides by how much was answered, so it mixes
-the ordering quality of the score with the accuracy of the classifier underneath, and Traub et
-al. (arXiv:2407.01032) found that switching to AUGRC moved the ranking on five of six datasets.
-It did not move it here: both prefer negative entropy, both rank the twelve scores near enough
-identically. Two metrics agreeing is worth more than one metric, and it cost an afternoon.
+**AUGRC is reported beside AURC from here, and on this data they disagree.** AURC divides by how
+much was answered, so it mixes the ordering quality of the score with the accuracy of the
+classifier underneath, and Traub et al. (arXiv:2407.01032) found that switching to AUGRC moved
+the ranking on five of six datasets. Here AUGRC prefers negative entropy and AURC prefers the
+3-norm. On four games they had agreed, which is one more thing four games could not see.
 
-**Where the line goes matters enormously, and this is the finding.** One threshold gates all
-twenty-six subjects. Fitting one per subject, each holding the same 75% floor *for its own
-predictions*, costs five points of overall coverage: 78.9% at 0.749 against 83.9% at 0.741. The
-average says the trade is not worth it. The average is wrong, and here is what it hides:
+**Where the line goes is the finding.** One threshold gates all twenty-six subjects. Fitting one
+per subject, each holding the same 75% floor *for its own predictions*, costs four points of
+overall coverage: 81.7% at 0.758 against 85.8% at 0.750. The average says the trade is not worth
+it. The average is what hides the problem:
 
 | subject | predicted | one line | a line per subject |
 |---|---|---|---|
-| `verdict` | 460 | 89% at 0.85 | 99% at 0.81 |
-| `story` | 111 | 80% at **0.35** | 8% at 0.67 |
-| `genre` | 170 | 77% at **0.53** | 28% at 0.46 |
-| `difficulty` | 107 | 80% at 0.65 | 53% at 0.60 |
-| `offtopic` | 198 | 79% at 0.68 | 65% at 0.76 |
-| `monetisation` | 29 | 69% at 0.70 | 90% at 0.62 |
-| `audio` | 26 | 92% at 0.83 | 100% at 0.81 |
-| `performance` | 50 | 82% at 0.83 | 92% at 0.80 |
+| `verdict` | 2,912 | 88% at 0.83 | 100% at 0.78 |
+| `gameplay` | 2,603 | 84% at 0.73 | 77% at 0.75 |
+| `offtopic` | 1,257 | 87% at 0.81 | 100% at 0.77 |
+| `content` | 976 | 81% at 0.71 | 70% at 0.75 |
+| `genre` | 903 | 84% at 0.70 | 69% at 0.74 |
+| `difficulty` | 873 | 82% at **0.66** | 52% at 0.75 |
+| `story` | 491 | 82% at **0.64** | 47% at 0.72 |
+| `atmosphere` | 332 | 81% at **0.64** | 58% at 0.74 |
+| `performance` | 292 | 89% at 0.84 | 100% at 0.78 |
+| `policy` | 171 | 83% at **0.60** | 49% at 0.73 |
+| `compatibility` | 155 | 89% at 0.70 | 58% at 0.69 |
+| `audio` | 150 | 94% at 0.84 | 98% at 0.81 |
+| `vr` | 36 | 75% at **0.30** | 25% at 0.00 |
+| `accessibility` | 31 | 58% at **0.50** | silent |
+| `licensing` | 4 | silent | silent |
 
-The shipped rule answers **80% of `story` predictions and is wrong two times in three**. It
-answers 77% of `genre` at barely better than a coin. A report that says "23 reviewers praised
-the story" built on that is not a weak number, it is a false one, and the headline 75% cannot
-see it because `verdict` and `price` are carrying the average. The per-subject rule takes the
-five points of coverage out of exactly those rows and hands most of them back on the rows the
-reader reads well: `verdict` to 99%, `audio` to 100%, `performance` and `multiplayer` to 92%.
+**One line keeps the promise on average and breaks it for sixteen of the twenty-six subjects**,
+including four of the five commonest. A report that says "38 reviewers found it too hard" is
+built on `difficulty` predictions that are right two times in three, not three in four, and the
+headline cannot see it because `verdict`, `offtopic` and `price` carry the average. `vr` is the
+worst of it: the reader says `vr`, is wrong seven times in ten, and the shipped threshold passes
+three quarters of that through.
+
+A line per subject spends its four points on exactly those rows and hands most of them back
+where the reader reads well: `verdict` and `offtopic` and `performance` to 100%, `audio` to 98%,
+`controls` from 89% to 94%, `price` from 93% to 99%. Nearly every subject then lands between
+0.74 and 0.78, which is the promise held subject by subject rather than on average.
 
 **The floor is held per subject, not overall, and that choice is the whole design.** The rule
 that maximises overall coverage under one overall floor is to answer the head and abstain on
@@ -789,27 +819,43 @@ Subjects with fewer than 40 calibration predictions cannot support a quantile of
 share a pooled one. That is the clustered form of the standard Mondrian construction, and with
 `licensing` at 32 labels in the entire set it is not optional.
 
-**What this does not yet do: ship.** `reader.json` carries one threshold and the Rust side
-applies one threshold. Changing that is a change to the exported artefact and to `read.rs`, and
-it wants the frozen games to confirm it first, not four validation games with intervals five
-points wide. What is settled is that the current rule is wrong, and how.
+**Built, and it ships when the next reader is exported.** `reader.json` may now carry a
+`thresholds` array, one line per subject in `subjects` order, and `read.rs` applies it;
+`null` means that subject is declined outright, which is the honest answer for a subject no
+threshold can make reliable and is not the same as a low line. A reader exported without the
+field keeps the single threshold, which is every reader shipped so far, so nothing has changed
+under anyone. `export.py --lines-from <fold logits>` draws them, fitting on every non-frozen
+game at once because that is the threshold that ships; what a line is *worth* is the
+out-of-fold question above and is answered separately.
 
-### The two worst subjects are two bad boundaries, and the labellers disagree first
+It is not switched on by exporting today, because the next export is going to carry the mined
+labels and whatever the adjudication settles, and exporting twice to change one thing at a time
+would mean measuring the model twice on the frozen games. One export, both changes, one frozen
+read.
 
-The table above named `story` at 0.35 and `genre` at 0.53 as the subjects the shipped threshold
-should not be answering. The obvious reading is that the reader has not learned them and needs
-more labels or more parameters. `training/confusion.py` was written to test that, because the
-direction of a confusion says which cure applies: scattered across many subjects means a
-starved row, concentrated on one other means a boundary the sheet has not drawn. Both of these
-are concentrated, and then the labels were checked without the model in the way at all.
+### The weakest subjects are bad boundaries, and the labellers disagree first
 
-**`story` is over-predicted two to one, and it takes it from `gameplay`.** 54 claims are
-labelled `story` in the validation games; the reader says `story` 111 times, precision 0.32. Of
-its 76 mistakes, 37 were labelled `gameplay`, 14 `content` and 8 `atmosphere`. Its most
-confident mistakes are claims that contain the word "story" and are about something else: the
-main story being short is `content`, going down a predetermined path is `gameplay`, a game
-managing without a story is `gameplay`. **The reader is keying on the word rather than on what
-the claim is about.**
+The table above named the subjects the shipped threshold should not be answering. The obvious
+reading is that the reader has not learned them and needs more labels or more parameters.
+`training/confusion.py` was written to test that, because the direction of a confusion says
+which cure applies: scattered across many subjects means a starved row, concentrated on one
+other means a boundary the sheet has not drawn. Out of fold over twenty-eight games, the five
+largest confusions in the whole matrix are concentrated on one other subject each, and then the
+labels were checked without the model in the way at all.
+
+| the biggest confusions, both ways, out of fold | claims |
+|---|---|
+| `difficulty` and `gameplay` | 357 |
+| `verdict` and `genre` | 248 |
+| `gameplay` and `content` | 245 |
+| `offtopic` and `verdict` | 236 |
+| `story` and `gameplay` | 163 |
+
+**`story` is over-predicted and it takes it from `gameplay`.** Precision 0.58 on 491
+predictions, and 95 of its mistakes were labelled `gameplay`. Its most confident mistakes are
+claims that contain the word "story" and are about something else: the main story being short
+is `content`, going down a predetermined path is `gameplay`, a game managing without a story is
+`gameplay`. **The reader is keying on the word rather than on what the claim is about.**
 
 Then the same question, asked of the labellers alone. Of the 18,907 training labels, 624
 contain a story word, and 35 of those also say something about length. Those 35 were labelled:
@@ -832,14 +878,14 @@ apply when they are reading that category's paragraph and not otherwise.
 of game attached, "excellent city builder", is a `verdict`, and `genre` is for when what kind of
 game it is, or which it resembles, is the point. Of the 152 claims that name a kind *and* carry
 a judgement word, labellers wrote `genre` 57 times and `verdict` 33. Nearly two to one against
-the rule. The reader learns the labels, not the sheet, so it over-predicts `genre` (170 said
-against 127 true) and `verdict` loses 49 claims to it, the largest single confusion anywhere in
-the matrix.
+the rule. The reader learns the labels, not the sheet, so it over-predicts `genre` (903 said
+against 830 true) and `verdict` loses 151 claims to it, the second largest confusion in the
+matrix.
 
-**A third boundary is the largest single disagreement between the two labellers.** Over the
-1,400 claims read twice, the commonest subject split is `difficulty` against `gameplay`, 25
-claims, and the reader repeats it: `difficulty` loses 24 of its mistakes to `gameplay` and it
-is the largest confusion either subject has. The sheet is as explicit here as it is anywhere:
+**A third boundary is the largest disagreement between the two labellers and the largest
+confusion the reader has.** Over the 1,400 claims read twice, the commonest subject split is
+`difficulty` against `gameplay`, 25 claims, and the reader repeats it 357 times out of fold: it
+is the biggest pair in the matrix in both directions. The sheet is as explicit here as anywhere:
 balance complaints belong to `difficulty` rather than `gameplay`, *including when they name a
 specific mechanic as overpowered or useless*. Of the 97 training claims that say something is
 overpowered, nerfed, buffed or unbalanced, 50 went to `difficulty` and 18 to `gameplay`. So the
@@ -852,7 +898,7 @@ which is exactly what the 192 split claims in `gold.html` are: the claims the tw
 answered differently, shown to a person who settles them. Two of the three boundaries named
 here are already in that file by name.
 
-**So the cure for the reader's two worst subjects is not more labels and not more parameters.**
+**So the cure for the reader's weakest subjects is not more labels and not more parameters.**
 It is two sheet edits and a relabelling of the claims they touch, and neither edit is a new
 category:
 
@@ -871,8 +917,36 @@ by name.
 
 ### Things tried that bought nothing, so nobody tries them again
 
-**A better uncertainty score.** Twelve of them, in the table above. The spread between best and
-worst is 1.8 points of coverage against a game-blocked interval eight points wide.
+**A better uncertainty score.** Twelve of them, in the table above. Out of fold over
+twenty-eight games the spread between best and worst is 2.0 points of coverage against an
+interval 2.3 points wide, and the p-norm family that was expected to win is the flattest part
+of it.
+
+**Post-hoc logit adjustment, the last long-tail method untried here.** Train with plain
+cross-entropy and then subtract `tau * log(prior)` from each logit at inference, which divides
+out the prior the model absorbed and is what Bayes says to do where reweighting only
+approximates it (Menon et al., ICLR 2021, arXiv:2007.07314). Measured out of fold over
+twenty-eight games by `training/adjust.py`, cross-fitted so a subject common in one game cannot
+set its own correction:
+
+| tau | macro F1 | accuracy | AUGRC | answers at the promise |
+|---|---|---|---|---|
+| **0.00** | **0.638** | **0.699** | **0.0926** | **85.8%** at 0.750 |
+| 0.10 | 0.635 | 0.697 | 0.0931 | 85.5% at 0.750 |
+| 0.25 | 0.635 | 0.694 | 0.0941 | 85.4% at 0.750 |
+| 0.50 | 0.632 | 0.692 | 0.0963 | 84.7% at 0.750 |
+| 1.00 | 0.621 | 0.676 | 0.1052 | 80.9% at 0.751 |
+
+**Zero wins every column.** Not a trade between macro F1 and coverage, which is what the
+literature warns to expect: both get worse, monotonically, from the first step. The starved rows
+it is aimed at do not move either, and `vr` goes the wrong way, F1 0.305 down to 0.179.
+
+That is the fourth attempt to fix class imbalance with a decision rule rather than with data:
+loss reweighting at exponents 0.3, 0.5 and 0.7, and now this. All four failed, and the reason is
+in the table's own left column: `licensing` has **8** held-out claims and `vr` has 23. No
+reweighting of a gradient and no shift of a logit invents a class the model has barely seen.
+This is the arithmetic behind roadmap item 6, and it is why 1,800 mined candidates are worth
+more than any further arithmetic on the ones already labelled.
 
 **Three epochs instead of five.** 0.588 accuracy and 52% coverage against 0.639 and 67%. The
 model was not overfitting at five; it was underfitting at three.
