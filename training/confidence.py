@@ -20,7 +20,7 @@ import numpy as np
 import onnxruntime
 from tokenizers import Tokenizer
 
-import data as claimdata
+import claimdata
 from train import Claims, area_under_risk_coverage, risk_coverage
 
 HERE = Path(__file__).resolve().parent

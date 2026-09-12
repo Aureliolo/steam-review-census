@@ -28,7 +28,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoConfig, AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
 
-import data as claimdata
+import claimdata
 
 HERE = Path(__file__).resolve().parent
 POLARITIES = claimdata.POLARITIES

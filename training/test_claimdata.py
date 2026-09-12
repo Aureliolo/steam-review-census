@@ -1,11 +1,11 @@
 """What the split has to guarantee, because every number reported rests on it.
 
-    python -m pytest training/test_data.py
+    python -m pytest training/test_claimdata.py
 """
 
 from __future__ import annotations
 
-import data as claimdata
+import claimdata
 
 
 def claim(app_id: int, index: int = 0) -> claimdata.Claim:

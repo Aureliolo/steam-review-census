@@ -22,7 +22,7 @@ import random
 from collections import defaultdict
 from pathlib import Path
 
-import data as claimdata
+import claimdata
 
 HERE = Path(__file__).resolve().parent
 BATCH = 50
@@ -345,7 +345,13 @@ def main():
         written = Path(args.answers) if args.answers else key.parent / "reader-answers.json"
         written.write_text(json.dumps(said, indent=2), encoding="utf-8")
         found = score(written, key, {row["subject"] for row in json.loads(key.read_text("utf-8"))})
-        found["model"] = str(model_dir)
+        # What model, not where it sat on one machine. A path names a directory on the laptop
+        # that ran this, which means nothing to anyone reading the published figure and puts a
+        # home directory in a file that ships.
+        reader = json.loads((model_dir / "reader.json").read_text("utf-8"))
+        found["model"] = reader["trained_from"]
+        found["trained_on"] = reader["data_fingerprint"]
+        found["threshold"] = reader["threshold"]
         print(json.dumps(found, indent=2))
         if args.out:
             Path(args.out).write_text(json.dumps(found, indent=2), encoding="utf-8")

@@ -29,7 +29,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion
 from transformers import AutoModel, AutoTokenizer
 
-import data as claimdata
+import claimdata
 from train import area_under_risk_coverage, risk_coverage
 
 HERE = Path(__file__).resolve().parent

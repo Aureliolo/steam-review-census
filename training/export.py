@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer
 
-import data as claimdata
+import claimdata
 from train import ClaimReader
 
 HERE = Path(__file__).resolve().parent
