@@ -61,15 +61,20 @@ const server = createServer((request, reply) => {
 await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const served = `http://127.0.0.1:${server.address().port}/`;
 
-// Answers the first question, the way a reader does.
+// Answers the first question by its keyboard shortcut, the way a reader does, and says which
+// subject that was so the answer the server receives can be checked against it.
 const ANSWER = `(function () {
   var press = function (key) {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
   };
   var first = document.querySelector('button.pick');
-  press(first.dataset.key || first.textContent.trim().charAt(0));
+  press(first.querySelector('kbd').textContent.trim());
   press('2');
-  return document.getElementById('kept') ? document.getElementById('kept').textContent : 'no indicator';
+  var kept = document.getElementById('kept');
+  return {
+    subject: first.dataset.subject,
+    kept: kept ? kept.textContent : 'no indicator',
+  };
 })()`;
 
 const FORGET = `(function () {
@@ -92,16 +97,23 @@ try {
   if (!(await ready())) throw new Error("the served page never became answerable");
 
   const wrong = [];
-  const kept = (await evaluate(ANSWER)).result?.result?.value;
+  const pressed = (await evaluate(ANSWER)).result?.result?.value ?? {};
   await sleep(500);
 
   if (posts === 0) wrong.push("answering posted nothing, so the answer only exists in the browser");
   if (!held.length) wrong.push("the post carried no answers");
-  if (held.length && !held[0].subject) wrong.push("the posted answer carries no subject");
+  if (held.length && held[0].subject !== pressed.subject) {
+    wrong.push(
+      `the posted answer says subject ${JSON.stringify(held[0].subject)}, not the ` +
+        `${JSON.stringify(pressed.subject)} that was pressed`,
+    );
+  }
   if (held.length && held[0].polarity !== "complaint") {
     wrong.push(`the posted answer says polarity ${held[0].polarity}, not the one pressed`);
   }
-  if (kept !== "saved") wrong.push(`the header says ${JSON.stringify(kept)} rather than saved`);
+  if (pressed.kept !== "saved") {
+    wrong.push(`the header says ${JSON.stringify(pressed.kept)} rather than saved`);
+  }
 
   // The promise that matters: a browser that remembers nothing still picks up the work,
   // because the file is the copy and this is only a cache.
