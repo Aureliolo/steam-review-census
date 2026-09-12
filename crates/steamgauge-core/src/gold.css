@@ -174,3 +174,31 @@ details.sheet summary { cursor: pointer; color: var(--dim); font-size: 0.9rem; }
 details.sheet dl { margin: 12px 0 0; }
 details.sheet dt { font-weight: 620; margin-top: 12px; }
 details.sheet dd { margin: 2px 0 0; color: var(--dim); font-size: 0.92rem; }
+
+details.howto {
+  margin: 0 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px 16px;
+}
+details.howto summary { cursor: pointer; font-weight: 620; }
+details.howto p { margin: 12px 0 0; font-size: 0.94rem; line-height: 1.55; color: var(--dim); }
+details.howto p b { color: var(--ink); font-weight: 620; }
+details.howto kbd {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font: 600 0.78rem ui-monospace, monospace;
+}
+
+/* Says which of the two things on the card is the question and which is the context. Without
+   it the review is the larger block and reads as the thing being asked about. */
+.asking {
+  color: var(--dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+.claim + .asking { margin-top: 16px; }

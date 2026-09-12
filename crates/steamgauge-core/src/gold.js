@@ -84,6 +84,40 @@
     }
   }
 
+  // What the task is, in the page rather than in somebody's head. Without it the first screen
+  // is a sentence, a review, twenty-six buttons and the word "polarity", and the commonest
+  // thing to conclude from that is that the question is about the review. It is not: a review
+  // is cut into its separate points and each one is its own question, so a review making
+  // thirty-six points is thirty-six answers and not one.
+  function howto() {
+    return (
+      '<details class="howto"' +
+      (howtoOpen ? " open" : "") +
+      "><summary>What you are doing</summary>" +
+      "<p>Each question is about <b>one claim</b>: a single point somebody made. The review it " +
+      "came from is shown underneath with the claim highlighted, because a claim like " +
+      "&ldquo;it doesn&rsquo;t&rdquo; or &ldquo;same here&rdquo; means nothing on its own. " +
+      "<b>Judge the highlighted claim, not the review around it.</b> A review that praises one " +
+      "thing and complains about thirty-four others is thirty-five separate claims, and you " +
+      "will be asked about them one at a time.</p>" +
+      "<p>Two answers each time. <b>Which subject</b> the claim is about, from the sheet at the " +
+      "foot of the page, and <b>what it says about that subject</b>: praise, a complaint, or " +
+      "neither. Nothing else is being asked, so a claim naming no subject at all is " +
+      "<b>Overall verdict</b> when it judges the game and <b>Not about the game</b> when it " +
+      "does not.</p>" +
+      "<p>Follow the sheet&rsquo;s rules where they disagree with your instinct: the rules are " +
+      "what make one person&rsquo;s answers comparable with another&rsquo;s, and where a rule " +
+      "is wrong that is worth finding out. If two subjects genuinely both fit and the sheet " +
+      "does not settle it, press <kbd>0</kbd>, which is not the same as being unsure " +
+      "(<kbd>8</kbd>).</p>" +
+      "<p>You are not told which game it is, whether the reviewer recommended it, or what " +
+      "anyone else answered. That is deliberate: an answer on the page is an answer in your " +
+      "head, and a figure produced by agreeing with a suggestion measures nothing. Stopping " +
+      "part-way is fine and the work is kept.</p>" +
+      "</details>"
+    );
+  }
+
   function keyOf(question) {
     return question.app_id + "#" + question.review_id + "#" + question.index;
   }
@@ -170,6 +204,19 @@
   // The page redraws itself on every answer, so anything the reader opened has to be put back
   // or the sheet slams shut the moment they use it.
   var sheetOpen = false;
+  // Open until it is closed once, and closed thereafter: the explanation is needed on the
+  // first question and in the way on the four hundredth.
+  //
+  // Deliberately not under `STORE`: that key holds the answers and only the answers, which is
+  // an invariant the browser check asserts, and it is per-draw where this preference is not.
+  var HOWTO = "steamgauge-adjudication-howto";
+  var howtoOpen = (function () {
+    try {
+      return localStorage.getItem(HOWTO) !== "0";
+    } catch (whatever) {
+      return true;
+    }
+  })();
 
   function render() {
     if (at >= questions.length) return renderDone();
@@ -200,8 +247,12 @@
         '%"></i></div>'
     );
 
+    html.push(howto());
+
     html.push('<div class="card">');
+    html.push('<p class="asking">The claim you are judging</p>');
     html.push('<p class="claim">' + escape(question.claim) + "</p>");
+    html.push('<p class="asking">The review it came from, so you can tell what it refers to</p>');
     html.push('<div class="review">' + marked(question) + "</div>");
 
     if (question.shown && question.shown.length) {
@@ -240,15 +291,28 @@
     });
     html.push("</div>");
 
-    html.push('<div class="row"><span class="label">Polarity</span>');
-    ["praise", "complaint", "neutral"].forEach(function (tone, i) {
+    var chosen = mine.subject
+      ? (categories.filter(function (one) {
+          return one.id === mine.subject;
+        })[0] || {}).label
+      : null;
+    html.push(
+      '<div class="row"><span class="label">Does the claim praise ' +
+        (chosen ? "<b>" + escape(chosen.toLowerCase()) + "</b>" : "that") +
+        " or complain about it?</span>"
+    );
+    [
+      ["praise", "praises it"],
+      ["complaint", "complains about it"],
+      ["neutral", "neither"],
+    ].forEach(function (pair, i) {
       html.push(
         '<button class="tone' +
-          (mine.polarity === tone ? " chosen" : "") +
+          (mine.polarity === pair[0] ? " chosen" : "") +
           '" data-tone="' +
-          tone +
+          pair[0] +
           '">' +
-          tone +
+          pair[1] +
           " <kbd>" +
           (i + 1) +
           "</kbd></button>"
@@ -256,16 +320,16 @@
     });
     html.push("</div>");
 
-    html.push('<div class="row"><span class="label">This claim</span>');
+    html.push('<div class="row"><span class="label">Anything else? (optional)</span>');
     html.push(
       '<button class="tone' +
         (mine.ambiguous ? " chosen" : "") +
-        '" id="ambiguous">is genuinely contested <kbd>0</kbd></button>'
+        '" id="ambiguous">two subjects both fit <kbd>0</kbd></button>'
     );
     html.push(
       '<button class="tone' +
         (mine.split_wrong ? " chosen" : "") +
-        '" id="split">was cut wrong <kbd>9</kbd></button>'
+        '" id="split">this is two points, or half of one <kbd>9</kbd></button>'
     );
     // The reader's own uncertainty, kept apart from whether the claim is contested: one is
     // about them and one is about the sheet, and a set that conflates them cannot say which
@@ -273,16 +337,20 @@
     html.push(
       '<button class="tone' +
         (mine.unsure ? " chosen" : "") +
-        '" id="unsure">I am unsure <kbd>8</kbd></button>'
+        '" id="unsure">I am not sure <kbd>8</kbd></button>'
     );
     html.push("</div>");
     html.push("</div>");
 
     html.push(
       '<p class="note"><kbd>&larr;</kbd> and <kbd>&rarr;</kbd> move, a letter picks a subject, ' +
-        "<kbd>1</kbd>&ndash;<kbd>3</kbd> the polarity. Pick both and it moves on by itself. " +
-        "<kbd>0</kbd> contested, <kbd>9</kbd> cut wrong, <kbd>8</kbd> unsure. " +
-        "Your answers are kept in this browser as you go.</p>"
+        "<kbd>1</kbd>&ndash;<kbd>3</kbd> praise, complaint or neither. Pick both and it moves " +
+        "on by itself. <kbd>0</kbd> two subjects fit, <kbd>9</kbd> cut wrong, <kbd>8</kbd> not " +
+        "sure. " +
+        (SERVED
+          ? "Every answer is written to disk as you make it."
+          : "Your answers are kept in this browser as you go.") +
+        "</p>"
     );
 
     html.push(
@@ -371,6 +439,17 @@
     if (sheet) {
       sheet.ontoggle = function () {
         sheetOpen = sheet.open;
+      };
+    }
+    var how = app.querySelector("details.howto");
+    if (how) {
+      how.ontoggle = function () {
+        howtoOpen = how.open;
+        try {
+          localStorage.setItem(HOWTO, howtoOpen ? "1" : "0");
+        } catch (whatever) {
+          /* Closing the instructions is a convenience, not work to be kept. */
+        }
       };
     }
   }
