@@ -285,6 +285,29 @@ impl ClaimReader {
             }))
             .map_err(|e| Error::Tokenizer(e.to_string()))?;
 
+        // Proved once, here, rather than trusted. A tokenizer that pads or truncates hands back
+        // offsets that do not describe the text, the window is then cut from somewhere the
+        // claim is not, and every answer still looks like an answer. This has cost the project
+        // a whole measurement once already, in two languages.
+        // Short, because padding only shows itself on text shorter than the budget, and long
+        // enough to be several tokens whatever the vocabulary.
+        let probe = "the quick brown fox jumps over the lazy dog";
+        let covered = whole
+            .encode(probe, false)
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        let offsets = covered.get_offsets();
+        if offsets.last().is_none_or(|&(_, end)| end < probe.len() - 1) {
+            return Err(Error::Tokenizer(format!(
+                "the tokenizer beside this model does not report where its tokens are: {} bytes \
+                 of text came back as {} offsets ending at {:?}. A tokenizer file saved by a \
+                 trainer carries that trainer's padding and truncation, and reading a review's \
+                 offsets through it gives padding rather than the review.",
+                probe.len(),
+                offsets.len(),
+                offsets.last(),
+            )));
+        }
+
         Ok(Self {
             session,
             tokenizer,
