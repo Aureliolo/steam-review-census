@@ -424,7 +424,10 @@ within a point, and nothing anywhere logged a warning.
 
 The reader now keeps a second tokenizer with padding and truncation turned off, for offsets
 alone. On the same claims, through the same graph, Rust now agrees 77.0% where Python agrees
-76.8%.
+76.8%; and through the whole pipeline, reading the corpora itself, the tool comes back to
+within a point of what training reported for the same games. Nineteen points on the worst of
+them, and the export now strips a trainer's padding out of the tokenizer it ships, so the next
+thing to load that file is not handed the same trap.
 
 Three things worth keeping. A component configured for one job and reused for another is where
 this class of bug lives, and the configuration that bit was three lines above the code that
