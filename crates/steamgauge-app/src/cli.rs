@@ -1592,8 +1592,8 @@ Within that block, the first figure is the ceiling: a model trained on one label
 reading cannot be more right than two labellers manage with each other, so the second
 figure is what it scores out of the first and not out of a hundred. Where the two
 labellers disagree there is no single right answer, and the third figure is a floor
-rather than a score. Every figure is over the claims the model answered; it declines
-about half, and those are not counted as errors because it did not make one."
+rather than a score. Every figure is over the claims the model answered, and the ones
+it declined are not counted as errors because it did not make one."
     );
     Ok(())
 }
