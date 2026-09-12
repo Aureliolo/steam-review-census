@@ -461,7 +461,13 @@ games that chose nothing:
 | bag of words (TF-IDF, word and character n-grams) | 0.441 | 0.347 | 0.339 | 32% |
 | nearest subject centroid, untuned backbone | 0.423 | 0.372 | 0.442 | **5%** |
 | the trained reader, claim alone, 278M | 0.605 | 0.504 | 0.216 | 58% |
-| the trained reader, claim in review, 560M | **0.709** | **0.611** | **0.127** | **84%** |
+| the same, claim in review, at the rate that suits it | 0.667 | 0.555 | 0.160 | 77% |
+| the same again, on a backbone of twice the size | **0.709** | **0.611** | **0.127** | **84%** |
+
+The last three rows are one change at a time, each measured on the frozen games, each promising
+75% and delivering it: 0.749, 0.751 and 0.763. Reading the claim inside its review and training
+at the learning rate that suits that is worth nineteen points of coverage; the bigger backbone
+is worth seven more on top and most of the macro F1.
 
 The third row is what this project did before it trained anything, and the last column is why
 it stopped. Cosine distance to a prototype has no way to say "this is about nothing", so its

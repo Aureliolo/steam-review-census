@@ -378,9 +378,10 @@ These rules keep those figures honest:
 
   **That share used to be most of the corpus and is now a sixth of it.** Trained on
   thirty-six games, the model answers **84%** of the labelled claims in games it has never seen
-  and agrees with a labeller on **76%** of those. Sixteen games and three backbones ago it
-  answered an eighth of them at 62%. What moved it, in order: labels, then reading each claim
-  inside the review it came from, then a backbone twice the size. A threshold moved to make the
+  and agrees with a labeller on **76%** of those. Sixteen games ago it answered an eighth of
+  them at 62%. What moved it, measured one change at a time on games it never saw: more labels,
+  then reading each claim inside the review it came from and training at the rate that suits
+  that (58% to 77%), then a backbone twice the size (77% to 84%). A threshold moved to make the
   number look better would be the old classifier again, and the share it declines is still
   printed beside every rate.
 
