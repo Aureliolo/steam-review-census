@@ -444,8 +444,9 @@ times the seed spread, on the same labels and the same schedule:
 | three epochs, 2e-5 | 78.2% | 0.656 | 0.150 | **0.135** |
 | `gte-multilingual-base`, 278M, the same schedule | 68.1% | 0.637 | 0.183 | 0.133 |
 
-Two seeds land 0.9 points apart where the small model's land 4.3 apart, and every rate tried
-beats every configuration of the small model, so this is the backbone and not a lucky run. What
+Three runs of it land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline seeds
+land 4.3 apart, and every rate tried on the big model beats every configuration of the small
+one. So this is the backbone and not a lucky run. What
 it costs to read a library with is the open question, and cost is the whole argument for this
 project over a frontier model, so it is measured on the card that does the reading before it is
 chosen. Its calibration is the other: worse than the small model's at every rate, and
