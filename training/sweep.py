@@ -10,6 +10,7 @@ a run on more labels is not a better configuration.
     python sweep.py                     # every run on the current labels, best first
     python sweep.py --against win-128   # what each run changed, and what it bought
     python sweep.py --subjects lr5e5    # where one run wins and loses, subject by subject
+    python sweep.py --frozen            # what the saved runs promised and what they delivered
 
 Coverage is the headline because the promise is fixed: the reader answers at the accuracy it
 promised or it abstains, so the configuration that answers more claims at the same promise is
