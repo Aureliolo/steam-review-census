@@ -516,6 +516,18 @@ enum Command {
         /// Changing this draws a different blind sample. The same seed draws the same one.
         #[arg(long, default_value_t = 1)]
         seed: u64,
+        /// Serve the page from this machine instead of writing it, so every answer lands on
+        /// disk as it is made. Opened as a file, the page keeps answers in the browser and
+        /// only the Export button gets them out, which puts a thousand questions of somebody's
+        /// judgement behind a button they have to remember.
+        #[arg(long)]
+        serve: bool,
+        /// Where the answers are written while serving. `ingest-gold` reads this file.
+        #[arg(long, default_value = "gold-answers.json")]
+        answers: PathBuf,
+        /// Port to serve on. 0 picks a free one.
+        #[arg(long, default_value_t = 8731)]
+        port: u16,
     },
 
     /// Merge adjudicated answers back, as the only labels in the set written by a person.
@@ -735,13 +747,6 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             seed,
             reference,
         } => run_mine(app_ids, out, *claims, *batch_size, *seed, reference),
-        Command::IngestClaims {
-            app_id,
-            from,
-            sheet,
-            by,
-            to,
-        } => run_ingest_claims(*app_id, from, sheet.as_deref(), by, to.clone()),
         Command::Revisit {
             words,
             subjects,
@@ -749,24 +754,73 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             reference,
             batch_size,
         } => run_revisit(words, subjects, app_ids, reference, *batch_size),
-        Command::IngestRevisit {
-            app_id,
-            from,
-            by,
-            to,
-        } => run_ingest_revisit(*app_id, from, by, to.clone()),
         Command::Gold {
             reference,
             to,
             blind,
             splits,
             seed,
-        } => run_gold(reference, to, *blind, (*splits).into(), *seed),
+            serve,
+            answers,
+            port,
+        } => run_gold(
+            reference,
+            *blind,
+            (*splits).into(),
+            *seed,
+            if *serve {
+                Delivery::Served {
+                    answers,
+                    port: *port,
+                }
+            } else {
+                Delivery::Written(to)
+            },
+        ),
+        Command::Distinct {
+            app_id,
+            out,
+            count,
+            seed,
+            to,
+        } => run_distinct(*app_id, out, *count, *seed, to.clone()),
+        Command::Brief { to } => run_brief(to),
+        _ => return labelled_work(command),
+    })
+}
+
+/// The commands that take a labeller's answers back, and the ones that score them.
+///
+/// Split from the draws above only because one dispatcher holding both stopped being
+/// readable, and the line between them is the labeller: everything above puts claims in front
+/// of one, everything here reads what came back.
+fn labelled_work(command: &Command) -> Option<Result<()>> {
+    Some(match command {
+        Command::IngestClaims {
+            app_id,
+            from,
+            sheet,
+            by,
+            to,
+        } => run_ingest_claims(*app_id, from, sheet.as_deref(), by, to.clone()),
+        Command::IngestRevisit {
+            app_id,
+            from,
+            by,
+            to,
+        } => run_ingest_revisit(*app_id, from, by, to.clone()),
         Command::IngestGold {
             from,
             reference,
             by,
         } => run_ingest_gold(from, reference, by),
+        Command::IngestInduced {
+            app_id,
+            from,
+            seed,
+            handout,
+            to,
+        } => run_ingest_induced(*app_id, from, *seed, handout.clone(), to.clone()),
         Command::MeasureClaims {
             app_ids,
             out,
@@ -786,21 +840,6 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             out,
             reference,
         } => run_ceiling(app_ids, out, reference),
-        Command::Distinct {
-            app_id,
-            out,
-            count,
-            seed,
-            to,
-        } => run_distinct(*app_id, out, *count, *seed, to.clone()),
-        Command::IngestInduced {
-            app_id,
-            from,
-            seed,
-            handout,
-            to,
-        } => run_ingest_induced(*app_id, from, *seed, handout.clone(), to.clone()),
-        Command::Brief { to } => run_brief(to),
         _ => return None,
     })
 }
@@ -1358,12 +1397,26 @@ fn run_revisit(
 }
 
 /// Merges revisited labels back into a set.
+/// How the adjudication page reaches the person answering it.
+///
+/// An enum rather than a flag beside the paths, because the two are exclusive: a served page
+/// writes its answers as they are made and has nowhere to put an HTML file, and a written one
+/// has no port.
+#[derive(Clone, Copy)]
+enum Delivery<'a> {
+    Written(&'a std::path::Path),
+    Served {
+        answers: &'a std::path::Path,
+        port: u16,
+    },
+}
+
 fn run_gold(
     reference: &std::path::Path,
-    to: &std::path::Path,
     blind: usize,
     splits: steamgauge_core::gold::Splits,
     seed: u64,
+    delivery: Delivery<'_>,
 ) -> Result<()> {
     let (questions, found) = steamgauge_core::gold::draw(reference, blind, splits, seed)?;
     if questions.is_empty() {
@@ -1372,7 +1425,7 @@ fn run_gold(
             reference.display()
         );
     }
-    std::fs::write(to, steamgauge_core::gold::render(&questions, found))?;
+    let page = steamgauge_core::gold::render(&questions, found);
 
     println!("games      {} frozen", found.games);
     println!("blind      {} claims, no answer shown", found.blind);
@@ -1384,11 +1437,33 @@ fn run_gold(
         "agreed     {} claims both labellers already answered the same way",
         found.agreed
     );
-    println!("page       {}", to.display());
-    println!(
-        "\nOpen it, answer, export, then `steamgauge ingest-gold --from <the file>`.\nThe page \
-         holds review text: it fetches nothing, sends nothing, and is never committed."
-    );
+
+    match delivery {
+        Delivery::Written(to) => {
+            std::fs::write(to, page)?;
+            println!("page       {}", to.display());
+            println!(
+                "\nOpen it, answer, export, then `steamgauge ingest-gold --from <the file>`.\n\
+                 The page holds review text: it fetches nothing, sends nothing, and is never \
+                 committed.\n`--serve` writes every answer to disk as it is made instead, \
+                 which is one fewer thing to remember."
+            );
+        }
+        Delivery::Served { answers, port } => {
+            let already = steamgauge_core::serve::answers_held(answers);
+            if already > 0 {
+                println!(
+                    "answers    {already} already on disk, and the page picks up where they end"
+                );
+            }
+            println!(
+                "\nNothing leaves this machine: the page is served on the loopback address and \
+                 the only thing written is the answers file."
+            );
+            steamgauge_core::serve::Adjudication::new(page, answers.to_path_buf())
+                .serve(port, &|said| println!("{said}"))?;
+        }
+    }
     Ok(())
 }
 

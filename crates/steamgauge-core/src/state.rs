@@ -383,35 +383,5 @@ mod tests {
         assert_eq!(state.completed_totals(id).unwrap(), (30, 2));
     }
 
-    /// Minimal scratch directory, removed on drop, so tests never touch a shared path.
-    mod tempdir {
-        use std::path::{Path, PathBuf};
-
-        #[derive(Debug)]
-        pub struct Dir(PathBuf);
-
-        impl Dir {
-            pub fn new() -> Self {
-                let unique = format!(
-                    "steamgauge-test-{}-{:?}",
-                    std::process::id(),
-                    std::thread::current().id()
-                );
-                let path = std::env::temp_dir().join(unique);
-                let _ = std::fs::remove_dir_all(&path);
-                std::fs::create_dir_all(&path).unwrap();
-                Self(path)
-            }
-
-            pub fn path(&self) -> &Path {
-                &self.0
-            }
-        }
-
-        impl Drop for Dir {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(&self.0);
-            }
-        }
-    }
+    use crate::tempdir;
 }

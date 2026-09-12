@@ -23,9 +23,12 @@ pub mod reader;
 pub mod reliability;
 pub mod report;
 pub mod said;
+pub mod serve;
 pub mod shard;
 pub mod state;
 pub mod taxonomy;
+#[cfg(test)]
+mod tempdir;
 pub mod time;
 
 pub use api::{DEFAULT_PACE, Page, QuerySummary, SteamClient};

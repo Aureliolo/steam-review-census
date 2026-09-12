@@ -1,6 +1,11 @@
-// The adjudication page. Everything is in the file already; nothing is fetched and nothing is
-// sent. Answers are kept in this browser as they are made, because fourteen hundred claims is
+// The adjudication page. Every question is in the file already and nothing is fetched to ask
+// one. Answers are kept in this browser as they are made, because fourteen hundred claims is
 // not one sitting and a closed tab must not cost a night's work.
+//
+// Opened from a file, the browser is the only copy until somebody presses Export, and a browser
+// loses its storage for reasons nobody controls. Served by `steamgauge gold --serve`, every
+// answer is posted as it is made and the disk is the copy that matters: the page reads the file
+// back when it opens, the store here becomes a cache, and there is nothing to remember.
 (function () {
   "use strict";
 
@@ -9,10 +14,12 @@
   var categories = data.categories || [];
   var app = document.getElementById("app");
   var STORE = "steamgauge-gold-" + questions.length + "-" + (data.taxonomy || "");
+  var SERVED = location.protocol === "http:" || location.protocol === "https:";
 
   var answers = load();
   var at = firstUnanswered();
   var notice = "";
+  var kept = SERVED ? "saved" : "";
 
   function load() {
     try {
@@ -26,7 +33,54 @@
     try {
       localStorage.setItem(STORE, JSON.stringify(answers));
     } catch (whatever) {
-      /* A full or blocked store is not a reason to stop; the export still works. */
+      /* A full or blocked store is not a reason to stop; the file on disk is the copy. */
+    }
+    if (SERVED) post();
+  }
+
+  // Posted whole rather than as a delta. A thousand answers is a few hundred kilobytes to a
+  // process on the same machine, and sending the lot means a dropped request costs nothing: the
+  // next answer carries everything the missed one did.
+  function post() {
+    var rows = exportable();
+    fetch("answers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows),
+    })
+      .then(function (reply) {
+        kept = reply.ok ? "saved" : "not saved";
+        paintKept();
+      })
+      .catch(function () {
+        kept = "not saved";
+        paintKept();
+      });
+  }
+
+  function paintKept() {
+    var where = document.getElementById("kept");
+    if (where) where.textContent = kept;
+  }
+
+  // What is on disk wins over what this browser remembers: the file is the one copy that
+  // survives a cleared cache and a second machine, and a browser holding a stale half of the
+  // work must not overwrite it.
+  function adopt(rows) {
+    var wanted = {};
+    questions.forEach(function (question) {
+      wanted[keyOf(question)] = true;
+    });
+    var taken = 0;
+    rows.forEach(function (row) {
+      var key = row.app_id + "#" + row.review_id + "#" + row.index;
+      if (!wanted[key]) return;
+      answers[key] = row;
+      taken += 1;
+    });
+    if (taken) {
+      at = firstUnanswered();
+      render();
     }
   }
 
@@ -135,6 +189,7 @@
         " answered</span>"
     );
     html.push('<span class="spacer"></span>');
+    if (SERVED) html.push('<span class="count" id="kept">' + escape(kept) + "</span>");
     html.push('<button class="go quiet" id="export">Export answers</button>');
     html.push(restoreControl());
     html.push("</header>");
@@ -253,7 +308,11 @@
       " of " +
       questions.length +
       " answered</h2>" +
-      '<p class="note">Export the file and run <code>steamgauge ingest-gold</code> on it.</p>' +
+      '<p class="note">' +
+      (SERVED
+        ? "Already on disk. Run <code>steamgauge ingest-gold</code> on it."
+        : "Export the file and run <code>steamgauge ingest-gold</code> on it.") +
+      "</p>" +
       '<p><button class="go" id="export">Export answers</button> ' +
       restoreControl() +
       ' <button class="go quiet" id="back">Back to the last one</button></p>' +
@@ -375,13 +434,17 @@
     reader.readAsText(file);
   }
 
-  function exportAnswers() {
+  function exportable() {
     var rows = [];
     questions.forEach(function (question) {
       var mine = answers[keyOf(question)];
       if (mine && mine.subject) rows.push(mine);
     });
-    var blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    return rows;
+  }
+
+  function exportAnswers() {
+    var blob = new Blob([JSON.stringify(exportable(), null, 2)], { type: "application/json" });
     var link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "gold-answers.json";
@@ -423,4 +486,18 @@
   });
 
   render();
+
+  if (SERVED) {
+    fetch("answers")
+      .then(function (reply) {
+        return reply.ok ? reply.json() : [];
+      })
+      .then(function (rows) {
+        if (rows && rows.length) adopt(rows);
+      })
+      .catch(function () {
+        kept = "not saved";
+        paintKept();
+      });
+  }
 })();
