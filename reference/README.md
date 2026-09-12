@@ -25,6 +25,13 @@ not committed.
   labeller's answer would destroy the comparison being made. Nothing trains on it, and nothing
   should: these are the claims the model is measured against, and a model trained on its own
   test set reports a number about itself.
+- **`claims/<app id>/declined/labels.json`** is a teaching set: claims the reader abstained on,
+  drawn by `steamgauge declined` and labelled like any other. Every row carries
+  `subset: declined`, and nothing that measures prevalence or accuracy reads it, because a set
+  drawn for being hard cannot say what share of a corpus mentions price. It exists only for
+  training, and only for games the model already learns from: drawing one from a held-out game
+  would end the measurement it exists to protect. Only the drawn claims are labelled, though
+  the whole review is handed over, since a claim reading "it doesn't" cannot be read alone.
 - **`induced/<app id>.json`** holds the subjects a game's own players raise that the fixed
   taxonomy has no row for, each with the reviews that raise it. A subject with fewer than
   three reviews behind it is refused rather than kept with a note.
