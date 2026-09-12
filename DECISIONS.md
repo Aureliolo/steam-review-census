@@ -374,13 +374,14 @@ instructive ways.
    deduplication was buying nothing. Over Cyberpunk's 1.55M English claims, 87% are distinct:
    real, but only an eighth of the forward passes.
 
-   Most of that eighth is bought back rather than lost. A claim read in context is a different
+   Part of that eighth is bought back rather than lost. A claim read in context is a different
    question in a different review, but the same question in every **copy** of the same review,
    because the window is cut from the text: the same text at the same index gives the same
    window and the same answer. So a context reading files its answers by the review's text
    rather than by its id, and "Great game." written as a whole review a thousand times is one
    forward pass again. Every reading records how many claims it counted and how many it
-   actually asked about, so the saving is a number in the file rather than an argument.
+   actually asked about, so the saving is a number in the file rather than an argument, and it
+   is not one number: across the eight frozen games it runs from 1% to 12% of the corpus.
 2. **By token arithmetic, then on a CPU: "9x", then "7.8x".** A claim is 21 tokens and a claim
    with its review is 168, so the work must be eight times greater. On a CPU it is: 51.7
    claims a second against 6.6.
@@ -391,7 +392,17 @@ instructive ways.
    three and a half hours, once per model version.
 
 The lesson is the one the project keeps relearning: measure the thing itself, on the hardware
-that will do it, not a proxy for it.
+that will do it, not a proxy for it. It held a fourth time. A backbone of twice the parameters
+should cost twice the arithmetic, and on the same game through the same pipeline with only
+`--model` differing it costs **1.45 times**, 20 seconds against 29 on 17,271 claims. The card
+is not the only thing in the loop.
+
+That measurement found the rest of the loop. The reader was tokenising each review once for
+every claim it holds, so a review of four and a half claims was tokenised four and a half
+times: the card sat at about half busy while one core did the same work over again. Tokenising
+once per review takes the same game from 39 seconds to 29, with the readings byte for byte
+identical. The second pass, which counts reviews with the card idle, is still about a fifth of
+each game and is the next thing worth taking.
 
 ## Most of a sweep is the seed
 
