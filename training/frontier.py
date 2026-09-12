@@ -194,8 +194,9 @@ def score_reader(model_dir: Path, key: Path, data: str):
         provenance.get("context", False),
         # A model trained to look for the marks and scored without them is scored on input it
         # has never seen, which understates it and looks like a worse model rather than a
-        # worse measurement.
+        # worse measurement. The same goes for the pair's prefixes.
         mark=provenance.get("mark", False),
+        prefix=provenance.get("prefix", False),
     )
 
     session = onnxruntime.InferenceSession(
@@ -206,12 +207,7 @@ def score_reader(model_dir: Path, key: Path, data: str):
     confidence, predicted, polarity = [], [], []
     for at in range(0, len(claims), 64):
         chunk = list(range(at, min(at + 64, len(claims))))
-        encoded = [
-            tokenizer.encode(claims[i].text, cut.windows[i])
-            if cut.context
-            else tokenizer.encode(claims[i].text)
-            for i in chunk
-        ]
+        encoded = [tokenizer.encode(*cut.pair(i)) for i in chunk]
         longest = max(min(len(e.ids), provenance["max_tokens"]) for e in encoded)
         ids = np.zeros((len(chunk), longest), dtype=np.int64)
         mask = np.zeros((len(chunk), longest), dtype=np.int64)

@@ -51,6 +51,7 @@ class Claims(Dataset):
         split_wrong_weight=1.0,
         mark=False,
         balance=0.0,
+        prefix=False,
     ):
         self.claims = claims
         self.ambiguous_weight = ambiguous_weight
@@ -79,6 +80,11 @@ class Claims(Dataset):
         # "it doesn't" and "same here" are unanswerable alone, and every one of them in the
         # training set is a label the model is asked to reach from text that cannot reach it.
         self.context = context
+        # `multilingual-e5-*` was pre-trained on pairs written as "query: " and "passage: ",
+        # and a fine-tune that drops them asks the encoder a differently shaped question from
+        # the one it learned. Off by default because it is a property of one family of
+        # backbones rather than of this task.
+        self.prefix = prefix
         # The window depends on the claim and the budget, neither of which moves, so it is cut
         # once rather than once per epoch. It costs a tokenisation of the whole review.
         self.windows = [self.window(claim) for claim in claims] if context else []
@@ -123,11 +129,25 @@ class Claims(Dataset):
             f"{claim.review[ends:closes]}"
         )
 
+    def pair(self, at):
+        """The sequences the model is asked about this claim, in the form it was trained on.
+
+        Every place that asks the model anything goes through here: the trainer, the export,
+        the frontier comparison and the confidence sweep. A claim written one way in training
+        and another way in scoring is a different question, and the answer still looks like an
+        answer, which is how this project lost a night to a tokenizer.
+        """
+        claim = self.claims[at]
+        asked = f"query: {claim.text}" if self.prefix else claim.text
+        if not self.context:
+            return (asked,)
+        window = self.windows[at]
+        return asked, f"passage: {window}" if self.prefix else window
+
     def __getitem__(self, at):
         claim = self.claims[at]
         encoded = self.tokenizer(
-            claim.text,
-            *([self.windows[at]] if self.context else []),
+            *self.pair(at),
             truncation=True,
             max_length=self.max_length,
             padding="max_length",
@@ -418,6 +438,7 @@ def run(args) -> dict:
                 args.split_wrong_weight if name == "train" else 1.0,
                 args.mark,
                 args.balance if name == "train" else 0.0,
+                args.prefix,
             ),
             batch_size=args.batch_size,
             shuffle=name == "train",
@@ -540,6 +561,7 @@ def run(args) -> dict:
         "context": args.context,
         "seed": args.seed,
         "mark": args.mark,
+        "prefix": args.prefix,
         "balance": args.balance,
         "ambiguous_weight": args.ambiguous_weight,
         "split_wrong_weight": args.split_wrong_weight,
@@ -618,6 +640,13 @@ def parse():
         help="mark the claim where it sits inside its window, as well as giving it as the "
         "first sequence. A pair alone says what the claim is and what surrounds it, but not "
         "which sentence of the surroundings is the one being asked about.",
+    )
+    parser.add_argument(
+        "--prefix",
+        action="store_true",
+        help="write the pair the way `multilingual-e5-*` was pre-trained on it, as "
+        "\"query: <claim>\" and \"passage: <window>\". A property of that family of backbones "
+        "rather than of this task, so it is off unless asked for.",
     )
     parser.add_argument(
         "--balance",

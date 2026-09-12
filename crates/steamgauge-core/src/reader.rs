@@ -80,6 +80,10 @@ pub struct Provenance {
     /// it has never seen, and every answer still looks plausible.
     #[serde(default)]
     pub mark: bool,
+    /// Whether the pair is written the way `multilingual-e5-*` was pre-trained on it, as
+    /// "query: " and "passage: ". Travels with the graph for the same reason the other two do.
+    #[serde(default)]
+    pub prefix: bool,
     #[serde(default)]
     pub trained_from: String,
     #[serde(default)]
@@ -451,11 +455,11 @@ impl Encoder {
             let pairs: Vec<(String, String)> = asked
                 .iter()
                 .zip(windows)
-                .map(|(one, window)| (one.claim.to_owned(), window))
+                .map(|(one, window)| (self.claim(one.claim), self.window_text(&window)))
                 .collect();
             self.tokenizer.encode_batch(pairs, true)
         } else {
-            let alone: Vec<String> = asked.iter().map(|one| one.claim.to_owned()).collect();
+            let alone: Vec<String> = asked.iter().map(|one| self.claim(one.claim)).collect();
             self.tokenizer.encode_batch(alone, true)
         }
         .map_err(|e| Error::Tokenizer(e.to_string()))?;
@@ -478,6 +482,14 @@ impl Encoder {
     #[must_use]
     pub fn windows_for(&self, asked: &[Asked<'_>]) -> Vec<String> {
         self.windows(asked)
+    }
+
+    fn claim(&self, text: &str) -> String {
+        as_query(self.provenance.prefix, text)
+    }
+
+    fn window_text(&self, window: &str) -> String {
+        as_passage(self.provenance.prefix, window)
     }
 
     /// Every claim's window, tokenising each review once however many claims it holds.
@@ -553,6 +565,27 @@ fn same_review(asked: &[Asked<'_>]) -> Vec<usize> {
                 .or_insert(at)
         })
         .collect()
+}
+
+/// The claim as the first sequence, in the form the model was trained on.
+///
+/// `multilingual-e5-*` was pre-trained on pairs written as "query: " and "passage: ", and a
+/// model fine-tuned that way is answering a differently shaped question without them. Matches
+/// `Claims.pair` in `training/train.py`, which is the only other place a pair is written.
+fn as_query(prefix: bool, text: &str) -> String {
+    if prefix {
+        format!("query: {text}")
+    } else {
+        text.to_owned()
+    }
+}
+
+fn as_passage(prefix: bool, window: &str) -> String {
+    if prefix {
+        format!("passage: {window}")
+    } else {
+        window.to_owned()
+    }
 }
 
 /// What marks the claim inside its window, matching `training/train.py`.
@@ -724,6 +757,16 @@ mod tests {
             at += word.len() + 1;
         }
         offsets
+    }
+
+    /// The trainer writes the pair one way and the reader has to write it the same way. This
+    /// has already cost the project a night once, through a tokenizer rather than a prefix.
+    #[test]
+    fn a_pair_is_written_the_way_the_model_was_trained_on_it() {
+        assert_eq!(as_query(false, "it crashes"), "it crashes");
+        assert_eq!(as_passage(false, "the review"), "the review");
+        assert_eq!(as_query(true, "it crashes"), "query: it crashes");
+        assert_eq!(as_passage(true, "the review"), "passage: the review");
     }
 
     #[test]

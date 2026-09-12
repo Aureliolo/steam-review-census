@@ -51,6 +51,7 @@ def logits_of(model_dir: Path, claims, provenance):
         budget,
         context,
         mark=provenance.get("mark", False),
+        prefix=provenance.get("prefix", False),
     )
     cut.tokenizer = _Shim(tokenizer)
     cut.windows = [cut.window(claim) for claim in claims] if context else []
@@ -63,12 +64,7 @@ def logits_of(model_dir: Path, claims, provenance):
     found = []
     for at in range(0, len(claims), 64):
         chunk = range(at, min(at + 64, len(claims)))
-        encoded = [
-            tokenizer.encode(claims[i].text, cut.windows[i])
-            if context
-            else tokenizer.encode(claims[i].text)
-            for i in chunk
-        ]
+        encoded = [tokenizer.encode(*cut.pair(i)) for i in chunk]
         longest = max(min(len(one.ids), budget) for one in encoded)
         ids = np.zeros((len(encoded), longest), dtype=np.int64)
         mask = np.zeros((len(encoded), longest), dtype=np.int64)

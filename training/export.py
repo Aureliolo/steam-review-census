@@ -81,13 +81,20 @@ def sample_claims(path: Path, count: int, record: dict, tokenizer) -> list:
     claims = claimdata.load(path)
     step = max(1, len(claims) // count)
     drawn = claims[::step][:count]
-    if not record.get("context"):
-        return [claim.text for claim in drawn]
 
     from train import Claims
 
-    cut = Claims(drawn, tokenizer, record["subjects"], record["max_length"], True, mark=record.get("mark", False))
-    return [(claim.text, cut.windows[at]) for at, claim in enumerate(drawn)]
+    cut = Claims(
+        drawn,
+        tokenizer,
+        record["subjects"],
+        record["max_length"],
+        record.get("context", False),
+        mark=record.get("mark", False),
+        prefix=record.get("prefix", False),
+    )
+    pairs = [cut.pair(at) for at in range(len(drawn))]
+    return [one[0] if len(one) == 1 else one for one in pairs]
 
 
 def main():
@@ -271,6 +278,7 @@ def main():
                 "max_tokens": record["max_length"],
                 "context": record.get("context", False),
                 "mark": record.get("mark", False),
+                "prefix": record.get("prefix", False),
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
                 "usual_declined": usual_declined,
