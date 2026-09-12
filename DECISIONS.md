@@ -404,6 +404,32 @@ once per review takes the same game from 39 seconds to 29, with the readings byt
 identical. The second pass, which counts reviews with the card idle, is still about a fifth of
 each game and is the next thing worth taking.
 
+## The tool was reading long reviews from the top, and nothing looked wrong
+
+Found 2026-09-12, an hour after the context model shipped. Training said the reader answered
+84.2% of the frozen claims at 76.3%. The tool, running the same graph over the same games,
+agreed on **68.4%**. Same model, same threshold, same claims, eight points apart.
+
+It was not the half-precision graph, and it was not the splitter moving under the labels. The
+reader configures its tokenizer to truncate at the token budget, because that is what encoding
+a pair needs. It then used **that same tokenizer** to find where a claim sits inside its
+review, and got back the offsets of the first 128 tokens only. For any review longer than that,
+the claim is not among the offsets, the search for it falls back to position zero, and the
+window becomes the opening of the review: precisely the head truncation that centring exists to
+undo, on precisely the long reviews where centring is worth anything. Every answer still looked
+plausible, every confidence was in the usual range, and the coverage figure was right to within
+a point.
+
+The reader now keeps a second tokenizer that cuts nothing, for offsets alone. Scored through
+Python's windowing, which never truncated, the same graph gives 84.1% at 76.2% over all 3,769
+frozen claims, which is training's figure to a tenth of a point; that is what the tool has to
+reproduce, and it is the measurement that caught this.
+
+Two things worth keeping from it. A component set up for one job and reused for another is
+where this class of bug lives, and the setting that bit was three lines away from the code that
+suffered. And the only reason it was found at all is that two independent implementations of
+the same measurement existed and were compared: the tool's figure was plausible on its own.
+
 ## Most of a sweep is the seed
 
 Forty configurations were trained on one set of labels overnight on 2026-09-11, every one of
