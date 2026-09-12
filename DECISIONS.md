@@ -531,11 +531,17 @@ times the seed spread, on the same labels and the same schedule:
 | five epochs, 3e-5 | **86.5%** | 0.659 | **0.138** | 0.190 |
 | five epochs, 1e-5 | 76.9% | 0.646 | 0.156 | 0.164 |
 | three epochs, 2e-5 | 78.2% | 0.656 | 0.150 | **0.135** |
+| `bge-m3`, 568M, five epochs, 3e-5 | 75.0% | 0.650 | 0.163 | 0.197 |
 | `gte-multilingual-base`, 278M, the same schedule | 68.1% | 0.637 | 0.183 | 0.133 |
 
-Three runs of it land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline seeds
-land 4.3 apart, and every rate tried on the big model beats every configuration of the small
-one. So this is the backbone and not a lucky run. What
+The `bge-m3` row is the one that says what this finding is and is not. It is the same size as
+the winner, from a different family, on the same labels and the same schedule, and it answers
+**ten points fewer claims**. Twice the parameters is not the finding; this backbone is, and a
+future candidate has to be tried rather than assumed from its parameter count.
+
+Three runs of the winner land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline
+seeds land 4.3 apart, and every rate tried on the big model beats every configuration of the
+small one. So this is the backbone and not a lucky run. What
 it costs to read a library with is the open question, and cost is the whole argument for this
 project over a frontier model, so it is measured on the card that does the reading before it is
 chosen. Its calibration is the other: worse than the small model's at every rate, and
