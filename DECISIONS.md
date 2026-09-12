@@ -521,9 +521,9 @@ and fifteen of coverage, from twelve and thirty-nine, and it is the number to cl
 
 ## Where the reader loses, and what it says about where labels should go
 
-A twelve-point gap averaged over everything says to work harder. Split by subject, on the
-same 471 stratified frozen claims, it says what to work on. The reader against Opus 5, with
-how much of the set each subject has:
+A gap averaged over everything says to work harder. Split by subject, on the same 471
+stratified frozen claims, it says what to work on. Measured 2026-09-11 against the 278M reader
+that was shipped then, with how much of the set each subject has:
 
 | subject | labels | Opus 5 | the reader | the reader declined |
 |---|---|---|---|---|
@@ -544,29 +544,37 @@ table as if it could was a mistake made first: it said `atmosphere` was broken. 
 frozen claims, where `atmosphere` has 205 of them, it scores F1 0.55, which is the middle of
 the pack. The per-subject picture from that larger set is the one to trust:
 
-| | labels | frozen claims | F1 |
-|---|---|---|---|
-| licensing | 32 | 24 | **0.00** |
-| accessibility | 62 | 17 | 0.08 |
-| community | 98 | 5 | 0.09 |
-| vr | 57 | 17 | 0.25 |
-| language | 64 | 6 | 0.37 |
-| **mods** | **152** | 35 | **0.92** |
-| atmosphere | 579 | 205 | 0.55 |
-| gameplay | 3,162 | 608 | 0.55 |
-| price | 422 | 67 | 0.77 |
-| verdict | 4,114 | 910 | 0.70 |
+| | labels | frozen claims | F1, 278M | F1, 560M |
+|---|---|---|---|---|
+| licensing | 32 | 24 | **0.00** | 0.21 |
+| accessibility | 62 | 17 | 0.08 | **0.10** |
+| community | 98 | 5 | 0.09 | 0.17 |
+| vr | 57 | 17 | 0.25 | 0.34 |
+| language | 64 | 6 | 0.37 | 0.50 |
+| **mods** | **152** | 35 | **0.92** | 0.80 |
+| atmosphere | 579 | 209 | 0.55 | 0.65 |
+| gameplay | 3,162 | 604 | 0.55 | **0.67** |
+| price | 422 | 77 | 0.77 | 0.86 |
+| verdict | 4,114 | 877 | 0.70 | **0.81** |
+
+**The two halves of that table have different cures, and the bigger backbone proved it.** Every
+row improved with capacity alone, on the same labels, but not equally: the rows with thousands
+of labels gained ten to eleven points (`gameplay` 0.55 to 0.67, `verdict` 0.70 to 0.81), and the
+starved rows are still broken (`accessibility` 0.08 to 0.10, `community` 0.09 to 0.17). So a
+diffuse row was never short of labels, it was short of a model able to tell two overlapping
+things apart; and a starved row is short of labels and no backbone will invent them. `mods`
+falling from 0.92 to 0.80 on 35 claims is the width of that sample, not a regression.
 
 **Label count predicts the bottom of that table and nothing above it.** Every subject under
 about 150 labels is broken, and every one of them is a row the fifteen new games were chosen
-to feed. Above 150 the count stops mattering: `mods` scores 0.92 on 152 labels while
-`gameplay` scores 0.55 on 3,162, because `mods` announces itself and `gameplay` is where
+to feed. Above 150 the count stops mattering: `mods` scores 0.80 on 152 labels while
+`gameplay` scores 0.67 on 3,162, because `mods` announces itself and `gameplay` is where
 everything lands that is not something else. `price` on 422 beats `verdict` on 4,114.
 
 So there are two different problems wearing the same face. Starved rows are fixed by labelling
-the games that raise them, which is in progress. Diffuse rows are not fixed by labels at all,
-and `gameplay` at 0.55 on the largest pile in the set is the evidence: what those need is
-boundary text that says what they are not.
+the games that raise them, which is in progress. Diffuse rows were never short of labels, and
+capacity moved them where labels had not: what remains for them is boundary text that says what
+they are not.
 
 **The cheapest fix for a starved row is not a new game, it is the claims already in the set.**
 `mods` went from nothing to 0.92 by being drawn out of `content` and `updates` by its own
