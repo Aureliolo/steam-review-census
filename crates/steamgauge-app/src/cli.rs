@@ -1131,7 +1131,17 @@ fn read_one(
              distinct` will find it."
         );
     }
-    println!("took         {}", elapsed(report.elapsed));
+    // Beside the time, because a reading is the one thing here that takes hours and the only
+    // way to tell a slow machine from a slow build is a rate.
+    let seconds = report.elapsed.as_secs();
+    match report.forward_passes.checked_div(seconds) {
+        Some(rate) if rate > 0 => println!(
+            "took         {} ({} claims a second)",
+            elapsed(report.elapsed),
+            thousands(rate)
+        ),
+        _ => println!("took         {}", elapsed(report.elapsed)),
+    }
     println!("written to   {}\n", path.display());
 
     let mut ranked: Vec<&steamgauge_core::read::SubjectCount> = report
