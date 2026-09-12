@@ -231,8 +231,13 @@ electricity. The claim being made is not that a 560M-parameter model beats a fro
 is that it gets most of the way there at four orders of magnitude less cost, and that it can
 tell you exactly how far short it falls.
 
-That is not a projection. The library this was built against is **51 games, 6.3 million
-reviews, 17.2 million claims**, all of it read by this model on one card, and the counts and
+The two models in that table are deliberately different ones. The labels this reader was
+trained from were written by **Claude Fable 5.1**, and the model it is measured against is
+**Claude Opus 5**, which wrote none of them. A teacher scoring its own student would make the
+gap meaningless, and the gap is the point.
+
+That is not a projection. The library this was built against is **51 games, 7.5 million
+reviews, 20.1 million claims**, all of it read by this model on one card, and the counts and
 the rows behind them reconcile game by game (`--example check-readings`).
 
 ### How a person turns silver into gold
