@@ -1015,13 +1015,25 @@ nothing. Two are missing, and no amount of further labelling closes either.
    answered question narrows the interval from the first one onward, and there is no threshold
    below which the exercise has produced nothing.
 
-   **The tool exists as of 2026-09-11.** `steamgauge gold` writes one self-contained page that
-   fetches nothing and sends nothing, holding 1,000 blind claims from the eight frozen games
-   and the 27 the two labellers split on there. A letter picks a subject, a digit the polarity,
-   and a claim with both moves on by itself; answers are kept in the browser as they are made,
-   because fourteen hundred claims is not one sitting. `steamgauge ingest-gold` reads the
-   export back and prints the share that matches the labeller already on record, which is the
-   first figure in this project that may be called accuracy. Chrome drives the page in CI.
+   **The tool exists as of 2026-09-11.** `steamgauge gold` writes one self-contained page
+   holding 1,000 blind claims from the eight frozen games and the 27 the two labellers split
+   on there. A letter picks a subject, a digit the polarity, and a claim with both moves on by
+   itself; answers are kept as they are made, because fourteen hundred claims is not one
+   sitting. `steamgauge ingest-gold` reads them back and prints the share that matches the
+   labeller already on record, which is the first figure in this project that may be called
+   accuracy. Chrome drives the page in CI.
+
+   **`--serve` as of 2026-09-12, and it is the way to run it.** The page as written keeps
+   answers in `localStorage` and only the Export button gets them out, which puts the sole copy
+   of a thousand questions of somebody's own judgement somewhere a cleared cache loses, and
+   makes the person answering into the backup. Asked to open the page, the user's first
+   question was whether they had to export, and the second was that if so it is bad design.
+   They were right. `steamgauge gold --serve` binds the loopback address and takes every answer
+   as it is made, writing beside the target and renaming so a crash mid-write cannot leave a
+   fragment where the adjudication was, and the page reads the file back when it opens: the
+   disk is the copy that matters and the browser is a cache. Nothing is exported and nothing
+   leaves the machine. Opened as a file the page behaves exactly as before, because a page that
+   needs a server to show a question would be a worse page.
 
    Frozen-only gives 27 splits rather than the four hundred first estimated, because a tenth
    of each set is read twice and 271 claims at 93.2% agreement leaves 27. A disagreement

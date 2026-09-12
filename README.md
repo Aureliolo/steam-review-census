@@ -248,14 +248,19 @@ drawn for measurement carries no answer, because an answer on the page is an ans
 reader's head, and a figure produced by agreeing with a suggestion is a ratification rather
 than a measurement.
 
-The page is a single file that fetches nothing and sends nothing, marks each claim inside the
-review it came from, and keeps answers in the browser as they are made. A letter picks a
-subject, a digit picks the polarity, and a claim with both moves on by itself; a thousand
-claims is not one sitting and a closed tab must not cost a night's work. The exported file
-loads back into the page, so it is a save rather than a delivery: a browser loses its storage
-for reasons nobody controls, and answers from another draw are refused rather than counted.
+The page marks each claim inside the review it came from and keeps answers as they are made. A
+letter picks a subject, a digit picks the polarity, and a claim with both moves on by itself; a
+thousand claims is not one sitting and a closed tab must not cost a night's work.
 
-`steamgauge ingest-gold` reads the export back, files it beside the labels already there
+**`steamgauge gold --serve` is the way to run it.** The page is served from the loopback
+address and every answer lands in a file on disk before the next question is drawn, so the disk
+is the copy that matters and the browser is a cache: reopen it anywhere and it carries on where
+the file ends. Nothing leaves the machine, and there is nothing to remember to press. Opened as
+a plain file instead, the page still works and still asks nothing of the network, but the
+browser is then the only copy until the Export button is pressed, which is a bad place for the
+only copy of somebody's own judgement.
+
+`steamgauge ingest-gold` reads those answers back, files them beside the labels already there
 rather than over them, and prints the share that agrees. That share is the first number this
 project can call accuracy rather than agreement.
 
