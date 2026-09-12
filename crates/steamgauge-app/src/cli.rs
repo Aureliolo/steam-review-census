@@ -306,6 +306,24 @@ enum Command {
         /// Where the claim reference sets live.
         #[arg(long, default_value = "reference/claims")]
         reference: PathBuf,
+        /// Fish with the labelled claims instead of with words. Every labelled claim of a
+        /// starved subject is embedded and the corpus is walked for its nearest neighbours,
+        /// which finds the paraphrases no word list has and crosses languages a word list
+        /// cannot. Costs a forward pass over the corpus per game and lands in `retrieved/`.
+        #[arg(long)]
+        by_neighbour: bool,
+        /// Which encoder to fish with, when `--by-neighbour`.
+        #[arg(long, default_value = "gte-base")]
+        model: Model,
+        /// Which build of the encoder to run, when `--by-neighbour`.
+        #[arg(long, default_value = "fp16")]
+        precision: Precision,
+        /// Where the encoder is cached. Defaults to the platform cache directory.
+        #[arg(long)]
+        model_dir: Option<PathBuf>,
+        /// Claims per forward pass, when `--by-neighbour`.
+        #[arg(long, default_value_t = 256)]
+        embed_batch: usize,
     },
 
     /// Score stored readings against a claim reference set.
@@ -668,6 +686,46 @@ pub async fn run() -> Result<()> {
             println!("{written} labelled claims -> {}", to.display());
             Ok(())
         }
+        Command::Report {
+            app_ids,
+            out,
+            to,
+            examples,
+            seed,
+        } => run_report(&app_ids, &out, &to, examples, seed),
+        other => encoder_work(other).await,
+    }
+}
+
+/// The commands that load an encoder, which on a first run is a download.
+async fn encoder_work(command: Command) -> Result<()> {
+    match command {
+        Command::Mine {
+            app_ids,
+            out,
+            claims,
+            batch_size,
+            reference,
+            by_neighbour: true,
+            model,
+            precision,
+            model_dir,
+            embed_batch,
+            ..
+        } => {
+            run_mine_by_neighbour(
+                &app_ids,
+                &out,
+                claims,
+                batch_size,
+                &reference,
+                model_dir,
+                model.into(),
+                precision.into(),
+                embed_batch,
+            )
+            .await
+        }
         Command::Embed {
             app_id,
             out,
@@ -688,13 +746,6 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::Report {
-            app_ids,
-            out,
-            to,
-            examples,
-            seed,
-        } => run_report(&app_ids, &out, &to, examples, seed),
         // Every reference-set command was answered above; a fresh arm here is one that
         // reference_work does not know about.
         Command::SampleClaims { .. }
@@ -712,6 +763,12 @@ pub async fn run() -> Result<()> {
         | Command::Distinct { .. }
         | Command::IngestInduced { .. }
         | Command::Brief { .. } => unreachable!("reference_work answers every reference command"),
+        Command::Crawl { .. }
+        | Command::Sweep { .. }
+        | Command::Claims { .. }
+        | Command::Read { .. }
+        | Command::ExportTraining { .. }
+        | Command::Report { .. } => unreachable!("run answers every command that needs no encoder"),
     }
 }
 
@@ -746,6 +803,8 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             batch_size,
             seed,
             reference,
+            by_neighbour: false,
+            ..
         } => run_mine(app_ids, out, *claims, *batch_size, *seed, reference),
         Command::Revisit {
             words,
@@ -2231,18 +2290,12 @@ fn run_claims(app_id: u32, out: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-async fn run_embed(
-    app_id: u32,
-    out: &std::path::Path,
-    batch_size: usize,
+/// Fetches the encoder if the cache lacks it and loads it, saying what it is doing.
+async fn load_encoder(
     model_dir: Option<PathBuf>,
     encoder: steamgauge_core::Encoder,
     precision: steamgauge_core::model::Precision,
-    unit: steamgauge_core::taxonomy::Unit,
-) -> Result<()> {
-    // Before the model, which on a first run is a download, and which a game that was never
-    // crawled has no use for.
-    steamgauge_core::embed::latest_snapshot(out, app_id)?;
+) -> Result<steamgauge_core::Embedder> {
     let cache = model_dir.unwrap_or_else(steamgauge_core::model::default_cache_dir);
     let interactive = std::io::stderr().is_terminal();
 
@@ -2271,8 +2324,135 @@ async fn run_embed(
     if interactive && !announced.is_empty() {
         eprintln!();
     }
+    Ok(steamgauge_core::Embedder::load(&cache, encoder, precision)?)
+}
 
-    let mut embedder = steamgauge_core::Embedder::load(&cache, encoder, precision)?;
+#[expect(
+    clippy::too_many_arguments,
+    reason = "clap owns the shape of the arguments and a draw needs every one of them"
+)]
+async fn run_mine_by_neighbour(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    claims: usize,
+    batch_size: usize,
+    reference: &std::path::Path,
+    model_dir: Option<PathBuf>,
+    encoder: steamgauge_core::Encoder,
+    precision: steamgauge_core::model::Precision,
+    embed_batch: usize,
+) -> Result<()> {
+    refuse_held_back(app_ids)?;
+    for &app_id in app_ids {
+        steamgauge_core::embed::latest_snapshot(out, app_id)?;
+    }
+    let interactive = std::io::stderr().is_terminal();
+    let mut embedder = load_encoder(model_dir, encoder, precision).await?;
+
+    let lines = steamgauge_core::mine::Lines::cast(&mut embedder, reference, embed_batch)?;
+    eprintln!("fishing with the labelled claims of each starved subject:");
+    for (subject, count) in lines.cast_count() {
+        eprintln!("  {subject:<16} {count:>5}");
+    }
+
+    let (mut reviews, mut asked, mut batches) = (0, 0, 0);
+    let mut by_line: std::collections::BTreeMap<&str, (usize, f32, f32)> =
+        std::collections::BTreeMap::new();
+    for &app_id in app_ids {
+        let dir = reference.join(app_id.to_string());
+        eprintln!("embedding app {app_id} on {}", embedder.device());
+        let mut last_line = 0;
+        let found = steamgauge_core::mine::draw_by_neighbour(
+            &mut embedder,
+            &lines,
+            out,
+            app_id,
+            &dir,
+            claims,
+            embed_batch,
+            |seen| {
+                let line = format!("  {} claims", thousands(seen));
+                if interactive {
+                    let mut err = std::io::stderr();
+                    let _ = write!(err, "\r{line}   ");
+                    let _ = err.flush();
+                } else if seen - last_line >= PROGRESS_EVERY_TEXTS {
+                    last_line = seen;
+                    eprintln!("{line}");
+                }
+            },
+        )?;
+        if interactive {
+            eprintln!();
+        }
+        for (subject, count, nearest, furthest) in &found.by_line {
+            let entry = by_line.entry(subject).or_insert((0, 0.0, 1.0));
+            entry.0 += count;
+            entry.1 = entry.1.max(*nearest);
+            entry.2 = if *count > 0 {
+                entry.2.min(*furthest)
+            } else {
+                entry.2
+            };
+        }
+        if found.drawn.is_empty() {
+            println!("{app_id:<10} nothing that is not already labelled");
+            continue;
+        }
+        let report =
+            steamgauge_core::claimset::write_set(&dir.join("retrieved"), &found.drawn, batch_size)?;
+        println!(
+            "{:<10} {:>4} reviews {:>5} claims {:>3} batches, from {} claims read",
+            app_id,
+            report.reviews,
+            report.claims,
+            report.batches,
+            thousands(found.claims_seen)
+        );
+        reviews += report.reviews;
+        asked += report.claims;
+        batches += report.batches;
+    }
+
+    if asked == 0 {
+        anyhow::bail!("nothing caught; read these games with a current reader first");
+    }
+    println!("\ndrawn      {reviews:>4} reviews {asked:>5} claims {batches:>3} batches");
+    println!(
+        "\nwhat each line caught, and how near: the furthest is the figure to read, and a line\n\
+         whose last catch sits far below its first was scraping the floor for a subject this\n\
+         game does not hold"
+    );
+    println!(
+        "  {:<16} {:>6} {:>8} {:>9}",
+        "line", "caught", "nearest", "furthest"
+    );
+    for (subject, (count, nearest, furthest)) in &by_line {
+        println!("  {subject:<16} {count:>6} {nearest:>8.3} {furthest:>9.3}");
+    }
+    println!(
+        "\nA neighbour is a candidate and the labeller decides. Ingest each with `steamgauge\n\
+         ingest-claims <app id> --from <dir> --by <model> --to {}/<app id>/retrieved`.\n\
+         Every row lands as subset `retrieved`, which trains the model and measures nothing.",
+        reference.display()
+    );
+    Ok(())
+}
+
+async fn run_embed(
+    app_id: u32,
+    out: &std::path::Path,
+    batch_size: usize,
+    model_dir: Option<PathBuf>,
+    encoder: steamgauge_core::Encoder,
+    precision: steamgauge_core::model::Precision,
+    unit: steamgauge_core::taxonomy::Unit,
+) -> Result<()> {
+    // Before the model, which on a first run is a download, and which a game that was never
+    // crawled has no use for.
+    steamgauge_core::embed::latest_snapshot(out, app_id)?;
+    let interactive = std::io::stderr().is_terminal();
+    let mut embedder = load_encoder(model_dir, encoder, precision).await?;
     eprintln!("embedding app {app_id} on {}", embedder.device());
     let mut last_line = 0;
     let report =

@@ -469,7 +469,7 @@ pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result
 /// Sets beside a game's random draw that add claims to train on rather than answers to
 /// compare. Every one of them is labelled as its own `subset`, and no prevalence figure
 /// counts a row from any of them.
-pub const TEACHING_SETS: &[&str] = &["declined", "mined"];
+pub const TEACHING_SETS: &[&str] = &["declined", "mined", "retrieved"];
 
 /// Draws the claims the reader would not answer, as a set to teach it on.
 ///
@@ -510,14 +510,7 @@ pub fn draw_declined(
         })?)?;
     reading.cut_as_this_build()?;
 
-    let drawn_already: Vec<DrawnReview> = std::fs::read(dir.join("sample.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default();
-    let already: std::collections::HashSet<&str> = drawn_already
-        .iter()
-        .map(|review| review.id.as_str())
-        .collect();
+    let already = already_drawn(dir);
 
     let mut chosen: crate::bounded::Smallest<[u8; 32], (String, u16)> =
         crate::bounded::Smallest::new(wanted);
@@ -579,14 +572,7 @@ pub fn draw_mined(
         })?)?;
     reading.cut_as_this_build()?;
 
-    let drawn_already: Vec<DrawnReview> = std::fs::read(dir.join("sample.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default();
-    let already: std::collections::HashSet<&str> = drawn_already
-        .iter()
-        .map(|review| review.id.as_str())
-        .collect();
+    let already = already_drawn(dir);
 
     let depth = reading.depth;
     let mut lines: Vec<crate::bounded::Smallest<[u8; 32], (String, u16)>> = crate::mine::PROBES
@@ -639,12 +625,24 @@ pub struct Mined {
     pub by_line: Vec<(&'static str, usize)>,
 }
 
+/// The reviews a game's reference set already holds, so no review is drawn twice under two
+/// different draws.
+pub(crate) fn already_drawn(dir: &Path) -> std::collections::HashSet<String> {
+    std::fs::read(dir.join("sample.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<DrawnReview>>(&bytes).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|review| review.id)
+        .collect()
+}
+
 /// Takes from each subject's line in turn until the quota is full or the lines run dry.
 ///
 /// Taking the best `wanted / 8` from each instead would leave the draw short whenever a game
 /// has none of a subject, which for `vr` is most games. Round-robin spends what one subject
 /// cannot use on the subjects that can, while still giving the starved rows first refusal.
-fn round_robin(
+pub(crate) fn round_robin(
     caught: &[Vec<(String, u16)>],
     wanted: usize,
 ) -> (std::collections::HashMap<String, Vec<u16>>, Vec<usize>) {
@@ -673,7 +671,7 @@ fn round_robin(
 /// `asked` list is what keeps the labeller from being charged for the rest of it. An index the
 /// corpus has outgrown is dropped here: a review edited between the read and the draw is cut
 /// into different claims, and the index chosen then names a different sentence now.
-fn handouts(
+pub(crate) fn handouts(
     snapshot: &Path,
     app_id: u32,
     depth: crate::read::Depth,

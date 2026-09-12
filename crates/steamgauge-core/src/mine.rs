@@ -35,6 +35,10 @@
 //! only to say it has none. A run over a sports game, a tie-in and a headset game is worth
 //! several over whatever happens to be captured.
 
+use std::path::Path;
+
+use crate::{Error, Result};
+
 /// Where claims about one starved subject tend to be found.
 #[derive(Debug)]
 pub struct Probe {
@@ -359,6 +363,249 @@ fn contains_term(haystack: &str, term: &str) -> bool {
 
 fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
+}
+
+/// The labelled claims of the starved subjects, embedded, to fish with.
+///
+/// This is the other half of the method, and the stronger one. A probe lists words; a labelled
+/// `policy` claim about Denuvo sits near every other complaint about copy protection whatever
+/// words it uses and whatever language it is in, and a Russian review complaining about
+/// subtitles is near an English one. The published form of this selects by retrieval for
+/// exactly that reason ([arXiv:2307.14899](https://arxiv.org/pdf/2307.14899)).
+///
+/// Every labelled claim of a starved subject is a query, not a centroid of them. `policy`
+/// spans DRM, region locks, account requirements and delistings, and the mean of those points
+/// is near none of them.
+#[derive(Debug)]
+pub struct Lines {
+    /// Subject id, one per probe, in [`PROBES`] order.
+    subjects: Vec<&'static str>,
+    /// Which line each query belongs to, and its unit vector.
+    queries: Vec<(usize, Vec<f32>)>,
+}
+
+impl Lines {
+    /// Embeds every labelled claim under `reference_root` whose subject has a probe.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the reference sets cannot be read or the forward pass fails.
+    pub fn cast(
+        embedder: &mut crate::embed::Embedder,
+        reference_root: &Path,
+        batch_size: usize,
+    ) -> Result<Self> {
+        let subjects: Vec<&'static str> = PROBES.iter().map(|probe| probe.subject).collect();
+        let labelled = crate::claimset::labelled_claims(reference_root)?;
+
+        let mut texts: Vec<String> = Vec::new();
+        let mut owners: Vec<usize> = Vec::new();
+        for claim in labelled {
+            let Some(at) = subjects
+                .iter()
+                .position(|subject| *subject == claim.label.subject)
+            else {
+                continue;
+            };
+            // A claim the labeller called contested is one two subjects fit, and a query
+            // that fits two subjects fishes for both.
+            if claim.label.ambiguous || claim.text.trim().is_empty() {
+                continue;
+            }
+            texts.push(claim.text);
+            owners.push(at);
+        }
+        if texts.is_empty() {
+            return Err(Error::NoReferenceSet {
+                path: reference_root.to_path_buf(),
+            });
+        }
+
+        let mut queries = Vec::with_capacity(texts.len());
+        for (chunk, who) in texts
+            .chunks(batch_size.max(1))
+            .zip(owners.chunks(batch_size.max(1)))
+        {
+            for (vector, owner) in embedder.embed(chunk)?.into_iter().zip(who) {
+                queries.push((*owner, vector));
+            }
+        }
+        Ok(Self { subjects, queries })
+    }
+
+    /// How many queries each line holds, in [`PROBES`] order.
+    #[must_use]
+    pub fn cast_count(&self) -> Vec<(&'static str, usize)> {
+        let mut counts = vec![0; self.subjects.len()];
+        for (owner, _) in &self.queries {
+            counts[*owner] += 1;
+        }
+        self.subjects.iter().copied().zip(counts).collect()
+    }
+
+    /// The line a claim's vector sits nearest, and how near.
+    ///
+    /// Nearest to any single query of the line rather than to their mean, for the reason the
+    /// queries are kept separately: the subjects being fished for are the ones with several
+    /// unrelated senses.
+    fn nearest(&self, vector: &[f32]) -> Option<(usize, f32)> {
+        let mut best: Option<(usize, f32)> = None;
+        for (owner, query) in &self.queries {
+            let similarity: f32 = vector.iter().zip(query).map(|(a, b)| a * b).sum();
+            if best.is_none_or(|(_, found)| similarity > found) {
+                best = Some((*owner, similarity));
+            }
+        }
+        best
+    }
+}
+
+/// What a retrieval draw found: the claims, and how near each line's catch was.
+#[derive(Debug)]
+pub struct Retrieved {
+    pub drawn: Vec<crate::claimset::DrawnReview>,
+    /// Per line: how many were taken, the nearest similarity and the furthest, in [`PROBES`]
+    /// order. The furthest is the figure to read. A line whose two-hundredth catch sits at
+    /// 0.6 is scraping the floor of the corpus for a subject it does not hold, and those two
+    /// hundred labels will mostly say `gameplay`.
+    pub by_line: Vec<(&'static str, usize, f32, f32)>,
+    pub claims_seen: u64,
+}
+
+/// Draws the claims nearest to the labelled claims of each starved subject.
+///
+/// Embeds the corpus as it goes rather than reading stored vectors, for two reasons. Stored
+/// claim vectors exist for no game yet, and the splitter changes: a vector file cut by one
+/// splitter names claims another does not, which is the failure `check-draws` exists to catch,
+/// and a draw that re-embeds cannot suffer it. The cost is a forward pass over the corpus per
+/// draw, minutes on a card for a large game, which a draw of two hundred claims can afford.
+///
+/// A claim goes to the line it sits nearest, and each line keeps its nearest `wanted`. There
+/// is deliberately no similarity floor: a floor that suits `vr` starves `licensing`, and the
+/// per-line furthest similarity in [`Retrieved::by_line`] is what says whether a line was worth
+/// casting in this game.
+///
+/// Every review carries `subset: "retrieved"`, and no prevalence figure may count one.
+///
+/// # Errors
+///
+/// Fails if there is no capture, no reading, the reading was cut by another splitter, or the
+/// forward pass fails.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a draw is its corpus, its reference set and its budget, and each is a separate thing"
+)]
+pub fn draw_by_neighbour(
+    embedder: &mut crate::embed::Embedder,
+    lines: &Lines,
+    out_dir: &Path,
+    app_id: u32,
+    dir: &Path,
+    wanted: usize,
+    batch_size: usize,
+    mut on_progress: impl FnMut(u64),
+) -> Result<Retrieved> {
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let reading: crate::read::ReadReport =
+        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            crate::Error::NoClassifications {
+                path: snapshot.join("reading.json"),
+            }
+        })?)?;
+    reading.cut_as_this_build()?;
+    let depth = reading.depth;
+
+    let already = crate::claimset::already_drawn(dir);
+
+    // The key is the distance, quantised, so the bounded keeper's "smallest" is "nearest".
+    let mut kept: Vec<crate::bounded::Smallest<u32, (String, u16, f32)>> = lines
+        .subjects
+        .iter()
+        .map(|_| crate::bounded::Smallest::new(wanted))
+        .collect();
+    let mut claims_seen = 0_u64;
+
+    let mut pending: Vec<(String, u16, String)> = Vec::with_capacity(batch_size);
+    let mut flush = |pending: &mut Vec<(String, u16, String)>,
+                     kept: &mut Vec<crate::bounded::Smallest<u32, (String, u16, f32)>>|
+     -> Result<()> {
+        if pending.is_empty() {
+            return Ok(());
+        }
+        let texts: Vec<String> = pending.iter().map(|(_, _, text)| text.clone()).collect();
+        let vectors = embedder.embed(&texts)?;
+        for ((id, index, _), vector) in pending.drain(..).zip(vectors) {
+            let Some((line, similarity)) = lines.nearest(&vector) else {
+                continue;
+            };
+            kept[line].offer(distance_key(similarity), (id, index, similarity));
+        }
+        Ok(())
+    };
+
+    crate::capture::for_each_body(&snapshot, |id, _, text| {
+        if already.contains(id) {
+            return Ok(());
+        }
+        for (index, claim) in depth.claims_of(text).into_iter().enumerate() {
+            let trimmed = claim.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            claims_seen += 1;
+            pending.push((
+                id.to_owned(),
+                u16::try_from(index).unwrap_or(u16::MAX),
+                trimmed.to_owned(),
+            ));
+            if pending.len() >= batch_size {
+                flush(&mut pending, &mut kept)?;
+                on_progress(claims_seen);
+            }
+        }
+        Ok(())
+    })?;
+    flush(&mut pending, &mut kept)?;
+    on_progress(claims_seen);
+
+    let caught: Vec<Vec<(String, u16, f32)>> = kept
+        .into_iter()
+        .map(crate::bounded::Smallest::take)
+        .collect();
+    let by_line = lines
+        .subjects
+        .iter()
+        .zip(&caught)
+        .map(|(subject, line)| {
+            let nearest = line.first().map_or(0.0, |(_, _, s)| *s);
+            let furthest = line.last().map_or(0.0, |(_, _, s)| *s);
+            (*subject, line.len(), nearest, furthest)
+        })
+        .collect();
+    let picks: Vec<Vec<(String, u16)>> = caught
+        .into_iter()
+        .map(|line| line.into_iter().map(|(id, index, _)| (id, index)).collect())
+        .collect();
+    let (picks, _) = crate::claimset::round_robin(&picks, wanted);
+    Ok(Retrieved {
+        drawn: crate::claimset::handouts(&snapshot, app_id, depth, &picks, "retrieved")?,
+        by_line,
+        claims_seen,
+    })
+}
+
+/// A cosine similarity as a key the bounded keeper sorts ascending, nearest first.
+///
+/// Quantised to a millionth, which is finer than an fp16 forward pass can tell two claims
+/// apart by, so nothing is lost in the ordering.
+fn distance_key(similarity: f32) -> u32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to [0, 2] and scaled to fit"
+    )]
+    let key = ((1.0 - similarity.clamp(-1.0, 1.0)) * 1_000_000.0) as u32;
+    key
 }
 
 #[cfg(test)]
