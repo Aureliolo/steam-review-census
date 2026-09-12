@@ -291,13 +291,36 @@
     });
     html.push("</div>");
 
+    // Before the polarity, not after it. Answering both halves moves the page on, so a row
+    // below the polarity is a row the reader never reaches without going back for it.
+    html.push('<div class="row"><span class="label">Anything else? (optional)</span>');
+    html.push(
+      '<button class="tone' +
+        (mine.ambiguous ? " chosen" : "") +
+        '" id="ambiguous">two subjects both fit <kbd>0</kbd></button>'
+    );
+    html.push(
+      '<button class="tone' +
+        (mine.split_wrong ? " chosen" : "") +
+        '" id="split">this is two points, or half of one <kbd>9</kbd></button>'
+    );
+    // The reader's own uncertainty, kept apart from whether the claim is contested: one is
+    // about them and one is about the sheet, and a set that conflates them cannot say which
+    // of the two a disagreement came from.
+    html.push(
+      '<button class="tone' +
+        (mine.unsure ? " chosen" : "") +
+        '" id="unsure">I am not sure <kbd>8</kbd></button>'
+    );
+    html.push("</div>");
+
     var chosen = mine.subject
       ? (categories.filter(function (one) {
           return one.id === mine.subject;
         })[0] || {}).label
       : null;
     html.push(
-      '<div class="row"><span class="label">Does the claim praise ' +
+      '<div class="row last"><span class="label">Does the claim praise ' +
         (chosen ? "<b>" + escape(chosen.toLowerCase()) + "</b>" : "that") +
         " or complain about it?</span>"
     );
@@ -319,34 +342,17 @@
       );
     });
     html.push("</div>");
-
-    html.push('<div class="row"><span class="label">Anything else? (optional)</span>');
-    html.push(
-      '<button class="tone' +
-        (mine.ambiguous ? " chosen" : "") +
-        '" id="ambiguous">two subjects both fit <kbd>0</kbd></button>'
-    );
-    html.push(
-      '<button class="tone' +
-        (mine.split_wrong ? " chosen" : "") +
-        '" id="split">this is two points, or half of one <kbd>9</kbd></button>'
-    );
-    // The reader's own uncertainty, kept apart from whether the claim is contested: one is
-    // about them and one is about the sheet, and a set that conflates them cannot say which
-    // of the two a disagreement came from.
-    html.push(
-      '<button class="tone' +
-        (mine.unsure ? " chosen" : "") +
-        '" id="unsure">I am not sure <kbd>8</kbd></button>'
-    );
-    html.push("</div>");
     html.push("</div>");
 
+    var flagged = mine.ambiguous || mine.split_wrong || mine.unsure;
     html.push(
       '<p class="note"><kbd>&larr;</kbd> and <kbd>&rarr;</kbd> move, a letter picks a subject, ' +
-        "<kbd>1</kbd>&ndash;<kbd>3</kbd> praise, complaint or neither. Pick both and it moves " +
-        "on by itself. <kbd>0</kbd> two subjects fit, <kbd>9</kbd> cut wrong, <kbd>8</kbd> not " +
-        "sure. " +
+        "<kbd>1</kbd>&ndash;<kbd>3</kbd> praise, complaint or neither. " +
+        (flagged
+          ? "This one is flagged, so it waits for <kbd>&rarr;</kbd> rather than moving on by " +
+            "itself."
+          : "Pick both and it moves on by itself.") +
+        " <kbd>0</kbd> two subjects fit, <kbd>9</kbd> cut wrong, <kbd>8</kbd> not sure. " +
         (SERVED
           ? "Every answer is written to disk as you make it."
           : "Your answers are kept in this browser as you go.") +
@@ -406,12 +412,16 @@
     save();
     // Moving on the moment both halves of an answer exist is what makes fourteen hundred
     // claims possible: the reader never touches a "next" button.
-    if (mine.subject && mine.polarity) {
+    //
+    // Except on a claim the reader has flagged. The flags are optional and the rows are
+    // ordered so they come before the polarity, but somebody who decides a claim is contested
+    // after answering it would otherwise watch the page leave while they reached for the key,
+    // and those are the claims the whole exercise is for. A flagged claim waits for an arrow.
+    var flagged = mine.ambiguous || mine.split_wrong || mine.unsure;
+    if (mine.subject && mine.polarity && !flagged) {
       at += 1;
-      render();
-    } else {
-      render();
     }
+    render();
   }
 
   function wire(question) {

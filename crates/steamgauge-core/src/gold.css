@@ -140,6 +140,8 @@ button.pick .what { font-size: 0.92rem; }
 button.pick.chosen { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
 
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+/* The row that moves the page on, set apart so it reads as the last thing to press. */
+.row.last { border-top: 1px solid var(--line); padding-top: 14px; }
 .row .label { color: var(--dim); font-size: 0.85rem; min-width: 6.5em; }
 
 button.tone { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: inherit; cursor: pointer; }

@@ -99,6 +99,29 @@ const PROBE = `(function () {
     document.querySelectorAll('button.pick.chosen').length === 1 &&
     document.querySelectorAll('button.tone.chosen').length >= 1);
 
+  // A flagged claim must wait. The flags are what the whole exercise is for and they used to
+  // sit below the polarity, so completing an answer took the page away before the reader could
+  // reach one, and the only way back was an arrow they had no reason to press.
+  press('ArrowRight');
+  press('ArrowRight');
+  var third = at();
+  press('0');
+  check('flagging a claim moved the page', at() === third);
+  var picked = document.querySelector('button.pick kbd').textContent;
+  press(picked);
+  press('1');
+  check('a flagged claim was carried away by its own answer', at() === third);
+  check('a flagged claim does not show it is flagged',
+    document.querySelectorAll('button.tone.chosen').length >= 2);
+  press('0');
+  check('unflagging a claim does not let it move on again', at() === third + 1);
+
+  // Back to somewhere with a question still on it. The sample page holds five, and the checks
+  // below answer another, so walking to the end here would leave them reading the finished
+  // screen and reporting that the page cannot be driven.
+  press('ArrowLeft');
+  press('ArrowLeft');
+
   // Everything answered must be kept, so a closed tab does not cost a night.
   var kept = Object.keys(localStorage).filter(function (k) { return k.indexOf('steamgauge-gold') === 0; });
   check('nothing is kept for the next sitting', kept.length === 1);
