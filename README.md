@@ -498,9 +498,9 @@ This repository holds no review data. Reviews belong to the people who wrote the
 Valve, and they are downloadable by anyone with the app ID, so there is nothing to gain from
 redistributing them here.
 
-By default nothing you pull leaves your machine. The crawler talks to Valve, and
-categorisation runs on a local embedding model, so a complete census is possible with no
-account, no key and no network beyond Steam itself. Reports are the same: one file with no
+By default nothing you pull leaves your machine. The crawler talks to Valve, and the reading
+runs on a model on your own card, so a complete census is possible with no account, no key and
+no network beyond Steam itself. Reports are the same: one file with no
 fonts, scripts or stylesheets fetched from anywhere, so reading a result is not a way of
 publishing it.
 
