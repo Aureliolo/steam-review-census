@@ -264,7 +264,16 @@ impl ClaimReader {
         // the opening of the review: exactly the head truncation the centring exists to avoid,
         // on exactly the long reviews where it matters. So the offsets come from a tokenizer
         // that cuts nothing, and the pair is encoded by one that cuts to the budget.
-        let whole = tokenizer.clone();
+        // A tokenizer saved by a trainer carries that trainer's padding and truncation inside
+        // the file, so a fresh one is already set to pad to the budget and cut at it. Reading
+        // a review's offsets through that gives 128 entries whatever the review says, the tail
+        // of them padding at (0, 0), and the claim is then looked for among offsets that do
+        // not describe the text. Everything downstream still returns a string.
+        let mut whole = tokenizer.clone();
+        whole.with_padding(None);
+        whole
+            .with_truncation(None)
+            .map_err(|e| Error::Tokenizer(e.to_string()))?;
         tokenizer.with_padding(Some(PaddingParams {
             strategy: PaddingStrategy::BatchLongest,
             ..PaddingParams::default()
@@ -362,6 +371,12 @@ impl ClaimReader {
     /// the same answer for every claim of one review. Asking per claim tokenised a review of
     /// ten claims ten times, and over a corpus that was most of what the reader spent its
     /// processor on while the card waited.
+    /// The windows this reader would build, for comparing against the trainer's.
+    #[must_use]
+    pub fn windows_for(&self, asked: &[Asked<'_>]) -> Vec<String> {
+        self.windows(asked)
+    }
+
     fn windows(&self, asked: &[Asked<'_>]) -> Vec<String> {
         let owners = same_review(asked);
         let mut offsets: Vec<Vec<(usize, usize)>> = vec![Vec::new(); asked.len()];
@@ -493,18 +508,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_claim_past_the_offsets_given_would_be_read_at_the_head_of_its_review() {
-        // Not a behaviour to rely on: a warning about where the offsets have to come from. A
-        // tokenizer set to truncate hands back the first `max_tokens` of a review, the claim
-        // is not among them, and this quietly returns the opening of the review instead of the
-        // window around the claim. Every answer still looks plausible. The reader keeps a
-        // second tokenizer that cuts nothing for exactly this reason.
-        let offsets: Vec<(usize, usize)> =
-            (0..10).map(|token| (token * 5, token * 5 + 4)).collect();
-        let (opens, closes) = centred(&offsets, 500, 10, 128);
+    fn offsets_that_do_not_describe_the_review_give_a_window_of_nothing() {
+        // Not behaviour to rely on: a warning about where the offsets have to come from. A
+        // tokenizer file saved by a trainer carries that trainer's padding and truncation, so
+        // a review read through it comes back as exactly `max_tokens` entries whatever it says,
+        // the tail of them padding at (0, 0). The claim is then looked for among offsets that
+        // describe nothing, and this hands back an empty window or the whole review: both are
+        // still strings, neither is what the model was trained on, and every answer still looks
+        // plausible. The reader keeps a second tokenizer with padding and truncation off for
+        // exactly this reason.
+        let real: Vec<(usize, usize)> = (0..10).map(|token| (token * 5, token * 5 + 4)).collect();
+        let padded: Vec<(usize, usize)> = real
+            .iter()
+            .copied()
+            .chain(std::iter::repeat_n((0, 0), 118))
+            .collect();
 
-        assert_eq!(opens, 0, "a claim nobody can find is read from the start");
-        assert_eq!(closes, 49, "and only as far as the offsets reach");
+        assert_eq!(
+            centred(&padded, 0, 20, 128),
+            (0, 0),
+            "padding at the end closes the window onto nothing"
+        );
+        assert_eq!(
+            centred(&real, 0, 20, 128),
+            (0, 49),
+            "the same claim, through offsets that are the review's"
+        );
+        // A claim past the offsets given is read from the start of the review instead, which is
+        // the shape the same mistake takes when the tokenizer truncates rather than pads.
+        assert_eq!(centred(&real, 500, 10, 128), (0, 49));
     }
 
     #[test]
