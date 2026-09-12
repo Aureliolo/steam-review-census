@@ -294,6 +294,29 @@ window, with the counts themselves left standing, until the game is read again. 
 the measure would have joined a stale reading silently and reported a number that was wrong
 by however many indexes had shifted, which is how it was first run and why the guard exists.
 
+### The splitter has run out of punctuation, and the rest is grammar
+
+Labellers have flagged 3,194 claims, 16.9% of the set, as badly cut. That number is quoted by
+the training summary and it is measured against whatever splitter cut the claim on the day, so
+five versions of rules later it says more about the past than about this build.
+`cargo run --release -p steamgauge-core --example stale-splits` re-cuts each flagged claim's
+review with the splitter this build has: **two fifths are already cut differently, and the rate
+that survives is 10.1% rather than 16.9%.**
+
+What survives is not punctuation. Of the flagged claims, 2,059 hold no line break and at most
+one comma of any kind, and 1,042 join their clauses with "and", "but" or "although": "The story
+and graphics were outstanding" is two subjects in four words, and "画面配乐玩法都是一流" is
+three in six characters with nothing between them. No rule about commas, colons or line breaks
+reaches any of those. A splitter that knows sentence terminators and markup and nothing else has
+reached what it can do, and the remaining ten per cent is either a grammar problem, which this
+project deliberately refuses to put a model into, or a label problem: a claim that really is
+about two subjects is being asked for one.
+
+So there is no `claims-6` on the strength of this, and the 16.9% in the training summary should
+be read as a historical flag rather than a property of the current cut. What a future splitter
+change costs is unchanged: every reading is re-read, and every label whose span it no longer
+cuts is dropped from the measurement.
+
 The chain was first verified end to end at eleven games and re-verified at every wave since.
 Training measures the frozen games in Python, on the full-precision weights, from the claim
 text as labelled. The tool measures them in Rust, on the half-precision ONNX graph, over a
