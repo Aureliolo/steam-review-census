@@ -451,17 +451,28 @@ the rest. A whole reading does 530 to 840 a second, so tokenising has three to f
 headroom it needs and parallelising it across the other thirty cores would buy nothing. What is
 left of the processor's share is not tokenising at all.
 
-**It is the bookkeeping.** Adding up what a review said means extracting the terms of every
-claim of it, hashing them, and writing a row each: real work, once per claim, and it sat between
-the model's batches. On a game of short reviews the card was **22% busy** while one core did it.
-It needs nothing the next batch needs, so the walk now resolves each review's answers and hands
-it to a thread of its own; on that same game the card runs at **80 to 100%**. A reading is three
-stages deep now: tokenise the next batch, run this one, add up the last one, and the card waits
-for none of it.
+**The bookkeeping looked like the answer, and was not.** Adding up what a review said means
+extracting the terms of every claim of it, hashing them and writing a row each: real work, once
+per claim, sitting between the model's batches. On a game of short reviews `nvidia-smi` showed
+the card **22% busy** while one core did exactly that, so it was moved to a thread of its own,
+and on the same game the card then read **80 to 100%**. Both numbers are true and the conclusion
+drawn from them was wrong. Timed properly, alternating, on three games:
 
-None of this changes what the reader is asked or what it answers. Every build in this section
-was checked by reading the same game and hashing the rows, and a change to how a reading is
-scheduled that changes a reading is not a scheduling change.
+| | tokenise ahead | and count behind too |
+|---|---|---|
+| 107,022 claims | 98s, 107s, 111s | 102s, 120s, 105s |
+| 68,917 claims | 51s, 50s, 53s | 50s, 50s, 53s |
+| 491,728 claims | 380s, 398s | **424s, 408s** |
+
+Nothing on the small games, and **6 to 12% slower on the large one**, because resolving each
+review's answers and shipping it to another thread costs more than the counting it moves. So the
+counting stays where it was, and what this section keeps is the measurement rather than the
+change: a card's reported utilisation says what it is doing, not what it is waiting for, and it
+is not evidence that anything got faster.
+
+None of this changes what the reader is asked or what it answers. Every build here was checked
+by reading the same game and hashing the rows, and a change to how a reading is scheduled that
+changes a reading is not a scheduling change.
 
 A figure taken before a correctness fix is not a figure. The first reading of this comparison
 was 1.45x, measured while the reader was cutting its window out of padding: it was tokenising
