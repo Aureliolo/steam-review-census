@@ -400,7 +400,10 @@ These rules keep those figures honest:
   exported claims, Python over the same, and the tool over its own reading of the game. On
   2026-09-12 the first two agreed to a fifth of a point and the third was eight below, which
   turned out to be the reader building its window out of the padding inside a tokenizer file.
-  Nothing about the output looked wrong, which is the argument for keeping all three.
+  Nothing about the output looked wrong, which is the argument for keeping all three. Fixed,
+  the tool reads the eight frozen games from their captures and reports 84.3% answered at 76.6%
+  where training reports 84.2% at 76.3% for the same claims: three tenths of a point across two
+  languages, two windowings and two corpora.
 
 - **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
   people lets whoever writes most set the numbers, which is the same distortion this tool

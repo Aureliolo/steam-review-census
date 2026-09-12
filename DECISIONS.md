@@ -394,15 +394,21 @@ instructive ways.
 The lesson is the one the project keeps relearning: measure the thing itself, on the hardware
 that will do it, not a proxy for it. It held a fourth time. A backbone of twice the parameters
 should cost twice the arithmetic, and on the same game through the same pipeline with only
-`--model` differing it costs **1.45 times**, 20 seconds against 29 on 17,271 claims. The card
-is not the only thing in the loop.
+`--model` differing it costs **1.68 times**: 103,026 claims in 124 seconds on the 278M model
+and 208 on the 560M one, 830 a second against 495. The card is not the only thing in the loop.
 
 That measurement found the rest of the loop. The reader was tokenising each review once for
 every claim it holds, so a review of four and a half claims was tokenised four and a half
 times: the card sat at about half busy while one core did the same work over again. Tokenising
-once per review takes the same game from 39 seconds to 29, with the readings byte for byte
+once per review is worth about a quarter of the wall time, with the readings byte for byte
 identical. The second pass, which counts reviews with the card idle, is still about a fifth of
 each game and is the next thing worth taking.
+
+A figure taken before a correctness fix is not a figure. The first reading of this comparison
+was 1.45x, measured while the reader was cutting its window out of padding: it was tokenising
+the first 128 tokens of a review rather than all of it, which is both wrong and cheap, and the
+bigger model paid more for the extra work than the smaller one did. Every timing in this
+section was retaken after the fix.
 
 ## The tool was reading a window of nothing, and every answer looked plausible
 
@@ -423,11 +429,14 @@ still strings. Every answer was in the usual confidence range, the coverage figu
 within a point, and nothing anywhere logged a warning.
 
 The reader now keeps a second tokenizer with padding and truncation turned off, for offsets
-alone. On the same claims, through the same graph, Rust now agrees 77.0% where Python agrees
-76.8%; and through the whole pipeline, reading the corpora itself, the tool comes back to
-within a point of what training reported for the same games. Nineteen points on the worst of
-them, and the export now strips a trainer's padding out of the tokenizer it ships, so the next
-thing to load that file is not handed the same trap.
+alone. On the same claims, through the same graph, Rust agrees 77.2% where Python agrees 76.8%.
+Through the whole pipeline, on all eight frozen games read again from their captures, the tool
+answers **84.3% of 3,456 labelled claims and agrees on 76.6%, macro F1 0.612**, against the
+84.2% at 76.3% and 0.611 training reported for the same games and the same graph. Three tenths
+of a point, where it had been eight. The export now strips a trainer's padding out of the
+tokenizer it ships, so the next thing to load that file is not handed the same trap, and the
+reader refuses to load a tokenizer that cannot say where its tokens are rather than believing
+it.
 
 Three things worth keeping. A component configured for one job and reused for another is where
 this class of bug lives, and the configuration that bit was three lines above the code that
