@@ -285,7 +285,16 @@ def main():
 
     mine = sub.add_parser("reader")
     mine.add_argument("--model", default=str(HERE.parent / "models" / "claim-reader"))
-    mine.add_argument("--key", required=True)
+    mine.add_argument("--key", default=None)
+    mine.add_argument(
+        "--frozen",
+        action="store_true",
+        help="score every frozen claim, writing the key first. This is the run that has to "
+        "reproduce what training reported, and `steamgauge measure-claims` over the same "
+        "games is the third opinion: any two of them more than a point apart is a bug.",
+    )
+    mine.add_argument("--app-id", type=int, default=None, help="one game of the frozen set")
+    mine.add_argument("--split-seed", type=int, default=1)
     mine.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
     mine.add_argument("--answers", default=None, help="where to write the reader's answers")
     mine.add_argument("--out", default=None)
@@ -302,8 +311,36 @@ def main():
         return
 
     if args.mode == "reader":
-        key = Path(args.key)
         model_dir = Path(args.model)
+        if args.frozen:
+            # Every frozen claim rather than a stratified draw, because this is the run that
+            # has to reproduce what training reported, and training reported over all of them.
+            claims = claimdata.load(args.data)
+            _, _, frozen = claimdata.split_by_game(claims, seed=args.split_seed)
+            if args.app_id:
+                frozen = [claim for claim in frozen if claim.app_id == args.app_id]
+            # Beside the export it is built from, which is where this project keeps the files
+            # that hold review ids rather than review text and are not committed either way.
+            key = Path(args.key) if args.key else HERE / "data" / "frozen-key.json"
+            key.write_text(
+                json.dumps(
+                    [
+                        {
+                            "id": f"{at:05d}",
+                            "app_id": claim.app_id,
+                            "review_id": claim.review_id,
+                            "claim_index": claim.claim_index,
+                            "subject": claim.subject,
+                            "polarity": claim.polarity,
+                        }
+                        for at, claim in enumerate(frozen)
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            print(f"{len(frozen):,} frozen claims -> {key}")
+        else:
+            key = Path(args.key)
         said = score_reader(model_dir, key, args.data)
         written = Path(args.answers) if args.answers else key.parent / "reader-answers.json"
         written.write_text(json.dumps(said, indent=2), encoding="utf-8")
