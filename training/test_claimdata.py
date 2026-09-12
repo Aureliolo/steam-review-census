@@ -67,3 +67,28 @@ def test_a_different_seed_is_a_different_split():
     one = claimdata.split_by_game(games, seed=1)
     two = claimdata.split_by_game(games, seed=2)
     assert {c.app_id for c in one[2]} != {c.app_id for c in two[2]}
+
+
+def test_the_folds_answer_every_game_the_frozen_set_does_not_hold():
+    claims = [claim(g) for g in range(200, 236)]
+    frozen = {c.app_id for c in claimdata.split_by_game(claims, seed=1)[2]}
+    answered: list[int] = []
+    for fold in range(5):
+        train, held, test = claimdata.split_by_game(claims, seed=1, fold=fold, folds=5)
+        assert {c.app_id for c in test} == frozen, "a fold moved the frozen games"
+        held_games = {c.app_id for c in held}
+        assert not held_games & frozen, "a fold held out a frozen game"
+        assert not held_games & {c.app_id for c in train}, "a game was trained on and held out"
+        answered.extend(held_games)
+    assert sorted(answered) == sorted({c.app_id for c in claims} - frozen)
+    assert len(answered) == len(set(answered)), "a game was held out by two folds"
+
+
+def test_no_fold_is_left_with_nothing_to_hold_out():
+    # Hashing each game into a bucket independently put one of thirty-six real app ids in the
+    # first of five folds and left that fold's training run measuring nothing.
+    for count in (12, 28, 36, 60):
+        claims = [claim(g) for g in range(3000, 3000 + count)]
+        for fold in range(5):
+            _, held, _ = claimdata.split_by_game(claims, seed=1, fold=fold, folds=5)
+            assert held, f"{count} games left fold {fold} empty"

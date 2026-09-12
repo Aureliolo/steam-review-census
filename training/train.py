@@ -307,14 +307,19 @@ def selective(confidence_and_predictions, truth, threshold):
 
 
 @torch.no_grad()
-def confidence_of(model, loader, device):
-    """Each claim's best subject and how sure the model is of it."""
+def logits_of(model, loader, device):
+    """Every claim's subject logits, in the order the loader gives them."""
     model.eval()
     logits = []
     for batch in loader:
         subject, _, _ = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
         logits.append(subject.float().cpu())
-    probabilities = torch.softmax(torch.cat(logits), dim=1).numpy()
+    return torch.cat(logits).numpy()
+
+
+def confidence_of(model, loader, device):
+    """Each claim's best subject and how sure the model is of it."""
+    probabilities = torch.softmax(torch.from_numpy(logits_of(model, loader, device)), dim=1).numpy()
     return probabilities.max(axis=1), probabilities.argmax(axis=1)
 
 
@@ -418,7 +423,9 @@ def run(args) -> dict:
     np.random.seed(args.seed)
 
     claims = claimdata.load(args.data)
-    train, validation, test = claimdata.split_by_game(claims, seed=args.split_seed)
+    train, validation, test = claimdata.split_by_game(
+        claims, seed=args.split_seed, fold=args.fold, folds=args.folds
+    )
     subjects = claimdata.subjects_in(claims)
     print(claimdata.summarise(claims))
 
@@ -567,6 +574,23 @@ def run(args) -> dict:
                 f"does not transfer; quote the frozen figure, not the validation one."
             )
 
+    if args.save_logits:
+        # The claims are named as well as scored, so folds can be pooled and a pooled set can
+        # be checked for a game appearing in two of them, which would mean a claim was answered
+        # by a model that had trained on it.
+        out_logits = Path(args.save_logits)
+        out_logits.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            out_logits,
+            logits=logits_of(model, loaders["validation"], device),
+            truth=np.array([subjects.index(claim.subject) for claim in validation]),
+            app_id=np.array([claim.app_id for claim in validation]),
+            review_id=np.array([claim.review_id for claim in validation]),
+            claim_index=np.array([claim.claim_index for claim in validation]),
+            subjects=np.array(subjects),
+        )
+        print(f"held-out logits written to {out_logits}")
+
     elapsed = time.time() - started
     record = {
         "backbone": args.backbone,
@@ -583,6 +607,8 @@ def run(args) -> dict:
         "split_wrong_weight": args.split_wrong_weight,
         "polarity_weight": args.polarity_weight,
         "split_seed": args.split_seed,
+        "fold": args.fold,
+        "folds": args.folds if args.fold is not None else None,
         "device": device,
         "git_sha": git_sha(),
         "data_fingerprint": claimdata.fingerprint(claims),
@@ -686,6 +712,22 @@ def parse():
         default=1.0,
         help="what a claim the labeller called mis-cut is worth in the loss. A sixth of the "
         "set is flagged: two points stuck together, or half of one.",
+    )
+    parser.add_argument(
+        "--fold",
+        type=int,
+        default=None,
+        help="hold out this cross-validation fold instead of the usual validation games. The "
+        "frozen games stay frozen. Four validation games cannot settle an abstention rule: "
+        "the interval around a coverage figure measured on them is wider than every "
+        "difference worth deciding. Run every fold and pool what each held out.",
+    )
+    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument(
+        "--save-logits",
+        default=None,
+        help="write the held-out claims' subject logits, with their game, review and claim "
+        "index, to this .npz. What the confidence and threshold study reads.",
     )
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--save", action="store_true")

@@ -9,11 +9,17 @@ frozen ones.
 
 Every figure is cross-fitted by game. A threshold fitted and reported on the same claims
 flatters itself, and a threshold fitted on one game and reported on another is the only kind
-whose number survives contact with a game nobody has seen. So each validation game is scored
-by a rule fitted on the others, the held-out answers are pooled, and the interval around them
-resamples whole games rather than claims, because claims from one game are not independent.
+whose number survives contact with a game nobody has seen. So each game is scored by a rule
+fitted on the others, the held-out answers are pooled, and the interval around them resamples
+whole games rather than claims, because claims from one game are not independent.
 
     python confidence.py --model ../models/claim-reader
+    python confidence.py --oof <dir of fold logits>
+
+The second form is the one to trust. Four validation games give intervals eight points wide,
+which is wider than every difference this study is asked to decide; five cross-validation folds
+(`train.py --fold`) give an out-of-fold answer for all twenty-eight non-frozen games at the
+cost of five training runs and no test set spent.
 
 The ranking is read with AUGRC, not AURC. AURC divides by how much was answered, so it mixes
 the ordering quality of the score with the accuracy of the classifier underneath it, and
@@ -282,31 +288,72 @@ def game_interval(answered, correct, app_ids, draws, rng):
     return span(coverages), span(accuracies)
 
 
+def pooled_folds(paths):
+    """Every fold's held-out logits, checked for a game answered by a model that trained on it.
+
+    The check is the point of pooling them here rather than concatenating them by hand. A game
+    in two folds means one of those folds trained on it, and its answers would be a model
+    marking its own homework in a table that says otherwise.
+    """
+    parts = [np.load(path, allow_pickle=False) for path in sorted(paths)]
+    if not parts:
+        raise SystemExit("no fold logits found")
+    subjects = [str(name) for name in parts[0]["subjects"]]
+    for part in parts[1:]:
+        if [str(name) for name in part["subjects"]] != subjects:
+            raise SystemExit("the folds do not agree on the subjects, so they cannot be pooled")
+
+    seen: dict[int, int] = {}
+    for at, part in enumerate(parts):
+        for game in set(part["app_id"].tolist()):
+            if game in seen:
+                raise SystemExit(f"game {game} is held out by folds {seen[game]} and {at}")
+            seen[game] = at
+
+    return (
+        np.concatenate([part["logits"] for part in parts]),
+        np.concatenate([part["truth"] for part in parts]),
+        np.concatenate([part["app_id"] for part in parts]),
+        subjects,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=str(HERE.parent / "models" / "claim-reader"))
     parser.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+    parser.add_argument(
+        "--oof",
+        default=None,
+        help="directory of .npz files written by `train.py --save-logits`, one per fold. Reads "
+        "those instead of running the shipped reader, which is how the study gets twenty-eight "
+        "games of held-out answers instead of four.",
+    )
     parser.add_argument("--split-seed", type=int, default=1)
     parser.add_argument("--min-accuracy", type=float, default=0.75)
     parser.add_argument("--draws", type=int, default=2000)
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
 
-    model_dir = Path(args.model)
-    provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
-    subjects = provenance["subjects"]
+    if args.oof:
+        logits, truth, app_ids, subjects = pooled_folds(Path(args.oof).glob("*.npz"))
+        print(f"{len(truth):,} out-of-fold claims over {len(set(app_ids))} games, from {args.oof}")
+    else:
+        model_dir = Path(args.model)
+        provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
+        subjects = provenance["subjects"]
+        claims = claimdata.load(args.data)
+        _, validation, _ = claimdata.split_by_game(claims, seed=args.split_seed)
+        validation = [claim for claim in validation if claim.subject in subjects]
+        app_ids = np.array([claim.app_id for claim in validation])
+        logits = logits_of(model_dir, validation, provenance)
+        truth = np.array([subjects.index(claim.subject) for claim in validation])
+        print(
+            f"{len(validation):,} validation claims over {len(set(app_ids))} games, "
+            f"model {model_dir}"
+        )
 
-    claims = claimdata.load(args.data)
-    _, validation, _ = claimdata.split_by_game(claims, seed=args.split_seed)
-    validation = [claim for claim in validation if claim.subject in subjects]
-    app_ids = np.array([claim.app_id for claim in validation])
-    print(
-        f"{len(validation):,} validation claims over {len(set(app_ids))} games, model {model_dir}"
-    )
-
-    logits = logits_of(model_dir, validation, provenance)
     predicted = softmax(logits).argmax(axis=1)
-    truth = np.array([subjects.index(claim.subject) for claim in validation])
     correct = (predicted == truth).astype(float)
     print(f"accuracy over everything: {correct.mean():.3f}\n")
 

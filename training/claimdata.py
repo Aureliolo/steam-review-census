@@ -116,7 +116,12 @@ def fingerprint(claims: list[Claim]) -> str:
 
 
 def split_by_game(
-    claims: list[Claim], seed: int = 1, test_share: float = 0.2, validation_share: float = 0.15
+    claims: list[Claim],
+    seed: int = 1,
+    test_share: float = 0.2,
+    validation_share: float = 0.15,
+    fold: int | None = None,
+    folds: int = 5,
 ) -> tuple[list[Claim], list[Claim], list[Claim]]:
     """Splits whole games, never claims, so a score is about a game nobody trained on.
 
@@ -124,6 +129,15 @@ def split_by_game(
     instead. That is a weaker guarantee and the number it produces is worth less: it says the
     model generalises across reviews of one game, not across games. Anything reported from it
     has to say so.
+
+    With a `fold`, the one validation set is replaced by a cross-validation fold over every
+    game the frozen set does not hold. Four validation games is the honest size of the usual
+    split and it is not enough to choose an abstention rule on: the interval around a coverage
+    figure measured over four games is eight points wide, which is wider than every difference
+    worth deciding. Training the same configuration once per fold and pooling what each fold
+    held out gives the same claims back as out-of-fold answers over every non-frozen game, at
+    the cost of one training run per fold and no test set spent. The frozen games stay frozen
+    in every fold.
     """
     games = sorted({claim.app_id for claim in claims})
     if len(games) < 3:
@@ -157,6 +171,10 @@ def split_by_game(
                 validation_games = {app_id}
                 break
 
+    if fold is not None:
+        assigned = folds_over([app_id for app_id in games if app_id not in test_games], seed, folds)
+        validation_games = {app_id for app_id, at in assigned.items() if at == fold}
+
     train, validation, test = [], [], []
     for claim in claims:
         if claim.app_id in test_games:
@@ -166,6 +184,23 @@ def split_by_game(
         else:
             train.append(claim)
     return train, validation, test
+
+
+def folds_over(games: list[int], seed: int, folds: int) -> dict[int, int]:
+    """Deals the games into cross-validation folds, deterministically and evenly.
+
+    Dealt in hash order rather than assigned by a hash of each game alone, which is the
+    opposite of how [`split_by_game`] fixes the frozen and validation roles, and deliberately.
+    A role has to depend on the game alone so that labelling a new game cannot move which games
+    the model is measured on. A fold has no such duty, and hashing each game independently
+    across five buckets put one of thirty-six games in the first of them and left a whole
+    training run with nothing to hold out. Dealing round-robin cannot do that.
+
+    The cost is that adding a game reshuffles the folds, so a cross-validation is read as a
+    whole or not at all. It is a few hours of one card either way.
+    """
+    ordered = sorted(games, key=lambda app_id: hashlib.sha256(f"fold:{seed}:{app_id}".encode()).digest())
+    return {app_id: at % max(folds, 1) for at, app_id in enumerate(ordered)}
 
 
 def place(app_id: int, seed: int) -> float:
