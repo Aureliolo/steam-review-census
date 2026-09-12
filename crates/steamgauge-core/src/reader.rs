@@ -9,7 +9,7 @@
 //! is about nothing": a review reading "gfg" came back as graphics and art. Abstention is not
 //! a nicety here, it is the difference between a mention rate and a rate of nearest matches.
 
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use ndarray::Array2;
 use ort::{session::Session, value::Tensor};
@@ -192,12 +192,51 @@ pub async fn ensure(
 /// The trained model, loaded and ready to read claims.
 pub struct ClaimReader {
     session: Session,
+    encoder: Arc<Encoder>,
+    provenance: Arc<Provenance>,
+    order: Vec<usize>,
+    device: &'static str,
+}
+
+/// Turning claims into the numbers the graph takes: the half of a reading that runs on the
+/// processor.
+///
+/// Apart from the session so that one batch can be prepared while the card works on the batch
+/// before it. Tokenising is most of what a reading spends its processor on, and a card that
+/// waits for it is a card at half duty.
+pub struct Encoder {
     tokenizer: Tokenizer,
     /// The same tokenizer with nothing cut off, for reading a whole review's offsets.
     whole: Tokenizer,
-    provenance: Provenance,
-    order: Vec<usize>,
-    device: &'static str,
+    provenance: Arc<Provenance>,
+}
+
+/// A batch tokenised and laid out, waiting for the card.
+pub struct Prepared {
+    rows: usize,
+    cols: usize,
+    ids: Vec<i64>,
+    mask: Vec<i64>,
+}
+
+/// Written by hand for the same reason the reader's is: the tokenizers hold megabytes each.
+impl std::fmt::Debug for Encoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Encoder")
+            .field("context", &self.provenance.context)
+            .field("max_tokens", &self.provenance.max_tokens)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The shape is the part worth seeing; the numbers are a batch of token ids.
+impl std::fmt::Debug for Prepared {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prepared")
+            .field("rows", &self.rows)
+            .field("cols", &self.cols)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Written by hand because the session and the tokenizer hold megabytes each, and a debug
@@ -308,10 +347,14 @@ impl ClaimReader {
             )));
         }
 
+        let provenance = Arc::new(provenance);
         Ok(Self {
             session,
-            tokenizer,
-            whole,
+            encoder: Arc::new(Encoder {
+                tokenizer,
+                whole,
+                provenance: Arc::clone(&provenance),
+            }),
             provenance,
             order,
             device,
@@ -324,8 +367,14 @@ impl ClaimReader {
     }
 
     #[must_use]
-    pub const fn provenance(&self) -> &Provenance {
+    pub fn provenance(&self) -> &Provenance {
         &self.provenance
+    }
+
+    /// The half of this reader that runs on the processor, to be used while the card is busy.
+    #[must_use]
+    pub fn encoder(&self) -> Arc<Encoder> {
+        Arc::clone(&self.encoder)
     }
 
     /// Reads a batch of claims.
@@ -337,30 +386,25 @@ impl ClaimReader {
         if asked.is_empty() {
             return Ok(Vec::new());
         }
-        let encodings = if self.provenance.context {
-            let windows = self.windows(asked);
-            let pairs: Vec<(String, String)> = asked
-                .iter()
-                .zip(windows)
-                .map(|(one, window)| (one.claim.to_owned(), window))
-                .collect();
-            self.tokenizer.encode_batch(pairs, true)
-        } else {
-            let alone: Vec<String> = asked.iter().map(|one| one.claim.to_owned()).collect();
-            self.tokenizer.encode_batch(alone, true)
-        }
-        .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        let prepared = self.encoder.prepare(asked)?;
+        self.run(prepared)
+    }
 
-        let rows = encodings.len();
-        let cols = encodings.first().map_or(0, |e| e.get_ids().len());
-        let ids: Vec<i64> = encodings
-            .iter()
-            .flat_map(|e| e.get_ids().iter().map(|&id| i64::from(id)))
-            .collect();
-        let mask: Vec<i64> = encodings
-            .iter()
-            .flat_map(|e| e.get_attention_mask().iter().map(|&m| i64::from(m)))
-            .collect();
+    /// Runs a batch somebody else tokenised.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the forward pass does.
+    pub fn run(&mut self, prepared: Prepared) -> Result<Vec<Reading>> {
+        let Prepared {
+            rows,
+            cols,
+            ids,
+            mask,
+        } = prepared;
+        if rows == 0 {
+            return Ok(Vec::new());
+        }
 
         let outputs = self.session.run(ort::inputs![
             "input_ids" => Tensor::from_array(Array2::from_shape_vec((rows, cols), ids)?)?,
@@ -388,18 +432,60 @@ impl ClaimReader {
             .collect())
     }
 
+    /// The windows this reader would build, for comparing against the trainer's.
+    #[must_use]
+    pub fn windows_for(&self, asked: &[Asked<'_>]) -> Vec<String> {
+        self.encoder.windows_for(asked)
+    }
+}
+
+impl Encoder {
+    /// Tokenises a batch and lays it out as the graph takes it.
+    ///
+    /// # Errors
+    ///
+    /// Fails if tokenisation does.
+    pub fn prepare(&self, asked: &[Asked<'_>]) -> Result<Prepared> {
+        let encodings = if self.provenance.context {
+            let windows = self.windows(asked);
+            let pairs: Vec<(String, String)> = asked
+                .iter()
+                .zip(windows)
+                .map(|(one, window)| (one.claim.to_owned(), window))
+                .collect();
+            self.tokenizer.encode_batch(pairs, true)
+        } else {
+            let alone: Vec<String> = asked.iter().map(|one| one.claim.to_owned()).collect();
+            self.tokenizer.encode_batch(alone, true)
+        }
+        .map_err(|e| Error::Tokenizer(e.to_string()))?;
+
+        Ok(Prepared {
+            rows: encodings.len(),
+            cols: encodings.first().map_or(0, |e| e.get_ids().len()),
+            ids: encodings
+                .iter()
+                .flat_map(|e| e.get_ids().iter().map(|&id| i64::from(id)))
+                .collect(),
+            mask: encodings
+                .iter()
+                .flat_map(|e| e.get_attention_mask().iter().map(|&m| i64::from(m)))
+                .collect(),
+        })
+    }
+
+    /// The windows this encoder would build, for comparing against the trainer's.
+    #[must_use]
+    pub fn windows_for(&self, asked: &[Asked<'_>]) -> Vec<String> {
+        self.windows(asked)
+    }
+
     /// Every claim's window, tokenising each review once however many claims it holds.
     ///
     /// Finding where a claim sits means knowing where the review's tokens fall, and that is
     /// the same answer for every claim of one review. Asking per claim tokenised a review of
     /// ten claims ten times, and over a corpus that was most of what the reader spent its
     /// processor on while the card waited.
-    /// The windows this reader would build, for comparing against the trainer's.
-    #[must_use]
-    pub fn windows_for(&self, asked: &[Asked<'_>]) -> Vec<String> {
-        self.windows(asked)
-    }
-
     fn windows(&self, asked: &[Asked<'_>]) -> Vec<String> {
         let owners = same_review(asked);
         let mut offsets: Vec<Vec<(usize, usize)>> = vec![Vec::new(); asked.len()];

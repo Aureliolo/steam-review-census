@@ -236,8 +236,8 @@ async fn sweep(app: AppHandle, app_id: u32) -> Result<Swept, String> {
 #[derive(Debug, Clone, Serialize)]
 struct ReadStep {
     app_id: u32,
-    done: u64,
-    reading_claims: bool,
+    claims_read: u64,
+    reviews_counted: u64,
 }
 
 /// How far a model download has got, as the window draws it.
@@ -292,8 +292,8 @@ async fn read_game(app: AppHandle, app_id: u32, language: Option<String>) -> Res
                 "read",
                 ReadStep {
                     app_id,
-                    done: progress.done,
-                    reading_claims: progress.reading_claims,
+                    claims_read: progress.claims_read,
+                    reviews_counted: progress.reviews_counted,
                 },
             );
         })

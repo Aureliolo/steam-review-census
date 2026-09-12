@@ -1077,16 +1077,15 @@ fn read_one(
     // hours, and a log with nothing in it is indistinguishable from a hang.
     let mut announced = 0;
     let report = steamgauge_core::read::read_corpus(model, app_id, options, |progress| {
-        if progress.done / 25_000 <= announced {
+        if progress.claims_read / 25_000 <= announced {
             return;
         }
-        announced = progress.done / 25_000;
-        let what = if progress.reading_claims {
-            "distinct claims read"
-        } else {
-            "reviews counted"
-        };
-        eprintln!("  {} {what}", thousands(progress.done));
+        announced = progress.claims_read / 25_000;
+        eprintln!(
+            "  {} distinct claims read, {} reviews counted",
+            thousands(progress.claims_read),
+            thousands(progress.reviews_counted),
+        );
     })?;
     let path =
         steamgauge_core::embed::latest_snapshot(&options.out_dir, app_id)?.join("reading.json");

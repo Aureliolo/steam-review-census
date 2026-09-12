@@ -1,9 +1,9 @@
 //! Reading a whole corpus, one claim at a time.
 //!
-//! Two passes over the capture. The first finds every distinct claim and asks the model about
-//! it; the second walks the reviews again and adds up what the answers mean. Distinct rather
-//! than every claim because "Great game." is one claim written a thousand times, and reading
-//! it a thousand times is a thousand times the electricity for the same answer.
+//! One walk over the capture. Every distinct claim is asked about, and a review is added up as
+//! soon as the model has answered the claims it holds. Distinct rather than every claim because
+//! "Great game." is one claim written a thousand times, and reading it a thousand times is a
+//! thousand times the electricity for the same answer.
 //!
 //! What comes out is deliberately three different shapes of number, and the difference
 //! matters more than any of them:
@@ -35,8 +35,8 @@ use parquet::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Result,
-    reader::{Asked, ClaimReader, Polarity, Reading},
+    Error, Result,
+    reader::{Asked, ClaimReader, Polarity, Prepared, Reading},
     taxonomy::CORE_SPINE,
 };
 
@@ -132,11 +132,12 @@ impl Default for ReadOptions {
     }
 }
 
+/// How far a reading has got. One walk does both jobs, so both numbers move together and a
+/// watcher never sees the corpus start again from nothing.
 #[derive(Debug, Clone, Copy)]
 pub struct ReadProgress {
-    pub done: u64,
-    pub total: u64,
-    pub reading_claims: bool,
+    pub claims_read: u64,
+    pub reviews_counted: u64,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -422,21 +423,14 @@ pub fn read_corpus(
     let started = Instant::now();
     let snapshot = crate::embed::latest_snapshot(&options.out_dir, app_id)?;
 
-    let answers = read_distinct_claims(model, &snapshot, options, &mut on_progress)?;
     let context = model.provenance().context;
-    let counted = count_reviews(
-        app_id,
-        &snapshot,
-        options,
-        context,
-        &answers,
-        &mut on_progress,
-    )?;
+    let (counted, forward_passes) =
+        read_and_count(model, app_id, &snapshot, options, context, &mut on_progress)?;
     let captured = crate::report::crawl_facts(&options.out_dir, app_id)?;
 
     Ok(ReadReport {
         elapsed: started.elapsed(),
-        forward_passes: answers.len() as u64,
+        forward_passes,
         device: model.device().to_owned(),
         threshold: model.provenance().threshold,
         model: model.provenance().trained_from.clone(),
@@ -495,41 +489,96 @@ struct Queued {
     at: usize,
 }
 
-/// Asks the model about every distinct claim in the corpus.
-fn read_distinct_claims(
+impl Queued {
+    fn asked(&self) -> Asked<'_> {
+        Asked {
+            claim: &self.claim,
+            review: &self.review,
+            at: self.at,
+        }
+    }
+}
+
+/// A review whose claims have been queued, waiting for the model to answer them.
+///
+/// Held by its claims rejoined rather than as it was captured: that is the form a labeller read
+/// and the form the model is asked in, and slicing it gives the claims back without splitting
+/// the review a second time.
+struct Pending {
+    row: crate::capture::Row,
+    text: Arc<str>,
+    spans: Vec<(usize, usize)>,
+    fingerprint: [u8; 32],
+}
+
+impl Pending {
+    fn claims(&self) -> Vec<&str> {
+        self.spans
+            .iter()
+            .map(|&(from, to)| &self.text[from..to])
+            .collect()
+    }
+}
+
+/// Reviews waiting on the model, beyond which they are counted whatever the window holds.
+///
+/// A corpus of a million copies of "Great game." queues one claim and drains nothing, so
+/// without this the reviews waiting to be counted would be the whole corpus, in memory.
+const PENDING_CAP: usize = 16_384;
+
+/// Asks the model about every distinct claim, and adds up each review as its answers arrive.
+///
+/// One walk rather than two. The counting pass used to open the capture again, split every
+/// review a second time and tally with the card idle; now a review is counted at the first
+/// drain after its last claim was queued, which is the same arithmetic in the same order
+/// against answers that are already final.
+fn read_and_count(
     model: &mut ClaimReader,
+    app_id: u32,
     snapshot: &Path,
     options: &ReadOptions,
+    context: bool,
     on_progress: &mut impl FnMut(ReadProgress),
-) -> Result<HashMap<[u8; 32], Reading>> {
-    let context = model.provenance().context;
+) -> Result<(ReadReport, u64)> {
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
     let mut window: Vec<Queued> = Vec::with_capacity(LENGTH_WINDOW);
+    let mut pending: Vec<Pending> = Vec::new();
+    let mut counting = Counting::new(snapshot, options.top_helpful)?;
     // One allocation for every review a model that reads claims alone will ever queue.
     let nothing: Arc<str> = Arc::from("");
 
-    crate::capture::for_each_body(snapshot, |_, language, text| {
+    crate::capture::for_each_row(snapshot, |row, text| {
+        counting.note_corpus(&row);
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
         // where the named language is a third of the reviews it is most of the work.
         if options
             .language
             .as_ref()
-            .is_some_and(|wanted| wanted != language)
+            .is_some_and(|wanted| wanted != &row.language)
         {
             return Ok(());
         }
         let claims = options.depth.claims_of(text);
-        let review: Arc<str> = if context {
-            Arc::from(rejoined(&claims))
+        let joined: Arc<str> = Arc::from(rejoined(&claims));
+        // Only a context reading files by the text, and hashing a review nothing will look up
+        // is work on every review of the corpus.
+        let fingerprint = if context {
+            review_key(&joined)
+        } else {
+            [0; 32]
+        };
+        let review = if context {
+            Arc::clone(&joined)
         } else {
             Arc::clone(&nothing)
         };
-        let fingerprint = review_key(&review);
+        let mut spans = Vec::with_capacity(claims.len());
         let mut at = 0;
-        for (index, claim) in claims.into_iter().enumerate() {
+        for (index, claim) in claims.iter().enumerate() {
             let starts = at;
             at += claim.len() + 1;
-            let key = key(context, &fingerprint, index, &claim);
+            spans.push((starts, starts + claim.len()));
+            let key = key(context, &fingerprint, index, claim);
             if answers.contains_key(&key) {
                 continue;
             }
@@ -538,24 +587,53 @@ fn read_distinct_claims(
             answers.insert(key, Reading::default());
             window.push(Queued {
                 key,
-                claim: claim.into_owned(),
+                claim: claim.to_string(),
                 review: Arc::clone(&review),
                 at: starts,
             });
             if window.len() >= LENGTH_WINDOW {
                 drain(model, options.batch_size, &mut window, &mut answers)?;
-                on_progress(ReadProgress {
-                    done: answers.len() as u64,
-                    total: 0,
-                    reading_claims: true,
-                });
+                // Every review already waiting had all of its claims queued before that
+                // drain, so every answer it needs is final. This one does not: its remaining
+                // claims are queued after this, and it waits for the next drain.
+                settle(&mut pending, &mut counting, context, &answers, on_progress)?;
             }
+        }
+        pending.push(Pending {
+            row,
+            text: joined,
+            spans,
+            fingerprint,
+        });
+        if pending.len() >= PENDING_CAP {
+            drain(model, options.batch_size, &mut window, &mut answers)?;
+            settle(&mut pending, &mut counting, context, &answers, on_progress)?;
         }
         Ok(())
     })?;
 
     drain(model, options.batch_size, &mut window, &mut answers)?;
-    Ok(answers)
+    settle(&mut pending, &mut counting, context, &answers, on_progress)?;
+    let forward_passes = answers.len() as u64;
+    Ok((counting.finish(app_id, options)?, forward_passes))
+}
+
+/// Counts every review whose answers are in, and says how far the walk has got.
+fn settle(
+    pending: &mut Vec<Pending>,
+    counting: &mut Counting,
+    context: bool,
+    answers: &HashMap<[u8; 32], Reading>,
+    on_progress: &mut impl FnMut(ReadProgress),
+) -> Result<()> {
+    for review in pending.drain(..) {
+        counting.count(&review, context, answers)?;
+    }
+    on_progress(ReadProgress {
+        claims_read: answers.len() as u64,
+        reviews_counted: counting.reviews,
+    });
+    Ok(())
 }
 
 /// Claims held back before a run of batches, so they can be sorted by length first.
@@ -567,6 +645,11 @@ fn read_distinct_claims(
 /// took a day; this pass was missing it.
 const LENGTH_WINDOW: usize = 16_384;
 
+/// Asks the model about a window of claims, a batch at a time.
+///
+/// The batch after next is tokenised while the card works on the one in hand. Tokenising is
+/// most of what a reading spends its processor on, and taking turns with the card left both at
+/// about half duty; the batches, their order and their answers are the same either way.
 fn drain(
     model: &mut ClaimReader,
     batch_size: usize,
@@ -577,20 +660,34 @@ fn drain(
         return Ok(());
     }
     window.sort_unstable_by_key(|queued| queued.claim.len() + queued.review.len());
+    let size = batch_size.max(1);
+    let encoder = model.encoder();
+    let queued: &[Queued] = window;
 
-    for chunk in window.chunks(batch_size.max(1)) {
-        let asked: Vec<Asked<'_>> = chunk
-            .iter()
-            .map(|queued| Asked {
-                claim: &queued.claim,
-                review: &queued.review,
-                at: queued.at,
-            })
-            .collect();
-        for (queued, reading) in chunk.iter().zip(model.read(&asked)?) {
-            answers.insert(queued.key, reading);
+    std::thread::scope(|scope| -> Result<()> {
+        let (send, receive) = std::sync::mpsc::sync_channel::<Result<Prepared>>(1);
+        scope.spawn(move || {
+            for chunk in queued.chunks(size) {
+                let asked: Vec<Asked<'_>> = chunk.iter().map(Queued::asked).collect();
+                // A closed channel is the reader having given up on this window, which is not
+                // this thread's error to report.
+                if send.send(encoder.prepare(&asked)).is_err() {
+                    return;
+                }
+            }
+        });
+
+        for chunk in queued.chunks(size) {
+            let prepared = receive
+                .recv()
+                .map_err(|_| Error::Tokenizer("the batch being tokenised was lost".to_owned()))??;
+            for (queued, reading) in chunk.iter().zip(model.run(prepared)?) {
+                answers.insert(queued.key, reading);
+            }
         }
-    }
+        Ok(())
+    })?;
+
     window.clear();
     Ok(())
 }
@@ -606,7 +703,7 @@ struct Verdict {
 }
 
 fn judge(
-    claims: &[std::borrow::Cow<'_, str>],
+    claims: &[&str],
     review: &[u8; 32],
     context: bool,
     answers: &HashMap<[u8; 32], Reading>,
@@ -651,80 +748,84 @@ fn judge(
     }
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one pass over a corpus, doing every tally it needs in the one walk it can afford"
-)]
-fn count_reviews(
-    app_id: u32,
-    snapshot: &Path,
-    options: &ReadOptions,
-    context: bool,
-    answers: &HashMap<[u8; 32], Reading>,
-    on_progress: &mut impl FnMut(ReadProgress),
-) -> Result<ReadReport> {
-    let path = snapshot.join("readings.parquet");
-    let schema = reading_schema();
-    let mut writer = ArrowWriter::try_new(
-        std::fs::File::create(&path)?,
-        Arc::clone(&schema),
-        Some(
-            WriterProperties::builder()
-                .set_compression(Compression::ZSTD(ZstdLevel::default()))
-                .build(),
-        ),
-    )?;
+/// Everything one walk adds up, and the file of readings it writes as it goes.
+struct Counting {
+    writer: ArrowWriter<std::fs::File>,
+    schema: Arc<Schema>,
+    tallies: Vec<Tally>,
+    languages: HashMap<String, u64>,
+    calendar: HashMap<String, Month>,
+    top: crate::bounded::Smallest<std::cmp::Reverse<u64>, Vec<usize>>,
+    rows: ReadingRows,
+    said: crate::said::Said,
+    reviews: u64,
+    corpus_reviews: u64,
+    claims: u64,
+    unclassified: u64,
+    silent: u64,
+    positive: u64,
+}
 
-    let mut tallies = vec![Tally::default(); CORE_SPINE.len()];
-    let mut languages: HashMap<String, u64> = HashMap::new();
-    let mut calendar: HashMap<String, Month> = HashMap::new();
-    let mut top: crate::bounded::Smallest<std::cmp::Reverse<u64>, Vec<usize>> =
-        crate::bounded::Smallest::new(options.top_helpful);
-    let mut rows = ReadingRows::default();
-    let mut said = crate::said::Said::new(CORE_SPINE.len());
+impl Counting {
+    fn new(snapshot: &Path, top_helpful: usize) -> Result<Self> {
+        let schema = reading_schema();
+        let writer = ArrowWriter::try_new(
+            std::fs::File::create(snapshot.join("readings.parquet"))?,
+            Arc::clone(&schema),
+            Some(
+                WriterProperties::builder()
+                    .set_compression(Compression::ZSTD(ZstdLevel::default()))
+                    .build(),
+            ),
+        )?;
+        Ok(Self {
+            writer,
+            schema,
+            tallies: vec![Tally::default(); CORE_SPINE.len()],
+            languages: HashMap::new(),
+            calendar: HashMap::new(),
+            top: crate::bounded::Smallest::new(top_helpful),
+            rows: ReadingRows::default(),
+            said: crate::said::Said::new(CORE_SPINE.len()),
+            reviews: 0,
+            corpus_reviews: 0,
+            claims: 0,
+            unclassified: 0,
+            silent: 0,
+            positive: 0,
+        })
+    }
 
-    let mut reviews = 0_u64;
-    let mut corpus_reviews = 0_u64;
-    let mut claims = 0_u64;
-    let mut unclassified = 0_u64;
-    let mut silent = 0_u64;
-    let mut positive = 0_u64;
+    /// What a review is worth to the corpus whether or not it is in the language being read.
+    fn note_corpus(&mut self, row: &crate::capture::Row) {
+        self.corpus_reviews += 1;
+        *self.languages.entry(row.language.clone()).or_default() += 1;
+    }
 
-    crate::capture::for_each_row(snapshot, |row, text| {
-        corpus_reviews += 1;
-        *languages.entry(row.language.clone()).or_default() += 1;
-        if options
-            .language
-            .as_ref()
-            .is_some_and(|wanted| wanted != &row.language)
-        {
-            return Ok(());
-        }
-        reviews += 1;
+    fn count(
+        &mut self,
+        review: &Pending,
+        context: bool,
+        answers: &HashMap<[u8; 32], Reading>,
+    ) -> Result<()> {
+        let row = &review.row;
+        self.reviews += 1;
         if row.voted_up {
-            positive += 1;
+            self.positive += 1;
         }
 
-        // Split once. The verdict and the rows written beside it are two readings of the same
-        // pieces, and this pass has no forward passes to hide the cost behind.
-        let pieces = options.depth.claims_of(text);
-        // Only a context reading files by the text, and rejoining a review that nothing will
-        // hash is work on every review of the corpus.
-        let fingerprint = if context {
-            review_key(&rejoined(&pieces))
-        } else {
-            [0; 32]
-        };
-        let verdict = judge(&pieces, &fingerprint, context, answers);
-        claims += verdict.claims as u64;
-        unclassified += verdict.unclassified as u64;
+        let pieces = review.claims();
+        let verdict = judge(&pieces, &review.fingerprint, context, answers);
+        self.claims += verdict.claims as u64;
+        self.unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
-            silent += 1;
+            self.silent += 1;
         }
         if let Some(primary) = verdict.primary {
-            tallies[primary].primary_reviews += 1;
+            self.tallies[primary].primary_reviews += 1;
         }
-        let month = calendar
+        let month = self
+            .calendar
             .entry(crate::time::year_month(row.created))
             .or_insert_with(|| Month {
                 label: crate::time::year_month(row.created),
@@ -741,7 +842,7 @@ fn count_reviews(
         }
 
         for &subject in &verdict.subjects {
-            let tally = &mut tallies[subject];
+            let tally = &mut self.tallies[subject];
             tally.mention_reviews += 1;
             if row.voted_up {
                 tally.positive_mentions += 1;
@@ -754,99 +855,98 @@ fn count_reviews(
             }
         }
         for (index, claim) in pieces.iter().enumerate() {
-            let reading = answers.get(&key(context, &fingerprint, index, claim));
+            let reading = answers.get(&key(context, &review.fingerprint, index, claim));
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
             {
-                tallies[subject].claims += 1;
-                said.note(subject, reading.polarity, claim);
+                self.tallies[subject].claims += 1;
+                self.said.note(subject, reading.polarity, claim);
             }
-            rows.push(&row.recommendationid, index, reading);
+            self.rows.push(&row.recommendationid, index, reading);
         }
-        said.next_review();
+        self.said.next_review();
 
         // Helpfulness ranks descending, and the bounded keeper takes the smallest key.
-        top.offer(
+        self.top.offer(
             std::cmp::Reverse(row.helpfulness.to_bits()),
             verdict.subjects,
         );
 
-        if rows.len() >= 16_384 {
-            writer.write(&rows.take(&schema)?)?;
-            on_progress(ReadProgress {
-                done: reviews,
-                total: 0,
-                reading_claims: false,
-            });
+        if self.rows.len() >= 16_384 {
+            let batch = self.rows.take(&self.schema)?;
+            self.writer.write(&batch)?;
         }
         Ok(())
-    })?;
-
-    if rows.len() > 0 {
-        writer.write(&rows.take(&schema)?)?;
     }
-    writer.close()?;
 
-    let top_reviews = top.take();
-    for subjects in &top_reviews {
-        for &subject in subjects {
-            tallies[subject].top_mention_reviews += 1;
+    fn finish(mut self, app_id: u32, options: &ReadOptions) -> Result<ReadReport> {
+        if self.rows.len() > 0 {
+            let batch = self.rows.take(&self.schema)?;
+            self.writer.write(&batch)?;
         }
-    }
+        self.writer.close()?;
 
-    let mut ranked: Vec<(String, u64)> = languages.into_iter().collect();
-    ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
-    let mut months: Vec<Month> = calendar.into_values().collect();
-    months.sort_by(|left, right| left.label.cmp(&right.label));
+        let top_reviews = self.top.take();
+        for subjects in &top_reviews {
+            for &subject in subjects {
+                self.tallies[subject].top_mention_reviews += 1;
+            }
+        }
 
-    Ok(ReadReport {
-        app_id,
-        reviews,
-        corpus_reviews,
-        language: options.language.clone(),
-        depth: options.depth,
-        splitter: crate::claims::SPLITTER_VERSION.to_owned(),
-        claims,
-        forward_passes: 0,
-        unclassified_claims: unclassified,
-        silent_reviews: silent,
-        positive,
-        top_helpful: top_reviews.len() as u64,
-        model: String::new(),
-        trained_on: String::new(),
-        usual_declined: None,
-        frozen: None,
-        context: false,
-        spine_version: String::new(),
-        threshold: 0.0,
-        device: String::new(),
-        captured_unix: 0,
-        subjects: CORE_SPINE
-            .iter()
-            .zip(&tallies)
-            .map(|(category, tally)| SubjectCount {
-                id: category.id.to_owned(),
-                label: category.label.to_owned(),
-                mention_reviews: tally.mention_reviews,
-                primary_reviews: tally.primary_reviews,
-                claims: tally.claims,
-                praised: tally.praised,
-                criticised: tally.criticised,
-                mixed: tally.mixed,
-                top_mention_reviews: tally.top_mention_reviews,
-                positive_mentions: tally.positive_mentions,
-            })
-            .collect(),
-        said: said.finish(
-            &CORE_SPINE
+        let mut ranked: Vec<(String, u64)> = self.languages.into_iter().collect();
+        ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
+        let mut months: Vec<Month> = self.calendar.into_values().collect();
+        months.sort_by(|left, right| left.label.cmp(&right.label));
+
+        Ok(ReadReport {
+            app_id,
+            reviews: self.reviews,
+            corpus_reviews: self.corpus_reviews,
+            language: options.language.clone(),
+            depth: options.depth,
+            splitter: crate::claims::SPLITTER_VERSION.to_owned(),
+            claims: self.claims,
+            forward_passes: 0,
+            unclassified_claims: self.unclassified,
+            silent_reviews: self.silent,
+            positive: self.positive,
+            top_helpful: top_reviews.len() as u64,
+            model: String::new(),
+            trained_on: String::new(),
+            usual_declined: None,
+            frozen: None,
+            context: false,
+            spine_version: String::new(),
+            threshold: 0.0,
+            device: String::new(),
+            captured_unix: 0,
+            subjects: CORE_SPINE
                 .iter()
-                .map(|c| (c.id, c.label))
-                .collect::<Vec<_>>(),
-        ),
-        languages: ranked,
-        months,
-        elapsed: Duration::default(),
-    })
+                .zip(&self.tallies)
+                .map(|(category, tally)| SubjectCount {
+                    id: category.id.to_owned(),
+                    label: category.label.to_owned(),
+                    mention_reviews: tally.mention_reviews,
+                    primary_reviews: tally.primary_reviews,
+                    claims: tally.claims,
+                    praised: tally.praised,
+                    criticised: tally.criticised,
+                    mixed: tally.mixed,
+                    top_mention_reviews: tally.top_mention_reviews,
+                    positive_mentions: tally.positive_mentions,
+                })
+                .collect(),
+            said: self.said.finish(
+                &CORE_SPINE
+                    .iter()
+                    .map(|c| (c.id, c.label))
+                    .collect::<Vec<_>>(),
+            ),
+            languages: ranked,
+            months,
+            elapsed: Duration::default(),
+        })
+    }
 }
 
 /// Streams every stored reading, one claim at a time.
@@ -1013,6 +1113,49 @@ mod tests {
             assert!(
                 claims.is_empty() || at == review.len() + 1,
                 "the walk must end exactly one separator past the end of {review:?}"
+            );
+        }
+    }
+
+    /// The walk holds a review by its rejoined text and the spans it queued, so that counting
+    /// it later does not split it a second time. Those spans have to give the claims back
+    /// exactly, or a review is counted as saying something it never said.
+    #[test]
+    fn a_held_review_gives_back_the_claims_it_was_queued_as() {
+        let reviews = [
+            "Looks incredible. Runs like a slideshow. The story is the best in the series.",
+            "[h1]Verdict[/h1]\n- great art\n- terrible netcode\n- worth it on sale",
+            "Multibyte: 教学纯靠自己领悟。战斗手感极好。",
+            "One point only",
+            "   ",
+        ];
+
+        for text in reviews {
+            let claims = Depth::Deep.claims_of(text);
+            let mut spans = Vec::new();
+            let mut at = 0;
+            for claim in &claims {
+                spans.push((at, at + claim.len()));
+                at += claim.len() + 1;
+            }
+            let held = Pending {
+                row: crate::capture::Row {
+                    recommendationid: "1".to_owned(),
+                    helpfulness: 0.0,
+                    votes_up: 0,
+                    voted_up: true,
+                    language: "english".to_owned(),
+                    created: 0,
+                },
+                text: Arc::from(rejoined(&claims)),
+                spans,
+                fingerprint: [0; 32],
+            };
+            let recovered: Vec<&str> = held.claims();
+            let expected: Vec<&str> = claims.iter().map(AsRef::as_ref).collect();
+            assert_eq!(
+                recovered, expected,
+                "held review {text:?} came back changed"
             );
         }
     }

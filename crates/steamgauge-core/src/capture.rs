@@ -439,7 +439,6 @@ pub const DEFAULT_TOP_HELPFUL: usize = 50;
 #[derive(Debug, Clone)]
 pub struct Row {
     pub recommendationid: String,
-    pub text_hash: String,
     /// Steam's own helpfulness score, which is what orders the page people read.
     pub helpfulness: f64,
     pub votes_up: u32,
@@ -501,7 +500,6 @@ pub fn for_each_row(snapshot: &Path, mut visit: impl FnMut(Row, &str) -> Result<
             visit(
                 Row {
                     recommendationid: ids.value(row).to_owned(),
-                    text_hash: crate::embed::sha256_hex(body),
                     helpfulness: if helpful.is_null(row) {
                         0.0
                     } else {

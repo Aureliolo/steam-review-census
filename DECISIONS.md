@@ -397,12 +397,29 @@ should cost twice the arithmetic, and on the same game through the same pipeline
 `--model` differing it costs **1.68 times**: 103,026 claims in 124 seconds on the 278M model
 and 208 on the 560M one, 830 a second against 495. The card is not the only thing in the loop.
 
-That measurement found the rest of the loop. The reader was tokenising each review once for
-every claim it holds, so a review of four and a half claims was tokenised four and a half
-times: the card sat at about half busy while one core did the same work over again. Tokenising
-once per review is worth about a quarter of the wall time, with the readings byte for byte
-identical. The second pass, which counts reviews with the card idle, is still about a fifth of
-each game and is the next thing worth taking.
+That measurement found the rest of the loop, which turned out to be the processor rather than
+the card. Three things were taken out of it, each measured the same way: the same game, the
+same graph, the same batches, three rounds alternating between builds so a warm cache or a
+boost clock cannot land on one of them.
+
+| | 107,022 claims | the card |
+|---|---|---|
+| two passes, tokenising a review once per claim | 282s | 36% busy |
+| tokenising each review once, and one walk instead of two | 266s | 45% busy |
+| **the next batch tokenised while the card runs this one** | **193s** | **51% busy** |
+
+**Thirty per cent, and not one answer changed**: all nine readings hash identically, which is
+the only reason a change like this is worth making. The counting pass used to open the capture
+again and split every review a second time, which is worth about 6%; a review is now counted at
+the first drain after its last claim was queued, against answers that are already final. The
+larger share is that tokenising and the forward pass were taking turns. Tokenising a batch is
+most of what a reading spends its processor on, the card waited through all of it, and a
+channel one batch deep is enough to overlap them.
+
+The card is still only half busy, so there is more here for whoever wants it: the window
+offsets are still encoded review by review on one thread. What this does not do is change what
+the reader is asked or what it answers, and a change that did would have to earn it against the
+measurement above rather than against an argument about where the time goes.
 
 A figure taken before a correctness fix is not a figure. The first reading of this comparison
 was 1.45x, measured while the reader was cutting its window out of padding: it was tokenising

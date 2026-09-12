@@ -223,11 +223,12 @@ listen('fetch', ({ payload }) => {
 
 listen('read', ({ payload }) => {
   if (payload.app_id !== chosen) return;
+  set(el('work-what'), 'Reading each point and counting what they add up to');
   set(
-    el('work-what'),
-    payload.reading_claims ? 'Reading each point' : 'Counting what they add up to',
+    el('work-count'),
+    `${whole.format(payload.claims_read)} points, ` +
+      `${whole.format(payload.reviews_counted)} reviews`,
   );
-  set(el('work-count'), whole.format(payload.done));
   /* No total to divide by: how many distinct points a corpus holds is not known until it has
      been walked, and a bar that invents a denominator is a bar that lies. */
   el('work-fill').style.width = '100%';
