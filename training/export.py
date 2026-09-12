@@ -181,6 +181,17 @@ def main():
     # Half precision has no CPU kernels worth the name, so it is checked where it will run.
     providers = ["CUDAExecutionProvider"] if args.fp16 else ["CPUExecutionProvider"]
     session = onnxruntime.InferenceSession(str(graph), providers=providers)
+    # ONNX Runtime accepts a provider it does not have and quietly runs somewhere else. That
+    # has already cost this project a measurement it believed: a reading reported as CUDA that
+    # ran on the processor. Whatever ran the check says so, and a half-precision graph checked
+    # on a processor is a weaker check than it looks.
+    ran_on = session.get_providers()[0]
+    print(f"parity checked on {ran_on}")
+    if args.fp16 and ran_on == "CPUExecutionProvider":
+        print(
+            "  which is not where this graph will run. The drift below is real but the kernels "
+            "are not the ones the reader uses."
+        )
     # In batches, for the same reason the trace is: the check is over hundreds of sequences and
     # a bigger model has to fit them all on the card at once to answer in one go.
     ids = encoded["input_ids"].numpy()
