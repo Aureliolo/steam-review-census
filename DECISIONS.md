@@ -836,6 +836,22 @@ the rule. The reader learns the labels, not the sheet, so it over-predicts `genr
 against 127 true) and `verdict` loses 49 claims to it, the largest single confusion anywhere in
 the matrix.
 
+**A third boundary is the largest single disagreement between the two labellers.** Over the
+1,400 claims read twice, the commonest subject split is `difficulty` against `gameplay`, 25
+claims, and the reader repeats it: `difficulty` loses 24 of its mistakes to `gameplay` and it
+is the largest confusion either subject has. The sheet is as explicit here as it is anywhere:
+balance complaints belong to `difficulty` rather than `gameplay`, *including when they name a
+specific mechanic as overpowered or useless*. Of the 97 training claims that say something is
+overpowered, nerfed, buffed or unbalanced, 50 went to `difficulty` and 18 to `gameplay`. So the
+rule is followed half the time, which is the same failure as `genre` and for the same reason: a
+rule in prose competes with an instinct, and the instinct is that a claim naming a mechanic is
+about the mechanic.
+
+This one wants no sheet edit, because the sheet already says it. It wants the adjudication,
+which is exactly what the 192 split claims in `gold.html` are: the claims the two labellers
+answered differently, shown to a person who settles them. Two of the three boundaries named
+here are already in that file by name.
+
 **So the cure for the reader's two worst subjects is not more labels and not more parameters.**
 It is two sheet edits and a relabelling of the claims they touch, and neither edit is a new
 category:
