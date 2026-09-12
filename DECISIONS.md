@@ -532,6 +532,7 @@ a day of work going quietly wrong.
 | `check-readings` | does every reading say what its own rows hold? |
 | `check-draws` | does a handout still name the claims this build cuts, before a labelling run is spent on it? |
 | `stale-splits` | how much of what labellers called a bad split does this build still split that way? |
+| `mine-check` | what is each fishing line for a starved subject actually catching? |
 
 Three more on the Python side, run against a model directory rather than a capture:
 
@@ -1057,17 +1058,29 @@ Then, in order:
    train on, and a review already in that game's random set is never drawn twice. It waits on a
    reading made by the current splitter, which the finalise pass produces.
 6. **Mine the twenty million unread claims for the starved rows. Settled 2026-09-12: this
-   happens.** Item 4 chooses whole games in the hope that they hold `vr` and `licensing`
-   claims; this goes straight at the claims themselves. Embed a slice of the corpus with the
-   reader already shipped, retrieve nearest neighbours of the tail claims already labelled plus
-   a handful of written probes for each starved row ("Denuvo", "region locked", "requires a
-   separate launcher account"), and send what comes back to the labeller. Retrieval-based
-   selection for class-imbalanced data is the published form of this
+   happens, and the lexical half of it is built.** Item 4 chooses whole games in the hope that
+   they hold `vr` and `licensing` claims; this goes straight at the claims themselves.
+   Retrieval-based selection for class-imbalanced data is the published form
    ([arXiv:2307.14899](https://arxiv.org/pdf/2307.14899)), and the argument for it is
    arithmetic: reweighting redistributes a gradient that 32 `licensing` claims do not contain,
    which is why every weighting scheme tried here made macro F1 worse. Rows drawn this way are
    not a random sample and no prevalence figure may count them, exactly as with the declined
-   draw.
+   draw, and `steamgauge mine` marks every one of them `mined`.
+
+   **`steamgauge mine` ships as of 2026-09-12**, with a written probe list per starved subject
+   in `mine.rs`, a round-robin quota so a game rich in one subject cannot eat the draw, and the
+   same refusal as the declined draw to touch a game held back from training. The retrieval
+   half, which is the stronger one, is still to build: probes are lexical and mostly ride on
+   borrowed tokens, so a Russian review complaining about subtitles is not caught.
+
+   **Read what a probe catches before spending a labeller on it**, with
+   `cargo run --release -p steamgauge-core --example mine-check -- <app id>`. Four of the eight
+   lines were wrong on their first outing and the corpus said so within a minute: "accessible"
+   is how reviewers say a game is easy to get into, "launcher" is a weapon in a shooter, "mods"
+   is an in-game upgrade tree in half the library, and "vive" is "long live" in French. Those
+   four narrowings cut the `mods` line from 5,513 claims to 778 and the `policy` line from 367
+   to 60, and what is left reads like the subject it is aimed at. The test
+   `the_wrong_sense_of_a_word_does_not_take_a_line` holds each of them.
 7. **Publishing**, which is the user's decision and not near.
 8. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.

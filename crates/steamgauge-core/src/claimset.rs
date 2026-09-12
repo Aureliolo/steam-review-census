@@ -469,7 +469,7 @@ pub fn draw_revisit(dir: &Path, words: &[String], subjects: &[String]) -> Result
 /// Sets beside a game's random draw that add claims to train on rather than answers to
 /// compare. Every one of them is labelled as its own `subset`, and no prevalence figure
 /// counts a row from any of them.
-pub const TEACHING_SETS: &[&str] = &["declined"];
+pub const TEACHING_SETS: &[&str] = &["declined", "mined"];
 
 /// Draws the claims the reader would not answer, as a set to teach it on.
 ///
@@ -537,9 +537,151 @@ pub fn draw_declined(
         picks.entry(id).or_default().push(index);
     }
 
+    handouts(&snapshot, app_id, reading.depth, &picks, "declined")
+}
+
+/// Draws claims that look like they belong to the subjects the labelled set is starved of.
+///
+/// The declined draw above asks the reader what it found hard. This asks a different question,
+/// because for eight of the twenty-six subjects the reader's opinion is worthless: it has seen
+/// thirty-two `licensing` claims and it does not know the row exists. A draw that waits for the
+/// model to be uncertain about `vr` will wait forever, and a random draw over a corpus where
+/// `vr` is two claims in a thousand spends its whole budget elsewhere.
+///
+/// So the claims are found by looking for them. [`crate::mine::PROBES`] says where each starved
+/// subject tends to be written about, a claim goes to the first subject whose line it takes,
+/// and the quota is filled round-robin so a game with plenty of `mods` claims and no `vr` ones
+/// still returns a full draw without `mods` eating it.
+///
+/// **Nothing here is a sample of anything.** Every review carries `subset: "mined"`, which
+/// keeps it out of every prevalence figure exactly as the declined draw is kept out. A set
+/// selected for containing the word "headset" cannot say what share of a corpus is about
+/// headsets, and the labels it produces are for training only.
+///
+/// A review already in the game's reference set is never drawn twice.
+///
+/// # Errors
+///
+/// Fails if there is no capture, no reading, or the reading was cut by another splitter.
+pub fn draw_mined(
+    out_dir: &Path,
+    app_id: u32,
+    dir: &Path,
+    wanted: usize,
+    seed: u64,
+) -> Result<Mined> {
+    let snapshot = crate::embed::latest_snapshot(out_dir, app_id)?;
+    let reading: crate::read::ReadReport =
+        serde_json::from_slice(&std::fs::read(snapshot.join("reading.json")).map_err(|_| {
+            crate::Error::NoClassifications {
+                path: snapshot.join("reading.json"),
+            }
+        })?)?;
+    reading.cut_as_this_build()?;
+
+    let drawn_already: Vec<DrawnReview> = std::fs::read(dir.join("sample.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let already: std::collections::HashSet<&str> = drawn_already
+        .iter()
+        .map(|review| review.id.as_str())
+        .collect();
+
     let depth = reading.depth;
+    let mut lines: Vec<crate::bounded::Smallest<[u8; 32], (String, u16)>> = crate::mine::PROBES
+        .iter()
+        .map(|_| crate::bounded::Smallest::new(wanted))
+        .collect();
+    crate::capture::for_each_body(&snapshot, |id, _, text| {
+        if already.contains(id) {
+            return Ok(());
+        }
+        for (index, claim) in depth.claims_of(text).into_iter().enumerate() {
+            let Some(subject) = crate::mine::hooked(&claim) else {
+                continue;
+            };
+            let at = crate::mine::PROBES
+                .iter()
+                .position(|probe| probe.subject == subject)
+                .unwrap_or(0);
+            let index = u16::try_from(index).unwrap_or(u16::MAX);
+            let key = crate::bounded::rank(seed, "mined", &format!("{id}\u{0}{index}"));
+            lines[at].offer(key, (id.to_owned(), index));
+        }
+        Ok(())
+    })?;
+
+    let caught: Vec<Vec<(String, u16)>> = lines
+        .into_iter()
+        .map(crate::bounded::Smallest::take)
+        .collect();
+    let (picks, taken) = round_robin(&caught, wanted);
+    Ok(Mined {
+        drawn: handouts(&snapshot, app_id, depth, &picks, "mined")?,
+        by_line: crate::mine::PROBES
+            .iter()
+            .zip(taken)
+            .map(|(probe, count)| (probe.subject, count))
+            .collect(),
+    })
+}
+
+/// A mining draw and which line caught what.
+///
+/// The counts are the only way to tell a probe list that is working from one that is not,
+/// short of labelling the result: a line that catches nothing across a whole library is
+/// written wrong or aimed at a subject the corpus does not discuss, and either way the reader
+/// will not learn that row from this draw.
+#[derive(Debug)]
+pub struct Mined {
+    pub drawn: Vec<DrawnReview>,
+    pub by_line: Vec<(&'static str, usize)>,
+}
+
+/// Takes from each subject's line in turn until the quota is full or the lines run dry.
+///
+/// Taking the best `wanted / 8` from each instead would leave the draw short whenever a game
+/// has none of a subject, which for `vr` is most games. Round-robin spends what one subject
+/// cannot use on the subjects that can, while still giving the starved rows first refusal.
+fn round_robin(
+    caught: &[Vec<(String, u16)>],
+    wanted: usize,
+) -> (std::collections::HashMap<String, Vec<u16>>, Vec<usize>) {
+    let mut picks: std::collections::HashMap<String, Vec<u16>> = std::collections::HashMap::new();
+    let mut taken = vec![0; caught.len()];
+    let deepest = caught.iter().map(Vec::len).max().unwrap_or(0);
+    for round in 0..deepest {
+        for (line, at) in caught.iter().zip(0..) {
+            if taken.iter().sum::<usize>() >= wanted {
+                return (picks, taken);
+            }
+            let Some((id, index)) = line.get(round) else {
+                continue;
+            };
+            picks.entry(id.clone()).or_default().push(*index);
+            taken[at] += 1;
+        }
+    }
+    (picks, taken)
+}
+
+/// Builds the handout for a set of chosen claims: whole reviews, with the claims asked about
+/// named by index.
+///
+/// The review is whole because a claim like "it doesn't" is unanswerable without it, and the
+/// `asked` list is what keeps the labeller from being charged for the rest of it. An index the
+/// corpus has outgrown is dropped here: a review edited between the read and the draw is cut
+/// into different claims, and the index chosen then names a different sentence now.
+fn handouts(
+    snapshot: &Path,
+    app_id: u32,
+    depth: crate::read::Depth,
+    picks: &std::collections::HashMap<String, Vec<u16>>,
+    subset: &str,
+) -> Result<Vec<DrawnReview>> {
     let mut drawn = Vec::new();
-    crate::capture::for_each_body(&snapshot, |id, language, text| {
+    crate::capture::for_each_body(snapshot, |id, language, text| {
         let Some(asked) = picks.get(id) else {
             return Ok(());
         };
@@ -556,15 +698,13 @@ pub fn draw_declined(
                 text: claim.into_owned(),
             })
             .collect();
-        // The corpus can have moved on since it was read: a review edited between the two is
-        // cut into different claims, and the index the reader declined then names a different
-        // sentence now.
         let mut asked: Vec<u16> = asked
             .iter()
             .copied()
             .filter(|index| usize::from(*index) < claims.len())
             .collect();
         asked.sort_unstable();
+        asked.dedup();
         if asked.is_empty() {
             return Ok(());
         }
@@ -572,7 +712,7 @@ pub fn draw_declined(
             id: id.to_owned(),
             app_id,
             language: language.to_owned(),
-            subset: "declined".to_owned(),
+            subset: subset.to_owned(),
             claims,
             asked: Some(asked),
         });

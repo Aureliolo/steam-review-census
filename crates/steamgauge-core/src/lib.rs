@@ -14,6 +14,7 @@ pub mod gold;
 pub mod html;
 pub mod induced;
 pub mod measure;
+pub mod mine;
 pub mod model;
 pub mod picture;
 pub mod query;

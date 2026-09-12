@@ -279,6 +279,35 @@ enum Command {
         reference: PathBuf,
     },
 
+    /// Draw claims that look like the subjects the labelled set has almost none of.
+    ///
+    /// Eight of the twenty-six subjects have under 250 labels between them. A random draw
+    /// cannot fix that, because it lands on the distribution the corpus already has, and the
+    /// reader's own uncertainty cannot point at them either: it has seen thirty-two
+    /// `licensing` claims and does not know the row is there. So the claims are found by
+    /// looking for them, with a written probe per starved subject. Marked `mined`, which
+    /// trains the model and measures nothing.
+    Mine {
+        /// Steam app IDs to draw from. Each must be a game the model trains on.
+        #[arg(required = true, num_args = 1..)]
+        app_ids: Vec<u32>,
+        /// Directory holding the captures and their readings.
+        #[arg(short, long, default_value = "data")]
+        out: PathBuf,
+        /// Claims to draw from each game.
+        #[arg(long, default_value_t = 200)]
+        claims: usize,
+        /// Reviews per batch file.
+        #[arg(long, default_value_t = 40)]
+        batch_size: usize,
+        /// Changing this draws a different sample. The same seed always draws the same one.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Where the claim reference sets live.
+        #[arg(long, default_value = "reference/claims")]
+        reference: PathBuf,
+    },
+
     /// Score stored readings against a claim reference set.
     MeasureClaims {
         /// Steam app IDs to score. Each is reported separately, because a model that reads
@@ -658,6 +687,7 @@ pub async fn run() -> Result<()> {
         // reference_work does not know about.
         Command::SampleClaims { .. }
         | Command::Declined { .. }
+        | Command::Mine { .. }
         | Command::IngestClaims { .. }
         | Command::Revisit { .. }
         | Command::IngestRevisit { .. }
@@ -697,6 +727,14 @@ fn reference_work(command: &Command) -> Option<Result<()>> {
             seed,
             reference,
         } => run_declined(app_ids, out, *claims, *batch_size, *seed, reference),
+        Command::Mine {
+            app_ids,
+            out,
+            claims,
+            batch_size,
+            seed,
+            reference,
+        } => run_mine(app_ids, out, *claims, *batch_size, *seed, reference),
         Command::IngestClaims {
             app_id,
             from,
@@ -930,14 +968,12 @@ fn run_sample_claims(
     Ok(())
 }
 
-fn run_declined(
-    app_ids: &[u32],
-    out: &std::path::Path,
-    claims: usize,
-    batch_size: usize,
-    seed: u64,
-    reference: &std::path::Path,
-) -> Result<()> {
+/// Refuses to draw a teaching set from a game the model is measured on.
+///
+/// Every teaching draw is labelled and trained on, so drawing one from a validation or frozen
+/// game turns the only honest measurement this project has into a number about claims the
+/// model was shown.
+fn refuse_held_back(app_ids: &[u32]) -> Result<()> {
     let held_back: Vec<u32> = app_ids
         .iter()
         .copied()
@@ -946,20 +982,32 @@ fn run_declined(
                 != steamgauge_core::measure::Role::Train
         })
         .collect();
-    if !held_back.is_empty() {
-        anyhow::bail!(
-            "{} {} held back from training, so teaching the model on {} would end the only \
-             honest measurement this project has. Draw from a game the model already learns \
-             from.",
-            held_back
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", "),
-            if held_back.len() == 1 { "is" } else { "are" },
-            if held_back.len() == 1 { "it" } else { "them" }
-        );
+    if held_back.is_empty() {
+        return Ok(());
     }
+    anyhow::bail!(
+        "{} {} held back from training, so teaching the model on {} would end the only \
+         honest measurement this project has. Draw from a game the model already learns \
+         from.",
+        held_back
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+        if held_back.len() == 1 { "is" } else { "are" },
+        if held_back.len() == 1 { "it" } else { "them" }
+    )
+}
+
+fn run_declined(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    claims: usize,
+    batch_size: usize,
+    seed: u64,
+    reference: &std::path::Path,
+) -> Result<()> {
+    refuse_held_back(app_ids)?;
 
     let (mut reviews, mut asked, mut batches) = (0, 0, 0);
     for &app_id in app_ids {
@@ -989,6 +1037,58 @@ fn run_declined(
          the labeller is told nothing about that. Ingest each with `steamgauge ingest-claims\n\
          <app id> --from <dir> --by <model> --to {}/<app id>/declined`.\n\
          Every row lands as subset `declined`, which trains the model and measures nothing.",
+        reference.display()
+    );
+    Ok(())
+}
+
+fn run_mine(
+    app_ids: &[u32],
+    out: &std::path::Path,
+    claims: usize,
+    batch_size: usize,
+    seed: u64,
+    reference: &std::path::Path,
+) -> Result<()> {
+    refuse_held_back(app_ids)?;
+
+    let (mut reviews, mut asked, mut batches) = (0, 0, 0);
+    let mut by_line: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for &app_id in app_ids {
+        let dir = reference.join(app_id.to_string());
+        let mined = steamgauge_core::claimset::draw_mined(out, app_id, &dir, claims, seed)?;
+        for (subject, count) in &mined.by_line {
+            *by_line.entry(subject).or_default() += count;
+        }
+        if mined.drawn.is_empty() {
+            println!("{app_id:<10} no probe caught anything that is not already labelled");
+            continue;
+        }
+        let report =
+            steamgauge_core::claimset::write_set(&dir.join("mined"), &mined.drawn, batch_size)?;
+        println!(
+            "{:<10} {:>4} reviews {:>5} claims {:>3} batches",
+            app_id, report.reviews, report.claims, report.batches
+        );
+        reviews += report.reviews;
+        asked += report.claims;
+        batches += report.batches;
+    }
+
+    if asked == 0 {
+        anyhow::bail!("no probe caught a claim; read these games with a current reader first");
+    }
+    println!("\ndrawn      {reviews:>4} reviews {asked:>5} claims {batches:>3} batches");
+    println!("\nwhat each line caught, before the labeller has said whether any of it is right:");
+    for (subject, count) in &by_line {
+        println!("  {subject:<16} {count:>5}");
+    }
+    println!(
+        "\nA probe says where a subject tends to be written about and never what it means, so\n\
+         a drawn claim is a candidate and the labeller decides. Ingest each with `steamgauge\n\
+         ingest-claims <app id> --from <dir> --by <model> --to {}/<app id>/mined`.\n\
+         Every row lands as subset `mined`, which trains the model and measures nothing: a set\n\
+         selected for holding the word \"headset\" cannot say what share of a corpus is about one.",
         reference.display()
     );
     Ok(())
