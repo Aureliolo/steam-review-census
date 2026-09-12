@@ -397,6 +397,11 @@ should cost twice the arithmetic, and on the same game through the same pipeline
 `--model` differing it costs **1.68 times**: 103,026 claims in 124 seconds on the 278M model
 and 208 on the 560M one, 830 a second against 495. The card is not the only thing in the loop.
 
+One caveat that applies to every second quoted in this section: the same binary reading the
+same game twice hours apart lands up to a fifth apart on this machine, so a ratio is only worth
+anything when both sides of it were measured in one sitting, alternating. Every comparison here
+was. None of the absolute times are comparable between them.
+
 That measurement found the rest of the loop, which turned out to be the processor rather than
 the card. Three things were taken out of it, each measured the same way: the same game, the
 same graph, the same batches, three rounds alternating between builds so a warm cache or a
