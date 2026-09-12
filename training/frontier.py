@@ -188,7 +188,7 @@ def score_reader(model_dir: Path, key: Path, data: str):
     tokenizer.no_truncation()
     cut = Claims(
         claims,
-        None,
+        _HuggingFaceShim(tokenizer),
         subjects,
         provenance["max_tokens"],
         provenance.get("context", False),
@@ -197,8 +197,6 @@ def score_reader(model_dir: Path, key: Path, data: str):
         # worse measurement.
         mark=provenance.get("mark", False),
     )
-    cut.tokenizer = _HuggingFaceShim(tokenizer)
-    cut.windows = [cut.window(claim) for claim in claims] if cut.context else []
 
     session = onnxruntime.InferenceSession(
         str(model_dir / "model.onnx"), providers=["CPUExecutionProvider"]
