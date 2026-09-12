@@ -230,12 +230,48 @@ subjects are for, and 228380 is a good second game to run the induction on.
 aspect-naming claims, nearly every "scary" and "I peed myself" among them. Before it existed
 those fell to `verdict` or were scattered across `graphics` and `audio`.
 
-### A verdict that names the genre as a noun: three reports
+### A verdict that names the genre as a noun: three reports, and the labels measured
 
 "Excellent city builder", "among the best platformers", "great platformer in every way". The
 `verdict` rule says any named aspect wins and `genre` owns naming what kind of game it is, so
 these are forced to `genre` while reading as bare verdicts. Labellers flagged nearly all of
 them contested. The sheet should say whether a genre noun counts as naming an aspect.
+
+Measured on 2026-09-12 across the 18,907 labels then exported: the sheet already says a
+judgement with only the kind of game attached is a `verdict`, and of the 152 claims that name
+a kind of game *and* carry a judgement word, labellers wrote `genre` 57 times and `verdict`
+33. Two to one against the rule as written. The reader learns the labels and repeats it:
+`verdict` and `genre` are the second largest confusion in the whole out-of-fold matrix, 248
+claims over twenty-eight games. Stating the principle was not enough, so the revision wants
+the counter-example beside it: "a great roguelike" is `verdict`, "it is a roguelike" is
+`genre`, and the test is whether removing the judgement leaves a claim that still says
+something.
+
+### How much story there is: five subjects for one question
+
+Of the 624 labelled claims that contain a story word, 35 also say something about length, and
+those went to `content` (7), `story` (5), `gameplay` (4), `difficulty` (4) and `verdict` (3).
+No majority. The rule exists and lives in the wrong entry: `gameplay` says "how much game
+there is belongs to content", and the `story` entry says nothing about amount at all. A rule
+under one category is applied by labellers reading that category's paragraph and not
+otherwise. The reader keys on the word: out of fold, `story` predictions are right 58% of the
+time and 95 of its mistakes were labelled `gameplay`, among them "the main story seemed
+fairly short" and "you're going down a predetermined path".
+
+The revision: the `story` boundary gains "how much story there is belongs to content, the same
+way how much game there is does; this is what the narrative is and whether it is worth
+following".
+
+### Balance complaints that name a mechanic: the rule is followed half the time
+
+The `difficulty` boundary is explicit that balance complaints belong there rather than to
+`gameplay`, *including when they name a specific mechanic as overpowered or useless*. Of the
+97 labelled claims that say something is overpowered, nerfed, buffed or unbalanced, 50 went
+to `difficulty` and 18 to `gameplay`. This is the largest disagreement between the two
+labellers (25 of 1,400 claims read twice) and the largest confusion the reader has (357 claims
+out of fold, both directions). The sheet already says it, so no edit; this is the boundary
+the adjudication settles, and the 192 split claims in front of the adjudicator hold it by
+name.
 
 ### Addictive, could not stop playing: one report, a dozen claims
 
