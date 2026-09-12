@@ -1,11 +1,13 @@
 """Every training run on one set of labels, ranked, with the interval around each figure.
 
 A sweep produces one number per configuration and the temptation is to read the largest one as
-the winner. Most of the gaps are smaller than the noise: 2,615 validation claims put about two
-points of uncertainty on any coverage figure, so two runs a point apart are the same run. This
-prints the interval beside the figure so a choice between configurations is made against it,
-and it refuses to put two runs in one table unless they were trained on the same labels, since
-a run on more labels is not a better configuration.
+the winner. Most of the gaps are smaller than the noise, and there are two kinds of noise, one
+of them much larger than the other. Scoring one finished model on 2,615 validation claims puts
+about two points of uncertainty on any coverage figure. Training the same configuration again,
+changing nothing but the seed, moves it four. So this prints the interval beside each figure
+and the measured spread between seeds beneath the table, because the second is the bar a change
+has to clear. It also refuses to put two runs in one table unless they were trained on the same
+labels, since a run on more labels is not a better configuration.
 
     python sweep.py                     # every run on the current labels, best first
     python sweep.py --against win-128   # what each run changed, and what it bought
