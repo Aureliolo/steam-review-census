@@ -29,12 +29,20 @@ Training wants a GPU. It will run on a CPU and you will not enjoy it.
 ```sh
 steamgauge export-training --to training/data/claims.jsonl   # labels plus their text, local only
 python bakeoff.py                                        # which backbone, decided by measurement
-python train.py --backbone Alibaba-NLP/gte-multilingual-base --epochs 5 --save
-python export.py --run runs/<id> --spine core-5 --fp16   # ONNX, with a parity assertion
+python train.py --backbone intfloat/multilingual-e5-large --context --epochs 5 \
+    --learning-rate 2e-5 --run-id <id> --save
+python sweep.py --against win-128                        # every run ranked, with the noise beside it
+python export.py --run runs/<id> --spine core-6 --fp16   # ONNX, with a parity assertion
 python publish.py --run runs/<id> \
     --model-repo <you>/steam-review-claim-reader \
     --data-repo <you>/steam-review-claims                # to Hugging Face, and pinned in the tool
 ```
+
+`--context` is what ships: the model reads a claim inside a window of its review centred on it,
+as the labeller did. `sweep.py` is not optional reading. It prints, beside every configuration,
+how far apart two runs of one configuration land, which on this machine is about two points of
+coverage even on the same seed. Almost every configuration ever tried here sits inside that,
+and the ones that did not are in `DECISIONS.md` with what each was worth.
 
 `claims.jsonl` holds review text and is never committed. What gets published is the model and a
 label set of review ids, claim offsets and labels, built from `reference/claims/` rather than
