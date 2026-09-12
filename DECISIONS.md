@@ -508,6 +508,20 @@ windowing, and `steamgauge measure-claims` scores what the tool wrote over a cor
 itself. Any two of those disagreeing by more than a point is a bug, and each removes one
 suspect: the tool's own figure was perfectly plausible on its own.
 
+### What is there to run when something looks wrong
+
+Each of these answers one question and is a `cargo run --release -p steamgauge-core --example`
+away. They exist because every one of them was, at some point, the thing that would have caught
+a day of work going quietly wrong.
+
+| | asks |
+|---|---|
+| `score-export` | does the reader agree with the trainer on the claims the trainer exported? |
+| `encoder-cost` | what does the processor half of a reading cost, and where inside it? |
+| `check-readings` | does every reading say what its own rows hold? |
+| `check-draws` | does a handout still name the claims this build cuts, before a labelling run is spent on it? |
+| `stale-splits` | how much of what labellers called a bad split does this build still split that way? |
+
 ## Most of a sweep is the seed
 
 Forty configurations were trained on one set of labels overnight on 2026-09-11, every one of
