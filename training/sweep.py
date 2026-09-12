@@ -209,18 +209,36 @@ def spread(found: list[dict], against: dict | None) -> None:
         print("\nno configuration was trained on more than one seed, so the spread is unmeasured")
         return
 
-    print("\nthe same configuration on another seed:")
-    widest = 0.0
-    for runs in sorted(repeated, key=len, reverse=True):
+    def line(runs: list[dict]) -> float:
         coverages = [run["validation"]["threshold_coverage"] for run in runs]
         gap = max(coverages) - min(coverages)
-        widest = max(widest, gap)
         names = ", ".join(
             f"{run['id']} {run['validation']['threshold_coverage']:.1%}"
             for run in sorted(runs, key=lambda run: -run["validation"]["threshold_coverage"])
         )
         what = differences(runs[0], against) if against else ""
         print(f"  {gap:5.1%} apart: {names}" + (f"   ({what})" if what else ""))
+        return gap
+
+    # Two runs of one configuration on one seed are not a spread over seeds: they are the same
+    # experiment twice. The trainer is not bit-for-bit repeatable on this card, and pretending
+    # otherwise puts a rerun's own noise inside a figure about configurations.
+    reruns: list[list[dict]] = []
+    for runs in repeated:
+        by_seed: dict[int, list[dict]] = {}
+        for run in runs:
+            by_seed.setdefault(run["seed"], []).append(run)
+        reruns.extend(same for same in by_seed.values() if len(same) > 1)
+
+    widest = 0.0
+    if reruns:
+        print("\nthe same configuration and the same seed, run twice:")
+        for runs in sorted(reruns, key=len, reverse=True):
+            widest = max(widest, line(runs))
+
+    print("\nthe same configuration on another seed:")
+    for runs in sorted(repeated, key=len, reverse=True):
+        widest = max(widest, line(runs))
     print(f"\na configuration has to beat {widest:.1%} of coverage to have changed anything")
 
 

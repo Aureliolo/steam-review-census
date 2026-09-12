@@ -491,6 +491,20 @@ The interval printed beside a coverage figure is about 1.8 points, and it is the
 is the noise in scoring one finished model on 2,615 claims and says nothing about training the
 same thing again. A configuration has to clear **4.3 points** before it has changed anything.
 
+Worse than that, and found on 2026-09-12: **the seed is not the only thing that moves.** Two
+pairs in this sweep are the same configuration, the same seed, the same labels and the same
+trainer, run twice at different commits that did not touch `train.py`, and they land 2.1 and 1.8
+points apart (`e5large` 84.9% against `wave9` 82.8%; `wave8` 75.3% against `lr5e5` 73.5%).
+Whatever this card does with non-deterministic kernels, a run is not repeatable to better than
+about two points of coverage, so "another seed" understates the noise and a two-point gap is
+worth nothing at all. `sweep.py` prints reruns and seeds as separate lists, because a rerun's
+own noise inside a figure about configurations is how a sweep lies to you.
+
+The first thing that bar refused: **a learning rate of 3e-5 on the big backbone.** Three seeds
+answer 86.7%, 86.5% and 84.7% against 2e-5's 84.9%, 84.1% and 82.8%: a two-point mean gap, which
+is exactly what running the same thing twice is worth. It is not a finding, `wave9` stays, and
+nothing was re-exported, re-installed or re-read on the strength of it.
+
 Against that bar, almost nothing the small model was asked changed anything. Everything here
 lands inside the band and bought nothing at all: batch 16, every window length from 96 to 256,
 marking the claim inside its window, a polarity weight of 0.2, down-weighting the contested and
