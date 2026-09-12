@@ -587,22 +587,32 @@ pub fn draw_by_neighbour(
         .collect();
     let mut claims_seen = 0_u64;
 
-    let mut pending: Vec<(String, u16, String)> = Vec::with_capacity(batch_size);
+    // Claims are gathered by the thousand and embedded shortest first, the way the embedding
+    // pass does. A batch is padded to its longest member, and in review order every batch
+    // holds one wall of text that pads two hundred and fifty short claims to five hundred
+    // tokens: measured at three hundred and fifty claims a second before this, which made a
+    // large game two hours.
+    let window = batch_size.saturating_mul(64).max(batch_size);
+    let mut pending: Vec<(String, u16, String)> = Vec::with_capacity(window);
     let mut flush = |pending: &mut Vec<(String, u16, String)>,
                      kept: &mut Vec<crate::bounded::Smallest<u32, (String, u16, f32)>>|
      -> Result<()> {
         if pending.is_empty() {
             return Ok(());
         }
-        let texts: Vec<String> = pending.iter().map(|(_, _, text)| text.clone()).collect();
-        let vectors = embedder.embed(&texts)?;
-        let margins = lines.margins(&vectors)?;
-        for ((id, index, _), found) in pending.drain(..).zip(margins) {
-            let Some((line, margin)) = found else {
-                continue;
-            };
-            kept[line].offer(margin_key(margin), (id, index, margin));
+        pending.sort_unstable_by_key(|(_, _, text)| text.len());
+        for chunk in pending.chunks(batch_size.max(1)) {
+            let texts: Vec<String> = chunk.iter().map(|(_, _, text)| text.clone()).collect();
+            let vectors = embedder.embed(&texts)?;
+            let margins = lines.margins(&vectors)?;
+            for ((id, index, _), found) in chunk.iter().zip(margins) {
+                let Some((line, margin)) = found else {
+                    continue;
+                };
+                kept[line].offer(margin_key(margin), (id.clone(), *index, margin));
+            }
         }
+        pending.clear();
         Ok(())
     };
 
@@ -621,7 +631,7 @@ pub fn draw_by_neighbour(
                 u16::try_from(index).unwrap_or(u16::MAX),
                 trimmed.to_owned(),
             ));
-            if pending.len() >= batch_size {
+            if pending.len() >= window {
                 flush(&mut pending, &mut kept)?;
                 on_progress(claims_seen);
             }
