@@ -608,8 +608,8 @@ the winner, from a different family, on the same labels and the same schedule, a
 **ten points fewer claims**. Twice the parameters is not the finding; this backbone is, and a
 future candidate has to be tried rather than assumed from its parameter count.
 
-Four 560M encoders at 3e-5 say what the size is worth and what the adaptation is, because three
-of these four are `xlm-roberta-large` underneath:
+Five 560M encoders at 3e-5 say what the size is worth and what the adaptation is, because four
+of these five are `xlm-roberta-large` underneath:
 
 | 560M encoder, five epochs at 3e-5 | answers at 75% | macro F1 |
 |---|---|---|
@@ -617,12 +617,47 @@ of these four are `xlm-roberta-large` underneath:
 | `multilingual-e5-large-instruct` | 83.2% | 0.671 |
 | `xlm-roberta-large`, unadapted | 78.0% | 0.601 |
 | `bge-m3` | 75.0% | 0.650 |
+| `bge-reranker-v2-m3` | 69.1% | 0.628 |
 
 The architecture is worth 78%. Adapting it for retrieval the way e5 did is worth another six to
 nine points on top; adapting it the way `bge-m3` did costs three. The instruct variant of the
 winner lands inside the winner's own seed spread and buys nothing. So the thing to carry forward
 is not "use a 560M encoder" and not "use XLM-R large": it is that what an encoder was adapted
 for decides this, and the only way to know is to train it for eleven minutes and look.
+
+**The last row is the sharpest version of that, and it was a surprise.** `bge-reranker-v2-m3` is
+the same graph and the same parameter count as the winner, and it is the only candidate anywhere
+that was pretrained as a cross-encoder over text pairs, which is the exact shape of this task:
+two sequences in, one judgement out. It was picked for the sweep on that reasoning. It answers
+**seventeen points fewer claims than the winner** and nine fewer than the unadapted architecture
+it is built on. Pretraining for the right shape is worth less than nothing here; pretraining a
+trunk to emit a single relevance scalar appears to discard what twenty-six-way classification
+needs, and starts further from useful than a general-purpose embedding model does. Shape of task
+is not a reason to expect a backbone to win, and after this it is not accepted as one.
+
+### The four backbones the earlier search missed, all refused
+
+Researched and run 2026-09-12, against the bar every candidate faces: more than 90.3% coverage,
+or near 86% at a fraction of the cost. Each got the learning rate its scale had already earned,
+5e-5 at base scale and 3e-5 at large.
+
+| candidate | parameters | answers at 75% | macro F1 | AURC |
+|---|---|---|---|---|
+| **incumbent, `multilingual-e5-large` 3e-5** | 560M | **86.5%** | 0.659 | 0.138 |
+| `jhu-clsp/mmBERT-base` | 110M | 70.2% | 0.598 | 0.173 |
+| `BAAI/bge-reranker-v2-m3` | 560M | 69.1% | 0.628 | 0.173 |
+| `ibm-granite/granite-embedding-311m-multilingual-r2` | 311M | 65.3% | 0.566 | 0.192 |
+| `jhu-clsp/mmBERT-small` | 42M | 59.0% | 0.560 | 0.213 |
+
+None is close, and none is cheap enough to make its distance interesting: `mmBERT-base` at a
+fifth of the parameters still loses sixteen points, where the whole argument for a small model
+would be losing two or three. The incumbent stands.
+
+**The last row was never a contender: it is a diagnostic, and it answered its question.** If a
+42M trunk had landed within two points of a 110M one, the ceiling would be the labels and
+backbone shopping would be the wrong thing to be doing. It landed **eleven points** below. So
+capacity is still binding at this data size, which is a thing worth knowing before anyone
+concludes that 20,982 labels are the limit: they are not the limit yet.
 
 Three runs of the winner land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline
 seeds land 4.3 apart, and every rate tried on the big model beats every configuration of the
@@ -672,14 +707,87 @@ confidences carry almost no ordering: asked to be right three times in four, it 
 claim in twenty. The bag of words is the honest floor, it takes seconds to fit, and a
 278M-parameter encoder that could not clear it would not be earning its electricity.
 
+### One threshold for twenty-six subjects is the wrong shape, and it hides the worst of it
+
+Measured 2026-09-12 by `training/confidence.py`, which now answers two separate questions:
+what to score confidence by, and where to put the line. Every figure below is **cross-fitted
+by game**: each of the four validation games is scored by a rule fitted on the other three,
+the held-out answers are pooled, and the interval resamples whole games rather than claims,
+because 935 claims from one game are not 935 independent observations. A threshold fitted and
+reported on the same claims flatters itself, and every threshold figure recorded before this
+one was fitted that way.
+
+**The score barely matters. Nothing beats max probability by more than a point.**
+
+| confidence score, on the shipped reader | AUGRC | AURC | held out, one line |
+|---|---|---|---|
+| max probability (shipped) | 0.0968 | 0.1402 | 83.9% at 0.741 |
+| margin over the runner-up | 0.0975 | 0.1412 | 82.9% at 0.746 |
+| negative entropy | **0.0960** | **0.1392** | 85.0% at 0.746 |
+| max logit | 0.0982 | 0.1465 | 85.0% at 0.745 |
+| max logit over its 2-norm | 0.0973 | 0.1412 | **85.7%** at 0.744 |
+| max logit over its 8-norm | 0.0994 | 0.1451 | 82.1% at 0.744 |
+
+The 2-norm row is the one that was expected to win. Normalising the logit vector by its p-norm
+and taking the max is the best-replicated post-hoc result in selective prediction: Cattelan and
+Silva (arXiv:2305.15508) ran it across 84 pretrained classifiers and found many of them have
+confidence estimators that are simply broken, with ordering far worse than their accuracy
+implies, and that this fixes it outright. It buys **1.8 points of coverage here, inside the
+game-blocked interval of [81.9%, 89.9%]**, and it is worse than max probability on AUGRC. The
+conclusion is the useful one: this reader's confidence estimator is not one of the broken ones,
+and the whole p grid from 0.3 to 8 is a flat line. Max probability stays, now for a reason
+rather than for want of trying.
+
+**AUGRC is reported beside AURC from here.** AURC divides by how much was answered, so it mixes
+the ordering quality of the score with the accuracy of the classifier underneath, and Traub et
+al. (arXiv:2407.01032) found that switching to AUGRC moved the ranking on five of six datasets.
+It did not move it here: both prefer negative entropy, both rank the twelve scores near enough
+identically. Two metrics agreeing is worth more than one metric, and it cost an afternoon.
+
+**Where the line goes matters enormously, and this is the finding.** One threshold gates all
+twenty-six subjects. Fitting one per subject, each holding the same 75% floor *for its own
+predictions*, costs five points of overall coverage: 78.9% at 0.749 against 83.9% at 0.741. The
+average says the trade is not worth it. The average is wrong, and here is what it hides:
+
+| subject | predicted | one line | a line per subject |
+|---|---|---|---|
+| `verdict` | 460 | 89% at 0.85 | 99% at 0.81 |
+| `story` | 111 | 80% at **0.35** | 8% at 0.67 |
+| `genre` | 170 | 77% at **0.53** | 28% at 0.46 |
+| `difficulty` | 107 | 80% at 0.65 | 53% at 0.60 |
+| `offtopic` | 198 | 79% at 0.68 | 65% at 0.76 |
+| `monetisation` | 29 | 69% at 0.70 | 90% at 0.62 |
+| `audio` | 26 | 92% at 0.83 | 100% at 0.81 |
+| `performance` | 50 | 82% at 0.83 | 92% at 0.80 |
+
+The shipped rule answers **80% of `story` predictions and is wrong two times in three**. It
+answers 77% of `genre` at barely better than a coin. A report that says "23 reviewers praised
+the story" built on that is not a weak number, it is a false one, and the headline 75% cannot
+see it because `verdict` and `price` are carrying the average. The per-subject rule takes the
+five points of coverage out of exactly those rows and hands most of them back on the rows the
+reader reads well: `verdict` to 99%, `audio` to 100%, `performance` and `multiplayer` to 92%.
+
+**The floor is held per subject, not overall, and that choice is the whole design.** The rule
+that maximises overall coverage under one overall floor is to answer the head and abstain on
+the entire tail, because that is arithmetic. It would also be a product failure dressed as a
+metric win: the rare complaints are the ones worth finding. A per-subject floor cannot buy
+coverage that way. A subject that no threshold can make right three times in four goes silent
+instead, which is the honest answer and is printed as `silent` rather than folded into an
+average.
+
+Subjects with fewer than 40 calibration predictions cannot support a quantile of their own and
+share a pooled one. That is the clustered form of the standard Mondrian construction, and with
+`licensing` at 32 labels in the entire set it is not optional.
+
+**What this does not yet do: ship.** `reader.json` carries one threshold and the Rust side
+applies one threshold. Changing that is a change to the exported artefact and to `read.rs`, and
+it wants the frozen games to confirm it first, not four validation games with intervals five
+points wide. What is settled is that the current rule is wrong, and how.
+
 ### Things tried that bought nothing, so nobody tries them again
 
-**A better uncertainty score.** The reader abstains on the largest softmax probability, which
-is the obvious choice and not usually the best one. Two others cost nothing from the same
-forward pass: the margin between the best class and the runner-up, and the entropy of the
-whole distribution. Over 2,615 validation claims they are indistinguishable, AURC 0.2226
-against 0.2242 and 0.2231, and all three answer 54.5% at the accuracy they promise. Max
-probability stays. `training/confidence.py` re-runs it against any reader.
+**A better uncertainty score.** Twelve of them, in the table above. The spread between best and
+worst is 1.8 points of coverage against a game-blocked interval eight points wide.
 
 **Three epochs instead of five.** 0.588 accuracy and 52% coverage against 0.639 and 67%. The
 model was not overfitting at five; it was underfitting at three.

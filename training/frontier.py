@@ -173,7 +173,7 @@ def score_reader(model_dir: Path, key: Path, data: str):
     import onnxruntime
     from tokenizers import Tokenizer
 
-    from train import Claims
+    from train import Claims, ShippedTokenizer
 
     provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
     subjects = provenance["subjects"]
@@ -188,7 +188,7 @@ def score_reader(model_dir: Path, key: Path, data: str):
     tokenizer.no_truncation()
     cut = Claims(
         claims,
-        _HuggingFaceShim(tokenizer),
+        ShippedTokenizer(tokenizer),
         subjects,
         provenance["max_tokens"],
         provenance.get("context", False),
@@ -237,22 +237,6 @@ def score_reader(model_dir: Path, key: Path, data: str):
         for at, row in enumerate(wanted)
     ]
     return answers
-
-
-class _HuggingFaceShim:
-    """Enough of the transformers tokenizer for `Claims.window` to run on the shipped one.
-
-    The window is cut with the tokenizer that will read the claim, and the model directory
-    ships `tokenizer.json` rather than a transformers directory. Duplicating the window in a
-    second place is how the tool and the trainer come to disagree about what the model saw.
-    """
-
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-
-    def __call__(self, text, *rest, **kwargs):
-        encoded = self.tokenizer.encode(text, *rest, add_special_tokens=False)
-        return {"offset_mapping": encoded.offsets, "input_ids": encoded.ids}
 
 
 def main():

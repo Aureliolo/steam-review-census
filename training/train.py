@@ -39,6 +39,22 @@ POLARITIES = claimdata.POLARITIES
 MARK = "**"
 
 
+class ShippedTokenizer:
+    """Enough of the transformers tokenizer for `Claims` to run on the exported one.
+
+    The window is cut with the tokenizer that will read the claim, and the model directory
+    ships `tokenizer.json` rather than a transformers directory. Duplicating the window in a
+    second place is how the tool and the trainer come to disagree about what the model saw.
+    """
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, text, *rest, **kwargs):
+        encoded = self.tokenizer.encode(text, *rest, add_special_tokens=False)
+        return {"offset_mapping": encoded.offsets, "input_ids": encoded.ids}
+
+
 class Claims(Dataset):
     def __init__(
         self,
