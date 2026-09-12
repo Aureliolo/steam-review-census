@@ -516,7 +516,8 @@ a quarter `verdict`, and two numbers from two distributions are not a comparison
 |---|---|---|---|---|
 | Claude Opus 5, zero-shot, given the sheet | **99.6%** | **87.0%** [83.6, 89.7] | **0.873** | 94.1% |
 | the reader, claim alone, 278M (2026-09-11) | 60.7% | 74.8% [69.5, 79.5] | 0.525 | 87.4% |
-| the reader, claim in review, 560M (2026-09-12) | 85.4% | 73.6% [69.1, 77.7] | 0.648 | 87.2% |
+| the same, claim in review, 278M | 74.5% | 72.6% [67.8, 77.0] | 0.578 | 85.1% |
+| the same again, 560M (2026-09-12) | 85.4% | 73.6% [69.1, 77.7] | 0.648 | 87.2% |
 
 It is not close, and the gap that closed is coverage rather than accuracy. The bigger backbone
 answers a quarter more of the claims at the same accuracy, which the intervals say is the same
