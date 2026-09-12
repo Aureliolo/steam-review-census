@@ -1709,7 +1709,7 @@ fn trust(out: &mut String, app: &AppReport) {
         // whether this corpus is hard or the taxonomy is short a row. Twice the usual rate
         // is the second, and it is a finding about the game.
         let against = match app.reading.declined_against_usual() {
-            Some(ratio) if ratio >= crate::read::UNUSUALLY_DECLINED => format!(
+            Some(ratio) if app.reading.declined_unusually() => format!(
                 ". That is {ratio:.1} times what it declines on a game it has never seen: this \
                  game's players talk about something the taxonomy has no row for"
             ),

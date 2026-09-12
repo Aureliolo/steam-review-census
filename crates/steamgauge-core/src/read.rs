@@ -352,20 +352,38 @@ impl ReadReport {
 
     /// How much more of this corpus the model declined than it usually does, as a ratio.
     ///
-    /// Above about 1.2 the corpus is talking about something the model was not trained to
-    /// find, and that is a finding about the game and the taxonomy rather than a detail of
-    /// the run. `None` when the model carries no usual figure to compare against.
+    /// `None` when the model carries no usual figure to compare against.
     #[must_use]
     pub fn declined_against_usual(&self) -> Option<f64> {
         let usual = f64::from(self.usual_declined?);
         let here = self.unclassified_share()?;
         (usual > 0.0).then(|| here / usual)
     }
+
+    /// Whether this corpus is declined enough above the usual rate to be a finding about the
+    /// game rather than a detail of the run.
+    ///
+    /// A ratio on its own stopped meaning what it meant. When the reader declined 45% of an
+    /// ordinary corpus, 1.2 times that was nine points more; against a reader that declines
+    /// 16%, the same ratio is three, which is the difference between one hard game and
+    /// another. So the gap has to be wide in points as well as in proportion.
+    #[must_use]
+    pub fn declined_unusually(&self) -> bool {
+        let (Some(ratio), Some(usual), Some(here)) = (
+            self.declined_against_usual(),
+            self.usual_declined,
+            self.unclassified_share(),
+        ) else {
+            return false;
+        };
+        ratio >= UNUSUALLY_DECLINED && here - f64::from(usual) >= UNUSUALLY_DECLINED_BY
+    }
 }
 
-/// Above this ratio to the usual decline rate, a corpus is about something the taxonomy
-/// lacks rather than merely hard to read.
+/// Above this ratio to the usual decline rate, and this many points above it, a corpus is
+/// about something the taxonomy lacks rather than merely hard to read.
 pub const UNUSUALLY_DECLINED: f64 = 1.2;
+pub const UNUSUALLY_DECLINED_BY: f64 = 0.05;
 
 impl ReadReport {
     /// Writes the counts beside the readings they were computed from.
@@ -1110,13 +1128,26 @@ mod tests {
             "90% against a usual 73% is {ratio}"
         );
 
+        assert!(found.declined_unusually(), "and seventeen points above it");
+
         found.unclassified_claims = 700;
         assert!(found.declined_against_usual().unwrap() < UNUSUALLY_DECLINED);
+
+        // A reader that declines little is above its usual rate by proportion long before the
+        // difference is worth telling anybody about: three points is one hard game, not a
+        // corpus about something the taxonomy cannot name.
+        found.usual_declined = Some(0.158);
+        found.unclassified_claims = 190;
+        assert!(found.declined_against_usual().unwrap() >= UNUSUALLY_DECLINED);
+        assert!(!found.declined_unusually(), "three points is not a finding");
+        found.unclassified_claims = 260;
+        assert!(found.declined_unusually(), "ten points is");
 
         // A reader exported before the figure existed cannot make the comparison, and says
         // nothing rather than comparing against zero.
         found.usual_declined = None;
         assert_eq!(found.declined_against_usual(), None);
+        assert!(!found.declined_unusually());
     }
 
     #[test]

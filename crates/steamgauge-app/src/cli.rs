@@ -1122,7 +1122,7 @@ fn read_one(
         );
     }
     if let Some(ratio) = report.declined_against_usual()
-        && ratio >= steamgauge_core::read::UNUSUALLY_DECLINED
+        && report.declined_unusually()
     {
         println!(
             "             {ratio:.1}x what this model declines on a game it has not seen. This \
