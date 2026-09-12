@@ -911,29 +911,34 @@ pub fn ingest(dir: &Path, from: &Path, sheet: &Sheet) -> Result<(Vec<ClaimLabel>
     Ok((labels, report))
 }
 
-/// Writes every labelled claim, with its text, as JSONL for training.
+/// A label joined back to the text it was written about.
 ///
-/// The text is joined here from the drawn sample rather than re-sliced from the capture, so
-/// the model is trained on exactly the characters the labeller read. The file it writes holds
-/// review text and never leaves the machine: what gets published is the label set, which
-/// carries ids and offsets and no text at all.
+/// The text is joined from the drawn sample rather than re-sliced from the capture, so
+/// whatever reads it sees exactly the characters the labeller read. Holds review text, so it
+/// never leaves the machine.
+#[derive(Debug, Clone)]
+pub struct LabelledClaim {
+    pub label: ClaimLabel,
+    pub text: String,
+    /// The review as the labeller was shown it, and where the claim starts in it. A labeller
+    /// reads "it doesn't" with the sentence before it; a model given the claim alone is being
+    /// asked a question nobody could answer, and the gap between what the two saw is
+    /// measurable error attributed to the model.
+    pub review: String,
+    pub review_offset: usize,
+}
+
+/// Every labelled claim under a reference root, with its text, in a fixed order.
+///
+/// A game's directory holds its random draw, and beside it the teaching draws named in
+/// [`TEACHING_SETS`]. Named rather than "every subdirectory holding labels": `second/` holds a
+/// second labeller's answers to claims the set already has, and sweeping those in would give
+/// the same claim twice, on both answers wherever the two labellers disagreed.
 ///
 /// # Errors
 ///
-/// Fails if a reference set cannot be read or the destination cannot be written.
-pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
-    use std::io::Write as _;
-
-    if let Some(parent) = to.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut out = std::io::BufWriter::new(std::fs::File::create(to)?);
-    let mut written = 0;
-
-    // A game's directory holds its random draw, and beside it the teaching draws named here.
-    // Named rather than "every subdirectory holding labels": `second/` holds a second
-    // labeller's answers to claims the set already has, and sweeping those in would train the
-    // model on the same claim twice, on both answers wherever the two labellers disagreed.
+/// Fails if a reference set cannot be read.
+pub fn labelled_claims(reference_root: &Path) -> Result<Vec<LabelledClaim>> {
     let mut sets: Vec<std::path::PathBuf> = std::fs::read_dir(reference_root)
         .into_iter()
         .flatten()
@@ -948,6 +953,7 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
         .collect();
     sets.sort();
 
+    let mut found = Vec::new();
     for set in sets {
         let labels: Vec<ClaimLabel> =
             serde_json::from_slice(&std::fs::read(set.join("labels.json"))?)?;
@@ -959,10 +965,6 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
         // and centre the window on the wrong half of the review.
         let mut text: std::collections::HashMap<(&str, u16), (&str, usize)> =
             std::collections::HashMap::new();
-        // The review around each claim, rebuilt exactly as the labeller was shown it. A
-        // labeller reads "it doesn't" with the sentence before it; a model given the claim
-        // alone is being asked a question nobody could answer, and the gap between what the
-        // two saw is measurable error attributed to the model.
         let mut around: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
         for review in &drawn {
             let mut at = 0;
@@ -973,30 +975,62 @@ pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
             around.insert(review.id.as_str(), rejoined(review));
         }
 
-        for label in &labels {
+        for label in labels {
             let Some(&(claim, at)) = text.get(&(label.review_id.as_str(), label.index)) else {
                 continue;
             };
-            let row = serde_json::json!({
-                "text": claim,
-                "review": around.get(label.review_id.as_str()),
-                "review_offset": at,
-                "subject": label.subject,
-                "polarity": label.polarity,
-                "confidence": label.confidence,
-                "ambiguous": label.ambiguous,
-                "ironic": label.ironic,
-                "split_wrong": label.split_wrong,
-                "produced_by": label.produced_by,
-                "language": label.language,
-                "app_id": label.app_id,
-                "review_id": label.review_id,
-                "claim_index": label.index,
-                "subset": label.subset,
+            found.push(LabelledClaim {
+                text: claim.to_owned(),
+                review: around
+                    .get(label.review_id.as_str())
+                    .cloned()
+                    .unwrap_or_default(),
+                review_offset: at,
+                label,
             });
-            writeln!(out, "{row}")?;
-            written += 1;
         }
+    }
+    Ok(found)
+}
+
+/// Writes every labelled claim, with its text, as JSONL for training.
+///
+/// The file it writes holds review text and never leaves the machine: what gets published is
+/// the label set, which carries ids and offsets and no text at all.
+///
+/// # Errors
+///
+/// Fails if a reference set cannot be read or the destination cannot be written.
+pub fn export_training(reference_root: &Path, to: &Path) -> Result<usize> {
+    use std::io::Write as _;
+
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut out = std::io::BufWriter::new(std::fs::File::create(to)?);
+    let mut written = 0;
+
+    for claim in labelled_claims(reference_root)? {
+        let label = &claim.label;
+        let row = serde_json::json!({
+            "text": claim.text,
+            "review": claim.review,
+            "review_offset": claim.review_offset,
+            "subject": label.subject,
+            "polarity": label.polarity,
+            "confidence": label.confidence,
+            "ambiguous": label.ambiguous,
+            "ironic": label.ironic,
+            "split_wrong": label.split_wrong,
+            "produced_by": label.produced_by,
+            "language": label.language,
+            "app_id": label.app_id,
+            "review_id": label.review_id,
+            "claim_index": label.index,
+            "subset": label.subset,
+        });
+        writeln!(out, "{row}")?;
+        written += 1;
     }
     out.flush()?;
     Ok(written)
