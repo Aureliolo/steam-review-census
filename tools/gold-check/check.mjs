@@ -8,82 +8,15 @@
 //   steamgauge gold --to gold.html
 //   node tools/gold-check/check.mjs gold.html
 //
-// Chrome is found through CHROME_PATH, or in the usual places on each platform.
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+// `served.mjs` is the other half: this one asserts the page fetches nothing and keeps its own
+// answers, which is what a file on disk has to do; that one asserts every answer reaches the
+// server, which is what `--serve` promises and is how the page is meant to be run.
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { connect, debuggerUrl, open, sleep } from "./chrome.mjs";
+
 const PORT = 9334;
-
-const CANDIDATES = [
-  process.env.CHROME_PATH,
-  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-  "/usr/bin/google-chrome",
-  "/usr/bin/google-chrome-stable",
-  "/usr/bin/chromium",
-  "/usr/bin/chromium-browser",
-  "/snap/bin/chromium",
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-];
-
-function browser() {
-  const found = CANDIDATES.filter(Boolean).find((path) => existsSync(path));
-  if (!found) throw new Error("no Chrome found. Set CHROME_PATH.");
-  return found;
-}
-
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-
-async function debuggerUrl() {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    try {
-      const list = await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json());
-      const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-      if (page) return page.webSocketDebuggerUrl;
-    } catch {
-      // Chrome has not opened the port yet, which is the usual case for the first second.
-    }
-    await sleep(250);
-  }
-  throw new Error("headless Chrome never opened a debugging port");
-}
-
-async function connect(url) {
-  const socket = new WebSocket(url);
-  await new Promise((ok, bad) => {
-    socket.addEventListener("open", ok, { once: true });
-    socket.addEventListener("error", bad, { once: true });
-  });
-  let id = 0;
-  const waiting = new Map();
-  const asked = [];
-  socket.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (message.method === "Network.requestWillBeSent") asked.push(message.params.request.url);
-    const settle = waiting.get(message.id);
-    if (settle) {
-      waiting.delete(message.id);
-      settle(message);
-    }
-  });
-  const send = (method, params) =>
-    new Promise((ok) => {
-      id += 1;
-      waiting.set(id, ok);
-      socket.send(JSON.stringify({ id, method, params }));
-    });
-  return {
-    socket,
-    send,
-    asked,
-    evaluate: (expression) =>
-      send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }),
-  };
-}
 
 // Runs inside the page. Returns a list of failures, so one run reports everything wrong.
 const PROBE = `(function () {
@@ -298,32 +231,15 @@ const NARROW = `(function () {
 
 const file = resolve(process.argv[2] ?? "gold.html");
 const page = pathToFileURL(file).href;
-const profile = await mkdtemp(join(tmpdir(), "steamgauge-gold-check-"));
 
-const chrome = spawn(
-  browser(),
-  [
-    "--headless=new",
-    `--remote-debugging-port=${PORT}`,
-    `--user-data-dir=${profile}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-gpu",
-    page,
-  ],
-  { stdio: "ignore" },
-);
+const chrome = await open(page, PORT);
 
 let failed = true;
 try {
-  const { socket, send, asked, evaluate } = await connect(await debuggerUrl());
+  const { socket, send, asked, evaluate, ready } = await connect(await debuggerUrl(PORT));
   await send("Network.enable", {});
   await send("Page.reload", { ignoreCache: true });
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
-    if (ready.result?.result?.value === true) break;
-    await sleep(250);
-  }
+  await ready();
 
   const fetched = asked.filter((url) => url !== page);
 
@@ -331,11 +247,7 @@ try {
   // question is on screen and the marks have to be checked against all of them.
   const marks = (await evaluate(MARKS)).result?.result?.value ?? ["the marks could not be read"];
   await send("Page.reload", { ignoreCache: true });
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
-    if (ready.result?.result?.value === true) break;
-    await sleep(250);
-  }
+  await ready();
 
   const answer = await evaluate(PROBE);
   const wrong = [
@@ -346,20 +258,12 @@ try {
   // Reloading is what a reader does after closing the tab, and it is the whole reason the
   // answers are kept at all.
   await send("Page.reload", { ignoreCache: true });
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
-    if (ready.result?.result?.value === true) break;
-    await sleep(250);
-  }
+  await ready();
   const again = (await evaluate(RELOADED)).result?.result?.value ?? [];
 
   const saved = (await evaluate(EMPTIED)).result?.result?.value ?? null;
   await send("Page.reload", { ignoreCache: true });
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    const ready = await evaluate("document.readyState === 'complete' && !!document.querySelector('button.pick')");
-    if (ready.result?.result?.value === true) break;
-    await sleep(250);
-  }
+  await ready();
   const restored = saved
     ? ((await evaluate(restoring(saved))).result?.result?.value ?? [
         "loading answers back could not be driven",
@@ -386,11 +290,7 @@ try {
   }
   socket.close();
 } finally {
-  chrome.kill();
-  // Chrome holds its profile open for a moment after the signal, and on Windows unlinking a
-  // file it still has is an error rather than a wait.
-  await new Promise((done) => chrome.once("exit", done));
-  await rm(profile, { recursive: true, force: true }).catch(() => {});
+  await chrome.close();
 }
 
 process.exit(failed ? 1 : 0);

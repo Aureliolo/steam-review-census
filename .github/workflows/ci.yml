@@ -72,3 +72,7 @@ jobs:
       # after somebody had read a thousand claims, which is exactly too late.
       - run: cargo run -p steamgauge-core --example sample-gold -- gold.html
       - run: node tools/gold-check/check.mjs gold.html
+      # And again as it is actually run. A POST that silently does nothing looks exactly like
+      # one that worked, so the promise that every answer is on disk before the next question
+      # is drawn is the one worth a browser to check.
+      - run: node tools/gold-check/served.mjs gold.html
