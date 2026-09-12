@@ -539,6 +539,22 @@ the winner, from a different family, on the same labels and the same schedule, a
 **ten points fewer claims**. Twice the parameters is not the finding; this backbone is, and a
 future candidate has to be tried rather than assumed from its parameter count.
 
+Four 560M encoders at 3e-5 say what the size is worth and what the adaptation is, because three
+of these four are `xlm-roberta-large` underneath:
+
+| 560M encoder, five epochs at 3e-5 | answers at 75% | macro F1 |
+|---|---|---|
+| `multilingual-e5-large` (three seeds) | **86.7%, 86.5%, 84.7%** | 0.659 to 0.673 |
+| `multilingual-e5-large-instruct` | 83.2% | 0.671 |
+| `xlm-roberta-large`, unadapted | 78.0% | 0.601 |
+| `bge-m3` | 75.0% | 0.650 |
+
+The architecture is worth 78%. Adapting it for retrieval the way e5 did is worth another six to
+nine points on top; adapting it the way `bge-m3` did costs three. The instruct variant of the
+winner lands inside the winner's own seed spread and buys nothing. So the thing to carry forward
+is not "use a 560M encoder" and not "use XLM-R large": it is that what an encoder was adapted
+for decides this, and the only way to know is to train it for eleven minutes and look.
+
 Three runs of the winner land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline
 seeds land 4.3 apart, and every rate tried on the big model beats every configuration of the
 small one. So this is the backbone and not a lucky run. What
