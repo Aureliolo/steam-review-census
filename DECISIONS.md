@@ -395,8 +395,8 @@ that will do it, not a proxy for it.
 
 ## Most of a sweep is the seed
 
-Twenty-five configurations were trained on one set of labels overnight on 2026-09-11, every one
-of them on the validation games only. Ranking them and taking the top row is how a sweep is
+Forty configurations were trained on one set of labels overnight on 2026-09-11, every one of
+them scored on the validation games only. Ranking them and taking the top row is how a sweep is
 usually read, and here it would be wrong almost every time.
 
 Train one configuration twice, changing nothing but the seed, and it lands **0.5 to 4.3 points
@@ -444,11 +444,15 @@ epochs is the fallback that keeps the calibration and gives up six points of cov
 `training/sweep.py` prints that table and that spread from the run records, and it is the first
 thing to run before calling any configuration a winner.
 
-Two things the sweep cannot say. The first is whether the higher rate's worse calibration
-survives: the expected calibration error climbs from 0.066 at 1e-5 to 0.203 at 5e-5, and
-calibration is exactly what makes a threshold chosen on the validation games hold on the frozen
-ones. That has failed before and it is checked on the frozen games before the model ships. The
-second is anything about the frozen games at all, because no sweep run ever reads them.
+The sweep cannot say anything about the frozen games, because no sweep run ever reads them, so
+the one question it left open was whether the worse calibration would cost the transfer: the
+expected calibration error climbs from 0.066 at 1e-5 to 0.203 at 5e-5, and calibration is
+exactly what makes a threshold chosen on the validation games hold on the frozen ones. That has
+failed before. **It did not fail here.** Trained again with the frozen games evaluated, the
+chosen configuration promised 75.0% and delivered 76.3% on them, and the small model at 5e-5
+promised 75.0% and delivered 75.1%. Worse calibration inside the validation games turned out to
+be compatible with a threshold that carries; it is still the thing to check, not the thing to
+assume.
 
 ## What it has to beat
 
