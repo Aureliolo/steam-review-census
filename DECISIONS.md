@@ -823,11 +823,20 @@ wrote, every label names the splitter and taxonomy it was made under, two labell
 tenth of it blind and agree at kappa 0.85, and the test games are fixed by hash and chose
 nothing. Two are missing, and no amount of further labelling closes either.
 
-1. **Human-adjudicated labels.** Everything so far is a model agreeing with a model, which the
-   README says plainly and which no citation can rest on. The user adjudicates: a random
-   thousand from the frozen games, labelled blind, for an accuracy figure that means what it
-   says; then the claims the two labellers split on, shown both answers, to settle the
-   boundaries. After `core-6`, never before.
+1. **Human-adjudicated labels. Confirmed 2026-09-12: the user is doing this.** Everything so
+   far is a model agreeing with a model, which the README says plainly and which no citation
+   can rest on. The user adjudicates: a random thousand from the frozen games, labelled blind,
+   for an accuracy figure that means what it says; then the claims the two labellers split on,
+   shown both answers, to settle the boundaries. After `core-6`, never before.
+
+   A useful thing to know before it starts: partial answers are worth something, so stopping
+   early is not wasted work. Prediction-powered inference takes a small human-labelled sample
+   and a large model-labelled one and returns an interval on the human-truth figure that is
+   valid however wrong the model is, and tighter than the human sample alone would give
+   ([arXiv:2301.09633](https://arxiv.org/abs/2301.09633)). The human sample here is the
+   adjudicated claims and the model-labelled one is the 20,982 already written, so every
+   answered question narrows the interval from the first one onward, and there is no threshold
+   below which the exercise has produced nothing.
 
    **The tool exists as of 2026-09-11.** `steamgauge gold` writes one self-contained page that
    fetches nothing and sends nothing, holding 1,000 blind claims from the eight frozen games
@@ -871,8 +880,20 @@ Then, in order:
    and no prevalence figure counts one, the draw refuses any game the model does not already
    train on, and a review already in that game's random set is never drawn twice. It waits on a
    reading made by the current splitter, which the finalise pass produces.
-6. **Publishing**, which is the user's decision and not near.
-7. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
+6. **Mine the twenty million unread claims for the starved rows. Settled 2026-09-12: this
+   happens.** Item 4 chooses whole games in the hope that they hold `vr` and `licensing`
+   claims; this goes straight at the claims themselves. Embed a slice of the corpus with the
+   reader already shipped, retrieve nearest neighbours of the tail claims already labelled plus
+   a handful of written probes for each starved row ("Denuvo", "region locked", "requires a
+   separate launcher account"), and send what comes back to the labeller. Retrieval-based
+   selection for class-imbalanced data is the published form of this
+   ([arXiv:2307.14899](https://arxiv.org/pdf/2307.14899)), and the argument for it is
+   arithmetic: reweighting redistributes a gradient that 32 `licensing` claims do not contain,
+   which is why every weighting scheme tried here made macro F1 worse. Rows drawn this way are
+   not a random sample and no prevalence figure may count them, exactly as with the declined
+   draw.
+7. **Publishing**, which is the user's decision and not near.
+8. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.
 
 Built since this list was first written: the report page on readings, the polarity split,
