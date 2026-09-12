@@ -1051,6 +1051,9 @@ fn run_read(
     // small corpus, so doing it per game would be most of the time for a list of them.
     let mut model = steamgauge_core::reader::ClaimReader::load(model_dir)?;
     eprintln!("model        {} on {}", model_dir.display(), model.device());
+    if !model.provenance().run_id.is_empty() {
+        eprintln!("run          {}", model.provenance().run_id);
+    }
     eprintln!("threshold    {:.2}", model.provenance().threshold);
     if options.depth != steamgauge_core::read::Depth::Deep {
         eprintln!(

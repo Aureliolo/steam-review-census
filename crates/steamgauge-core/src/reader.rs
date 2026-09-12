@@ -88,6 +88,10 @@ pub struct Provenance {
     pub trained_from: String,
     #[serde(default)]
     pub data_fingerprint: String,
+    /// The training run this reader came out of. Every candidate of one generation shares a
+    /// backbone and a label set, so this is the only thing that tells two of them apart.
+    #[serde(default)]
+    pub run_id: String,
     /// The share of claims this model declined on games it never saw. A corpus declined at
     /// far above this is a corpus about something the taxonomy lacks, and the only way a
     /// reader of one game's report can know that is if the reader carries the comparison.

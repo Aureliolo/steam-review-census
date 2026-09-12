@@ -2144,6 +2144,7 @@ mod tests {
                     spine_version: crate::CORE_SPINE_VERSION.to_owned(),
                     model: "test-reader".to_owned(),
                     trained_on: "0123456789abcdef".to_owned(),
+                    read_with: "wave9".to_owned(),
                     usual_declined: Some(0.1),
                     frozen: Some(crate::reader::Frozen {
                         games: 8,

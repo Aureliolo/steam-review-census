@@ -752,6 +752,7 @@ mod tests {
                 top_helpful,
                 model: "test".to_owned(),
                 trained_on: String::new(),
+                read_with: String::new(),
                 usual_declined: None,
                 frozen: None,
                 context: false,

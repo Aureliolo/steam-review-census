@@ -286,6 +286,11 @@ pub struct ReadReport {
     /// that recorded only the backbone could not say which it was.
     #[serde(default)]
     pub trained_on: String,
+    /// Which training run produced the reader. The backbone and the labels are shared by every
+    /// candidate of one generation, so without this a library read with a new model skips every
+    /// game the old one read and the corpus quietly holds two models' answers.
+    #[serde(default)]
+    pub read_with: String,
     /// What this model usually declines, on games it never saw, so this corpus's share can be
     /// read against something.
     #[serde(default)]
@@ -435,6 +440,7 @@ pub fn read_corpus(
         threshold: model.provenance().threshold,
         model: model.provenance().trained_from.clone(),
         trained_on: model.provenance().data_fingerprint.clone(),
+        read_with: model.provenance().run_id.clone(),
         usual_declined: model.provenance().usual_declined,
         frozen: model.provenance().frozen,
         context,
@@ -913,6 +919,7 @@ impl Counting {
             top_helpful: top_reviews.len() as u64,
             model: String::new(),
             trained_on: String::new(),
+            read_with: String::new(),
             usual_declined: None,
             frozen: None,
             context: false,
@@ -1250,6 +1257,7 @@ mod tests {
             top_helpful: 10,
             model: String::new(),
             trained_on: String::new(),
+            read_with: String::new(),
             usual_declined: Some(0.73),
             frozen: None,
             context: false,

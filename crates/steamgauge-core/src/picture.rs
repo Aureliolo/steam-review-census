@@ -217,6 +217,7 @@ mod tests {
             top_helpful: 50,
             model: String::new(),
             trained_on: String::new(),
+            read_with: String::new(),
             usual_declined: None,
             frozen: None,
             context: false,

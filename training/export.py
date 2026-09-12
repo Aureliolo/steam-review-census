@@ -281,6 +281,7 @@ def main():
                 "prefix": record.get("prefix", False),
                 "trained_from": record["backbone"],
                 "data_fingerprint": record["data_fingerprint"],
+                "run_id": run.name,
                 "usual_declined": usual_declined,
                 # What this model did on games it never saw, carried so that a report of a
                 # game with no reference set can still say what its rates are worth. Without

@@ -109,6 +109,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             top_helpful: 50,
             model: "Alibaba-NLP/gte-multilingual-base".to_owned(),
             trained_on: "0123456789abcdef".to_owned(),
+            read_with: "wave9".to_owned(),
             usual_declined: Some(0.53),
             frozen: Some(steamgauge_core::reader::Frozen {
                 games: 8,
