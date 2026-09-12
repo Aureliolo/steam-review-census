@@ -533,6 +533,14 @@ a day of work going quietly wrong.
 | `check-draws` | does a handout still name the claims this build cuts, before a labelling run is spent on it? |
 | `stale-splits` | how much of what labellers called a bad split does this build still split that way? |
 
+Three more on the Python side, run against a model directory rather than a capture:
+
+| | asks |
+|---|---|
+| `training/sweep.py` | which configuration won, and is the gap bigger than the seed spread? |
+| `training/confidence.py` | what should confidence be scored by, and where does the line go, subject by subject? |
+| `training/confusion.py` | what does the reader mistake for what, and is a weak subject starved or badly bounded? |
+
 ## Most of a sweep is the seed
 
 Forty configurations were trained on one set of labels overnight on 2026-09-11, every one of
@@ -657,7 +665,8 @@ would be losing two or three. The incumbent stands.
 42M trunk had landed within two points of a 110M one, the ceiling would be the labels and
 backbone shopping would be the wrong thing to be doing. It landed **eleven points** below. So
 capacity is still binding at this data size, which is a thing worth knowing before anyone
-concludes that 20,982 labels are the limit: they are not the limit yet.
+concludes that the 18,907 labels in the current training export are the limit: they are not the
+limit yet.
 
 Three runs of the winner land 2.1 points apart, 82.8% to 84.9%, where the small model's baseline
 seeds land 4.3 apart, and every rate tried on the big model beats every configuration of the
@@ -783,6 +792,65 @@ share a pooled one. That is the clustered form of the standard Mondrian construc
 applies one threshold. Changing that is a change to the exported artefact and to `read.rs`, and
 it wants the frozen games to confirm it first, not four validation games with intervals five
 points wide. What is settled is that the current rule is wrong, and how.
+
+### The two worst subjects are two bad boundaries, and the labellers disagree first
+
+The table above named `story` at 0.35 and `genre` at 0.53 as the subjects the shipped threshold
+should not be answering. The obvious reading is that the reader has not learned them and needs
+more labels or more parameters. `training/confusion.py` was written to test that, because the
+direction of a confusion says which cure applies: scattered across many subjects means a
+starved row, concentrated on one other means a boundary the sheet has not drawn. Both of these
+are concentrated, and then the labels were checked without the model in the way at all.
+
+**`story` is over-predicted two to one, and it takes it from `gameplay`.** 54 claims are
+labelled `story` in the validation games; the reader says `story` 111 times, precision 0.32. Of
+its 76 mistakes, 37 were labelled `gameplay`, 14 `content` and 8 `atmosphere`. Its most
+confident mistakes are claims that contain the word "story" and are about something else: the
+main story being short is `content`, going down a predetermined path is `gameplay`, a game
+managing without a story is `gameplay`. **The reader is keying on the word rather than on what
+the claim is about.**
+
+Then the same question, asked of the labellers alone. Of the 18,907 training labels, 624
+contain a story word, and 35 of those also say something about length. Those 35 were labelled:
+
+| where "how long is the story" went | claims |
+|---|---|
+| `content` | 7 |
+| `story` | 5 |
+| `gameplay` | 4 |
+| `difficulty` | 4 |
+| `verdict` | 3 |
+
+Five subjects for one question, and no majority. The sheet has a rule for this and it lives in
+the wrong entry: `gameplay` says "How much game there is belongs to content", and the `story`
+entry says nothing about amount at all. A rule stated under one category is a rule labellers
+apply when they are reading that category's paragraph and not otherwise.
+
+**`genre` is over-predicted too, and here the sheet states the rule and the labels ignore it.**
+432 training claims name a kind of game. The sheet is explicit: a judgement with only the kind
+of game attached, "excellent city builder", is a `verdict`, and `genre` is for when what kind of
+game it is, or which it resembles, is the point. Of the 152 claims that name a kind *and* carry
+a judgement word, labellers wrote `genre` 57 times and `verdict` 33. Nearly two to one against
+the rule. The reader learns the labels, not the sheet, so it over-predicts `genre` (170 said
+against 127 true) and `verdict` loses 49 claims to it, the largest single confusion anywhere in
+the matrix.
+
+**So the cure for the reader's two worst subjects is not more labels and not more parameters.**
+It is two sheet edits and a relabelling of the claims they touch, and neither edit is a new
+category:
+
+1. The `story` boundary gains the amount rule it is missing: how much story there is belongs to
+   `content`, the same way how much game there is already does. `story` is what the narrative is
+   and whether it is worth following.
+2. The `genre` boundary gains the counter-example the rule needs, because stating the principle
+   was not enough: "a great roguelike" is `verdict`, "it is a roguelike" is `genre`, and the
+   test is whether removing the judgement leaves a claim that still says something.
+
+Both are clarifications rather than new meanings, but both change which claims belong where at
+the margin, so they wait for the labeller and are done as one pass with the relabelling rather
+than piecemeal. Queued behind the revisit draw. This is also the sharpest argument yet for the
+human adjudication the user has taken on: the two boundaries it will settle are already known
+by name.
 
 ### Things tried that bought nothing, so nobody tries them again
 
@@ -942,7 +1010,7 @@ nothing. Two are missing, and no amount of further labelling closes either.
    and a large model-labelled one and returns an interval on the human-truth figure that is
    valid however wrong the model is, and tighter than the human sample alone would give
    ([arXiv:2301.09633](https://arxiv.org/abs/2301.09633)). The human sample here is the
-   adjudicated claims and the model-labelled one is the 20,982 already written, so every
+   adjudicated claims and the model-labelled one is every claim label already written, so each
    answered question narrows the interval from the first one onward, and there is no threshold
    below which the exercise has produced nothing.
 
