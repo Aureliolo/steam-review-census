@@ -404,31 +404,38 @@ once per review takes the same game from 39 seconds to 29, with the readings byt
 identical. The second pass, which counts reviews with the card idle, is still about a fifth of
 each game and is the next thing worth taking.
 
-## The tool was reading long reviews from the top, and nothing looked wrong
+## The tool was reading a window of nothing, and every answer looked plausible
 
 Found 2026-09-12, an hour after the context model shipped. Training said the reader answered
 84.2% of the frozen claims at 76.3%. The tool, running the same graph over the same games,
-agreed on **68.4%**. Same model, same threshold, same claims, eight points apart.
+agreed on **68.4%**. Same model, same threshold, same claims, eight points apart, and on the
+worst game nineteen.
 
-It was not the half-precision graph, and it was not the splitter moving under the labels. The
-reader configures its tokenizer to truncate at the token budget, because that is what encoding
-a pair needs. It then used **that same tokenizer** to find where a claim sits inside its
-review, and got back the offsets of the first 128 tokens only. For any review longer than that,
-the claim is not among the offsets, the search for it falls back to position zero, and the
-window becomes the opening of the review: precisely the head truncation that centring exists to
-undo, on precisely the long reviews where centring is worth anything. Every answer still looked
-plausible, every confidence was in the usual range, and the coverage figure was right to within
-a point.
+Neither the half-precision graph nor the splitter moving under the labels. **A tokenizer file
+saved by a trainer carries that trainer's padding and truncation inside it**, and this one was
+saved from a run that padded every sequence to 128 tokens. The reader loaded it, and used it
+both to encode the pair, which wants padding and truncation, and to find where a claim sits
+inside its review, which wants neither. A 144-character review came back as 128 offsets, the
+last ninety of them padding at `(0, 0)`. The claim was then looked for among offsets that
+describe nothing: for the first claim of a review the window closed to the empty string, and
+for later claims it opened past where it closed and fell back to the whole review. Both are
+still strings. Every answer was in the usual confidence range, the coverage figure was right to
+within a point, and nothing anywhere logged a warning.
 
-The reader now keeps a second tokenizer that cuts nothing, for offsets alone. Scored through
-Python's windowing, which never truncated, the same graph gives 84.1% at 76.2% over all 3,769
-frozen claims, which is training's figure to a tenth of a point; that is what the tool has to
-reproduce, and it is the measurement that caught this.
+The reader now keeps a second tokenizer with padding and truncation turned off, for offsets
+alone. On the same claims, through the same graph, Rust now agrees 77.0% where Python agrees
+76.8%.
 
-Two things worth keeping from it. A component set up for one job and reused for another is
-where this class of bug lives, and the setting that bit was three lines away from the code that
-suffered. And the only reason it was found at all is that two independent implementations of
-the same measurement existed and were compared: the tool's figure was plausible on its own.
+Three things worth keeping. A component configured for one job and reused for another is where
+this class of bug lives, and the configuration that bit was three lines above the code that
+suffered. The same mistake had already been found and fixed once on the Python side, and the
+Rust side was never checked for it. And it was caught only because two independent
+implementations of the same measurement existed to disagree:
+`cargo run --release -p steamgauge-core --example score-export` scores the reader over the
+exported claims, `training/frontier.py reader` scores the same graph through the trainer's own
+windowing, and `steamgauge measure-claims` scores what the tool wrote over a corpus it split
+itself. Any two of those disagreeing by more than a point is a bug, and each removes one
+suspect: the tool's own figure was perfectly plausible on its own.
 
 ## Most of a sweep is the seed
 
