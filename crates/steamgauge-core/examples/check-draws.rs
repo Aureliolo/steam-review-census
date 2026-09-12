@@ -7,10 +7,11 @@
 //! longer cuts is a labelling run whose answers cannot be scored, and the quota it costs is the
 //! scarcest thing in this project.
 //!
-//! So before spending one, ask. The spans are in each game's `sample.json`, which is committed,
-//! and they are ranges into the review as captured, so they are checked against the capture. A
-//! game with no capture on this machine falls back to the copy of the text in `batches/`, which
-//! is the claims rejoined rather than the review as written, and reads as a claim that moved.
+//! So before spending one, ask. The spans are in each game's `sample.json`, which stays on the
+//! machine that drew it, and they are ranges into the review as captured, so they are checked
+//! against the capture. A game with no capture here falls back to the copy of the text in
+//! `batches/`, which is the claims rejoined rather than the review as written, and every
+//! markup-heavy review then reads as a claim that moved.
 //!
 //!     cargo run --release -p steamgauge-core --example check-draws -- reference/claims data
 
@@ -22,10 +23,16 @@ use steamgauge_core::read::Depth;
 struct Drawn {
     id: String,
     claims: Vec<Span>,
+    /// Which of the review's claims this draw actually asks about. A revisit hands a labeller
+    /// the whole review and a question about two claims of it, and the rest are along for the
+    /// context; counting them would say a draw is at risk when nothing at risk is being asked.
+    #[serde(default)]
+    asked: Option<Vec<u16>>,
 }
 
 #[derive(serde::Deserialize)]
 struct Span {
+    index: u16,
     start: usize,
     end: usize,
     text: String,
@@ -43,10 +50,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "reference/claims".to_owned());
     let library =
         std::path::PathBuf::from(std::env::args().nth(2).unwrap_or_else(|| "data".to_owned()));
-    let mut games: Vec<std::path::PathBuf> = std::fs::read_dir(&root)?
-        .filter_map(|entry| entry.ok().map(|found| found.path()))
-        .filter(|path| path.is_dir())
-        .collect();
+    // A game holds its random draw, and beneath it whatever subsets have been drawn since:
+    // the second reading, the claims the reader declined. Each is a handout somebody will be
+    // asked to label, so each is checked.
+    let mut games: Vec<std::path::PathBuf> = Vec::new();
+    for game in std::fs::read_dir(&root)?.filter_map(|entry| entry.ok().map(|found| found.path())) {
+        if !game.is_dir() {
+            continue;
+        }
+        for subset in std::fs::read_dir(&game)?.filter_map(|entry| entry.ok().map(|e| e.path())) {
+            if subset.is_dir() && subset.join("sample.json").is_file() {
+                games.push(subset);
+            }
+        }
+        games.push(game);
+    }
     games.sort();
 
     let mut total = 0_usize;
@@ -84,6 +102,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // the tidying having changed.
             let spans = Depth::Deep.spans_of(text);
             for claim in &review.claims {
+                if review
+                    .asked
+                    .as_ref()
+                    .is_some_and(|asked| !asked.contains(&claim.index))
+                {
+                    continue;
+                }
                 held += 1;
                 if !spans
                     .iter()
@@ -99,8 +124,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stale += moved;
         retidied += tidied;
         unread += missing;
-        let name = game.file_name().unwrap_or_default().to_string_lossy();
         if moved > 0 {
+            let subset = game.file_name().unwrap_or_default().to_string_lossy();
+            let name = match app_of(&game) {
+                Some(app) if subset != app.to_string() => format!("{app} {subset}"),
+                Some(app) => app.to_string(),
+                None => subset.into_owned(),
+            };
             println!("{name}: {moved} of {held} claims are not what this build cuts there");
         }
     }
@@ -115,13 +145,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Which game a draw belongs to, whether it is the game's own or a subset beneath it.
+fn app_of(dir: &std::path::Path) -> Option<u32> {
+    let named = |path: &std::path::Path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.parse::<u32>().ok())
+    };
+    named(dir).or_else(|| dir.parent().and_then(named))
+}
+
 /// The reviews a draw names, as the capture holds them.
 fn captured(
     library: &std::path::Path,
     game: &std::path::Path,
     wanted: &std::collections::HashSet<&str>,
 ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let app_id = game.file_name().unwrap_or_default().to_string_lossy();
+    let app_id = app_of(game).ok_or("no app id in the path of this draw")?;
     let mut snapshots: Vec<std::path::PathBuf> =
         std::fs::read_dir(library.join(format!("appid={app_id}")))?
             .filter_map(|entry| entry.ok().map(|found| found.path()))
