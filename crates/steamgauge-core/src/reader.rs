@@ -193,6 +193,8 @@ pub async fn ensure(
 pub struct ClaimReader {
     session: Session,
     tokenizer: Tokenizer,
+    /// The same tokenizer with nothing cut off, for reading a whole review's offsets.
+    whole: Tokenizer,
     provenance: Provenance,
     order: Vec<usize>,
     device: &'static str,
@@ -256,6 +258,13 @@ impl ClaimReader {
         let (session, device) = crate::model::session_at(&dir.join("model.onnx"))?;
         let mut tokenizer = Tokenizer::from_file(dir.join("tokenizer.json"))
             .map_err(|e| Error::Tokenizer(e.to_string()))?;
+        // Finding where a claim sits in its review means tokenising the whole review, and a
+        // tokenizer set to truncate hands back the first `max_tokens` of it. Every offset past
+        // that goes missing, the claim is not found among them, and the window falls back to
+        // the opening of the review: exactly the head truncation the centring exists to avoid,
+        // on exactly the long reviews where it matters. So the offsets come from a tokenizer
+        // that cuts nothing, and the pair is encoded by one that cuts to the budget.
+        let whole = tokenizer.clone();
         tokenizer.with_padding(Some(PaddingParams {
             strategy: PaddingStrategy::BatchLongest,
             ..PaddingParams::default()
@@ -270,6 +279,7 @@ impl ClaimReader {
         Ok(Self {
             session,
             tokenizer,
+            whole,
             provenance,
             order,
             device,
@@ -358,7 +368,7 @@ impl ClaimReader {
         for (at, &owner) in owners.iter().enumerate() {
             if owner == at {
                 offsets[at] = self
-                    .tokenizer
+                    .whole
                     .encode(asked[at].review, false)
                     .map(|encoded| encoded.get_offsets().to_vec())
                     .unwrap_or_default();
@@ -481,6 +491,21 @@ fn softmax_best(logits: &[f32]) -> (usize, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_claim_past_the_offsets_given_would_be_read_at_the_head_of_its_review() {
+        // Not a behaviour to rely on: a warning about where the offsets have to come from. A
+        // tokenizer set to truncate hands back the first `max_tokens` of a review, the claim
+        // is not among them, and this quietly returns the opening of the review instead of the
+        // window around the claim. Every answer still looks plausible. The reader keeps a
+        // second tokenizer that cuts nothing for exactly this reason.
+        let offsets: Vec<(usize, usize)> =
+            (0..10).map(|token| (token * 5, token * 5 + 4)).collect();
+        let (opens, closes) = centred(&offsets, 500, 10, 128);
+
+        assert_eq!(opens, 0, "a claim nobody can find is read from the start");
+        assert_eq!(closes, 49, "and only as far as the offsets reach");
+    }
 
     #[test]
     fn the_claims_of_one_review_share_the_tokens_of_that_review_and_no_other() {
