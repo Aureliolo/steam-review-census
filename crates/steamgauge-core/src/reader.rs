@@ -296,9 +296,11 @@ impl ClaimReader {
             return Ok(Vec::new());
         }
         let encodings = if self.provenance.context {
+            let windows = self.windows(asked);
             let pairs: Vec<(String, String)> = asked
                 .iter()
-                .map(|one| (one.claim.to_owned(), self.window(one)))
+                .zip(windows)
+                .map(|(one, window)| (one.claim.to_owned(), window))
                 .collect();
             self.tokenizer.encode_batch(pairs, true)
         } else {
@@ -344,17 +346,38 @@ impl ClaimReader {
             .collect())
     }
 
+    /// Every claim's window, tokenising each review once however many claims it holds.
+    ///
+    /// Finding where a claim sits means knowing where the review's tokens fall, and that is
+    /// the same answer for every claim of one review. Asking per claim tokenised a review of
+    /// ten claims ten times, and over a corpus that was most of what the reader spent its
+    /// processor on while the card waited.
+    fn windows(&self, asked: &[Asked<'_>]) -> Vec<String> {
+        let owners = same_review(asked);
+        let mut offsets: Vec<Vec<(usize, usize)>> = vec![Vec::new(); asked.len()];
+        for (at, &owner) in owners.iter().enumerate() {
+            if owner == at {
+                offsets[at] = self
+                    .tokenizer
+                    .encode(asked[at].review, false)
+                    .map(|encoded| encoded.get_offsets().to_vec())
+                    .unwrap_or_default();
+            }
+        }
+        asked
+            .iter()
+            .enumerate()
+            .map(|(at, one)| self.window(one, &offsets[owners[at]]))
+            .collect()
+    }
+
     /// The part of the review the token budget can afford, centred on the claim.
     ///
     /// Truncating a pair from the end spends the whole budget on the opening of the review,
     /// so a claim at the foot of a long one would be read beside paragraphs it is nowhere
     /// near. The budget is the same either way; where it is spent is not, and it is worth
     /// the most immediately around the claim.
-    fn window(&self, asked: &Asked<'_>) -> String {
-        let Ok(encoded) = self.tokenizer.encode(asked.review, false) else {
-            return asked.review.to_owned();
-        };
-        let offsets = encoded.get_offsets();
+    fn window(&self, asked: &Asked<'_>, offsets: &[(usize, usize)]) -> String {
         if offsets.is_empty() {
             return asked.review.to_owned();
         }
@@ -378,6 +401,24 @@ impl ClaimReader {
         };
         format!("{before}{MARK} {claim} {MARK}{after}")
     }
+}
+
+/// For each claim, where the first claim of the same review sits in the batch.
+///
+/// Two live string slices are one review exactly when they start at the same byte and run the
+/// same length, and every claim of a review is handed the same slice of the same text.
+fn same_review(asked: &[Asked<'_>]) -> Vec<usize> {
+    let mut first: std::collections::HashMap<(usize, usize), usize> =
+        std::collections::HashMap::new();
+    asked
+        .iter()
+        .enumerate()
+        .map(|(at, one)| {
+            *first
+                .entry((one.review.as_ptr() as usize, one.review.len()))
+                .or_insert(at)
+        })
+        .collect()
 }
 
 /// What marks the claim inside its window, matching `training/train.py`.
@@ -440,6 +481,33 @@ fn softmax_best(logits: &[f32]) -> (usize, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_claims_of_one_review_share_the_tokens_of_that_review_and_no_other() {
+        let first: std::sync::Arc<str> = std::sync::Arc::from("It runs badly. Worth the money.");
+        let second: std::sync::Arc<str> = std::sync::Arc::from("It runs badly. Worth the money.");
+        let asked = vec![
+            Asked {
+                claim: "It runs badly.",
+                review: &first,
+                at: 0,
+            },
+            Asked {
+                claim: "Worth the money.",
+                review: &second,
+                at: 0,
+            },
+            Asked {
+                claim: "Worth the money.",
+                review: &first,
+                at: 15,
+            },
+        ];
+
+        // The second review reads the same and is a different review: a copy of a text is
+        // tokenised again rather than sharing an answer with something it only resembles.
+        assert_eq!(same_review(&asked), vec![0, 1, 0]);
+    }
 
     #[test]
     fn the_best_class_comes_back_with_a_probability_rather_than_a_logit() {
