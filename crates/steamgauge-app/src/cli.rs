@@ -1125,6 +1125,12 @@ fn read_one(
             thousands(report.silent_reviews)
         );
     }
+    if report.claimless_reviews > 0 {
+        println!(
+            "no claim     {} reviews the splitter found no point in at all",
+            thousands(report.claimless_reviews)
+        );
+    }
     if let Some(ratio) = report.declined_against_usual()
         && report.declined_unusually()
     {

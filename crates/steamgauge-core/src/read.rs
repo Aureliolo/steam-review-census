@@ -278,6 +278,11 @@ pub struct ReadReport {
     pub unclassified_claims: u64,
     /// Reviews where no claim got a subject at all.
     pub silent_reviews: u64,
+    /// Reviews the splitter found no claim in: markup, a row of emoji, a single punctuation
+    /// mark. They are reviews of the corpus and are counted as such, and they write no rows,
+    /// so without this the counts and the rows beside them cannot be reconciled.
+    #[serde(default)]
+    pub claimless_reviews: u64,
     pub positive: u64,
     pub top_helpful: u64,
     pub model: String,
@@ -769,6 +774,7 @@ struct Counting {
     claims: u64,
     unclassified: u64,
     silent: u64,
+    claimless: u64,
     positive: u64,
 }
 
@@ -798,6 +804,7 @@ impl Counting {
             claims: 0,
             unclassified: 0,
             silent: 0,
+            claimless: 0,
             positive: 0,
         })
     }
@@ -826,6 +833,9 @@ impl Counting {
         self.unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
             self.silent += 1;
+        }
+        if pieces.is_empty() {
+            self.claimless += 1;
         }
         if let Some(primary) = verdict.primary {
             self.tallies[primary].primary_reviews += 1;
@@ -915,6 +925,7 @@ impl Counting {
             forward_passes: 0,
             unclassified_claims: self.unclassified,
             silent_reviews: self.silent,
+            claimless_reviews: self.claimless,
             positive: self.positive,
             top_helpful: top_reviews.len() as u64,
             model: String::new(),
@@ -1253,6 +1264,7 @@ mod tests {
             forward_passes: 1_000,
             unclassified_claims: 900,
             silent_reviews: 0,
+            claimless_reviews: 0,
             positive: 50,
             top_helpful: 10,
             model: String::new(),

@@ -105,6 +105,7 @@ fn game(app_id: u32, name: &str, measured: bool) -> AppReport {
             // it puts above the table rather than the footnote it puts below.
             unclassified_claims: reviews * 3 * 3 / 5,
             silent_reviews: reviews / 50,
+            claimless_reviews: 0,
             positive,
             top_helpful: 50,
             model: "Alibaba-NLP/gte-multilingual-base".to_owned(),

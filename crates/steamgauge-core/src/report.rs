@@ -748,6 +748,7 @@ mod tests {
                 forward_passes: 300_000,
                 unclassified_claims: 0,
                 silent_reviews: 0,
+                claimless_reviews: 0,
                 positive: 70_000,
                 top_helpful,
                 model: "test".to_owned(),

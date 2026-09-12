@@ -213,6 +213,7 @@ mod tests {
             forward_passes: 3_000,
             unclassified_claims: 0,
             silent_reviews: 0,
+            claimless_reviews: 0,
             positive: 700,
             top_helpful: 50,
             model: String::new(),

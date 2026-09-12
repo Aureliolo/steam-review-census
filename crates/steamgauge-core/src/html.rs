@@ -2139,6 +2139,7 @@ mod tests {
                     forward_passes: 3_000,
                     unclassified_claims: 300,
                     silent_reviews: 3,
+                    claimless_reviews: 0,
                     positive: 700,
                     top_helpful: 50,
                     spine_version: crate::CORE_SPINE_VERSION.to_owned(),
