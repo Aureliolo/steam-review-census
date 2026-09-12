@@ -419,9 +419,10 @@ rare because the corpus rarely says it, and shouting its few examples louder add
 about it while costing the rows that had some.
 
 Two settings are genuinely better, and only one of them is small. **5e-5 answers 73.5%**, 4.7
-points clear of the best of the three baseline seeds. And **a backbone of twice the size
-answers 84.9%**, which is eleven points clear of that and four times the seed spread, on the
-same labels and the same schedule:
+points clear of the best of the three baseline seeds, and it is a plateau rather than a peak:
+7e-5 and 1e-4 answer 73.0% and 73.3%, and three seeds of 5e-5 land between 72.5% and 73.5%. And
+**a backbone of twice the size answers 84.9%**, which is eleven points clear of that and four
+times the seed spread, on the same labels and the same schedule:
 
 | `multilingual-e5-large`, 560M | answers at 75% | macro F1 | AURC | ECE |
 |---|---|---|---|---|
