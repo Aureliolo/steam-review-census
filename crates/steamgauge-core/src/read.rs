@@ -523,6 +523,43 @@ struct Pending {
 }
 
 impl Pending {
+    /// The same review with its answers found, which is the last thing that needs the table of
+    /// them. Everything after this is arithmetic over what is already known, so it can be done
+    /// somewhere the card is not waiting for it.
+    fn counted(self, context: bool, answers: &HashMap<[u8; 32], Reading>) -> Counted {
+        let readings = self
+            .spans
+            .iter()
+            .enumerate()
+            .map(|(index, &(from, to))| {
+                answers
+                    .get(&key(
+                        context,
+                        &self.fingerprint,
+                        index,
+                        &self.text[from..to],
+                    ))
+                    .copied()
+            })
+            .collect();
+        Counted {
+            row: self.row,
+            text: self.text,
+            spans: self.spans,
+            readings,
+        }
+    }
+}
+
+/// A review the model has answered for, on its way to being added up.
+struct Counted {
+    row: crate::capture::Row,
+    text: Arc<str>,
+    spans: Vec<(usize, usize)>,
+    readings: Vec<Option<Reading>>,
+}
+
+impl Counted {
     fn claims(&self) -> Vec<&str> {
         self.spans
             .iter()
@@ -551,15 +588,58 @@ fn read_and_count(
     context: bool,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<(ReadReport, u64)> {
+    let counting = Counting::new(snapshot, options.top_helpful)?;
+    // Adding up what a review said is term extraction on every claim of it, which is enough
+    // work to leave the card waiting between batches. It needs nothing the next batch needs,
+    // so it happens on a thread of its own and the card never sees it.
+    let (send, receive) = std::sync::mpsc::sync_channel::<Vec<Counted>>(2);
+    std::thread::scope(|scope| -> Result<(ReadReport, u64)> {
+        let adding = scope.spawn(move || -> Result<Counting> {
+            let mut counting = counting;
+            for batch in receive {
+                for review in &batch {
+                    counting.count(review)?;
+                }
+            }
+            Ok(counting)
+        });
+        let (corpus, forward_passes) = walk(model, snapshot, options, context, &send, on_progress)?;
+        drop(send);
+        let counted = adding
+            .join()
+            .map_err(|_| Error::Tokenizer("the pass adding up the reviews stopped".to_owned()))??;
+        Ok((counted.finish(app_id, options, corpus)?, forward_passes))
+    })
+}
+
+/// What a walk of the capture is worth outside the language it was read in.
+#[derive(Default)]
+struct Corpus {
+    reviews: u64,
+    languages: HashMap<String, u64>,
+}
+
+/// Walks the capture, asking the model about every distinct claim and handing each review on to
+/// be added up once its answers are final.
+fn walk(
+    model: &mut ClaimReader,
+    snapshot: &Path,
+    options: &ReadOptions,
+    context: bool,
+    send: &std::sync::mpsc::SyncSender<Vec<Counted>>,
+    on_progress: &mut impl FnMut(ReadProgress),
+) -> Result<(Corpus, u64)> {
     let mut answers: HashMap<[u8; 32], Reading> = HashMap::new();
     let mut window: Vec<Queued> = Vec::with_capacity(LENGTH_WINDOW);
     let mut pending: Vec<Pending> = Vec::new();
-    let mut counting = Counting::new(snapshot, options.top_helpful)?;
+    let mut corpus = Corpus::default();
+    let mut counted = 0_u64;
     // One allocation for every review a model that reads claims alone will ever queue.
     let nothing: Arc<str> = Arc::from("");
 
     crate::capture::for_each_row(snapshot, |row, text| {
-        counting.note_corpus(&row);
+        corpus.reviews += 1;
+        *corpus.languages.entry(row.language.clone()).or_default() += 1;
         // Reading a claim nothing will count is a forward pass for nothing, and on a corpus
         // where the named language is a third of the reviews it is most of the work.
         if options
@@ -607,7 +687,14 @@ fn read_and_count(
                 // Every review already waiting had all of its claims queued before that
                 // drain, so every answer it needs is final. This one does not: its remaining
                 // claims are queued after this, and it waits for the next drain.
-                settle(&mut pending, &mut counting, context, &answers, on_progress)?;
+                settle(
+                    &mut pending,
+                    context,
+                    &answers,
+                    send,
+                    &mut counted,
+                    on_progress,
+                )?;
             }
         }
         pending.push(Pending {
@@ -618,31 +705,52 @@ fn read_and_count(
         });
         if pending.len() >= PENDING_CAP {
             drain(model, options.batch_size, &mut window, &mut answers)?;
-            settle(&mut pending, &mut counting, context, &answers, on_progress)?;
+            settle(
+                &mut pending,
+                context,
+                &answers,
+                send,
+                &mut counted,
+                on_progress,
+            )?;
         }
         Ok(())
     })?;
 
     drain(model, options.batch_size, &mut window, &mut answers)?;
-    settle(&mut pending, &mut counting, context, &answers, on_progress)?;
-    let forward_passes = answers.len() as u64;
-    Ok((counting.finish(app_id, options)?, forward_passes))
+    settle(
+        &mut pending,
+        context,
+        &answers,
+        send,
+        &mut counted,
+        on_progress,
+    )?;
+    Ok((corpus, answers.len() as u64))
 }
 
-/// Counts every review whose answers are in, and says how far the walk has got.
+/// Hands on every review whose answers are in, and says how far the walk has got.
 fn settle(
     pending: &mut Vec<Pending>,
-    counting: &mut Counting,
     context: bool,
     answers: &HashMap<[u8; 32], Reading>,
+    send: &std::sync::mpsc::SyncSender<Vec<Counted>>,
+    counted: &mut u64,
     on_progress: &mut impl FnMut(ReadProgress),
 ) -> Result<()> {
-    for review in pending.drain(..) {
-        counting.count(&review, context, answers)?;
+    let batch: Vec<Counted> = pending
+        .drain(..)
+        .map(|review| review.counted(context, answers))
+        .collect();
+    *counted += batch.len() as u64;
+    if !batch.is_empty() {
+        send.send(batch).map_err(|_| {
+            Error::Tokenizer("the pass adding up the reviews stopped early".to_owned())
+        })?;
     }
     on_progress(ReadProgress {
         claims_read: answers.len() as u64,
-        reviews_counted: counting.reviews,
+        reviews_counted: *counted,
     });
     Ok(())
 }
@@ -713,12 +821,7 @@ struct Verdict {
     unclassified: usize,
 }
 
-fn judge(
-    claims: &[&str],
-    review: &[u8; 32],
-    context: bool,
-    answers: &HashMap<[u8; 32], Reading>,
-) -> Verdict {
+fn judge(readings: &[Option<Reading>]) -> Verdict {
     let mut praise = vec![false; CORE_SPINE.len()];
     let mut complaint = vec![false; CORE_SPINE.len()];
     let mut seen = vec![false; CORE_SPINE.len()];
@@ -726,8 +829,11 @@ fn judge(
     let mut best = f32::NEG_INFINITY;
     let mut unclassified = 0;
 
-    for (index, claim) in claims.iter().enumerate() {
-        let Some(reading) = answers.get(&key(context, review, index, claim)) else {
+    for reading in readings {
+        // A claim with no answer at all and a claim the model would not put a subject on are
+        // both unclassified: one was never asked, the other declined, and neither names a
+        // subject this review can be counted under.
+        let Some(reading) = reading else {
             unclassified += 1;
             continue;
         };
@@ -754,7 +860,7 @@ fn judge(
         primary,
         praise,
         complaint,
-        claims: claims.len(),
+        claims: readings.len(),
         unclassified,
     }
 }
@@ -764,13 +870,11 @@ struct Counting {
     writer: ArrowWriter<std::fs::File>,
     schema: Arc<Schema>,
     tallies: Vec<Tally>,
-    languages: HashMap<String, u64>,
     calendar: HashMap<String, Month>,
     top: crate::bounded::Smallest<std::cmp::Reverse<u64>, Vec<usize>>,
     rows: ReadingRows,
     said: crate::said::Said,
     reviews: u64,
-    corpus_reviews: u64,
     claims: u64,
     unclassified: u64,
     silent: u64,
@@ -794,13 +898,11 @@ impl Counting {
             writer,
             schema,
             tallies: vec![Tally::default(); CORE_SPINE.len()],
-            languages: HashMap::new(),
             calendar: HashMap::new(),
             top: crate::bounded::Smallest::new(top_helpful),
             rows: ReadingRows::default(),
             said: crate::said::Said::new(CORE_SPINE.len()),
             reviews: 0,
-            corpus_reviews: 0,
             claims: 0,
             unclassified: 0,
             silent: 0,
@@ -809,18 +911,7 @@ impl Counting {
         })
     }
 
-    /// What a review is worth to the corpus whether or not it is in the language being read.
-    fn note_corpus(&mut self, row: &crate::capture::Row) {
-        self.corpus_reviews += 1;
-        *self.languages.entry(row.language.clone()).or_default() += 1;
-    }
-
-    fn count(
-        &mut self,
-        review: &Pending,
-        context: bool,
-        answers: &HashMap<[u8; 32], Reading>,
-    ) -> Result<()> {
+    fn count(&mut self, review: &Counted) -> Result<()> {
         let row = &review.row;
         self.reviews += 1;
         if row.voted_up {
@@ -828,7 +919,7 @@ impl Counting {
         }
 
         let pieces = review.claims();
-        let verdict = judge(&pieces, &review.fingerprint, context, answers);
+        let verdict = judge(&review.readings);
         self.claims += verdict.claims as u64;
         self.unclassified += verdict.unclassified as u64;
         if verdict.subjects.is_empty() {
@@ -871,14 +962,15 @@ impl Counting {
             }
         }
         for (index, claim) in pieces.iter().enumerate() {
-            let reading = answers.get(&key(context, &review.fingerprint, index, claim));
+            let reading = review.readings.get(index).copied().flatten();
             if let Some(reading) = reading
                 && let Some(subject) = reading.subject
             {
                 self.tallies[subject].claims += 1;
                 self.said.note(subject, reading.polarity, claim);
             }
-            self.rows.push(&row.recommendationid, index, reading);
+            self.rows
+                .push(&row.recommendationid, index, reading.as_ref());
         }
         self.said.next_review();
 
@@ -895,7 +987,7 @@ impl Counting {
         Ok(())
     }
 
-    fn finish(mut self, app_id: u32, options: &ReadOptions) -> Result<ReadReport> {
+    fn finish(mut self, app_id: u32, options: &ReadOptions, corpus: Corpus) -> Result<ReadReport> {
         if self.rows.len() > 0 {
             let batch = self.rows.take(&self.schema)?;
             self.writer.write(&batch)?;
@@ -909,7 +1001,7 @@ impl Counting {
             }
         }
 
-        let mut ranked: Vec<(String, u64)> = self.languages.into_iter().collect();
+        let mut ranked: Vec<(String, u64)> = corpus.languages.into_iter().collect();
         ranked.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
         let mut months: Vec<Month> = self.calendar.into_values().collect();
         months.sort_by(|left, right| left.label.cmp(&right.label));
@@ -917,7 +1009,7 @@ impl Counting {
         Ok(ReadReport {
             app_id,
             reviews: self.reviews,
-            corpus_reviews: self.corpus_reviews,
+            corpus_reviews: corpus.reviews,
             language: options.language.clone(),
             depth: options.depth,
             splitter: crate::claims::SPLITTER_VERSION.to_owned(),
@@ -1169,7 +1261,8 @@ mod tests {
                 spans,
                 fingerprint: [0; 32],
             };
-            let recovered: Vec<&str> = held.claims();
+            let counted = held.counted(false, &HashMap::new());
+            let recovered: Vec<&str> = counted.claims();
             let expected: Vec<&str> = claims.iter().map(AsRef::as_ref).collect();
             assert_eq!(
                 recovered, expected,
