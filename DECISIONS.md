@@ -1056,6 +1056,16 @@ something else. At the rate the `mods` pass moved, that is roughly three times t
 labels for `licensing`, `accessibility`, `vr` and `community` combined, without crawling or
 drawing a single new review. It is the first thing to spend labelling quota on.
 
+**Spent 2026-09-13, and the rate did not carry over.** 381 of the 527 revisit claims were
+relabelled across seven games, and 48 moved, **a net gain of six labels** for the four rows
+together: 14 moved in and 8 moved out, most of the traffic being `vr` and `verdict` swapping
+places on "worth buying a headset for". The `mods` pass moved 73% because `mods` did not exist
+when those claims were first labelled; these four rows did, and the first labeller had mostly
+put the claims where they belong. The remaining 146 revisit claims, spread one to fourteen
+across thirty games, are left unlabelled on that measurement: at 1.6% net yield they are worth
+about two labels, and the labeller slot they would take is worth a hundred on the mined draw.
+A revisit is for a subject that was born after its claims were labelled, and for nothing else.
+
 ## The corpus stopped being a corpus of games people like
 
 Measured 2026-09-11 over all 51 captures, 7.5M reviews. Before the fifteen chosen games
