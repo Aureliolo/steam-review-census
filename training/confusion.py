@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 
 import claimdata
-from confidence import logits_of, softmax
+from confidence import logits_of, pooled_folds, softmax
 
 HERE = Path(__file__).resolve().parent
 
@@ -61,26 +61,38 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=str(HERE.parent / "models" / "claim-reader"))
     parser.add_argument("--data", default=str(HERE / "data" / "claims.jsonl"))
+    parser.add_argument(
+        "--oof",
+        default=None,
+        help="directory of .npz files written by `train.py --save-logits`. Twenty-eight games "
+        "of held-out answers instead of four, which is the difference between a confusion "
+        "worth acting on and one built from thirty claims.",
+    )
     parser.add_argument("--split-seed", type=int, default=1)
     parser.add_argument("--subject", default=None, help="one subject to read in full")
     parser.add_argument("--examples", type=int, default=12)
     args = parser.parse_args()
 
-    model_dir = Path(args.model)
-    provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
-    subjects = provenance["subjects"]
+    validation: list = []
+    if args.oof:
+        logits, truth, _, subjects = pooled_folds(Path(args.oof).glob("*.npz"))
+        where = f"{len(truth):,} out-of-fold claims, from {args.oof}"
+    else:
+        model_dir = Path(args.model)
+        provenance = json.loads((model_dir / "reader.json").read_text(encoding="utf-8"))
+        subjects = provenance["subjects"]
+        claims = claimdata.load(args.data)
+        _, validation, _ = claimdata.split_by_game(claims, seed=args.split_seed)
+        validation = [claim for claim in validation if claim.subject in subjects]
+        logits = logits_of(model_dir, validation, provenance)
+        truth = np.array([subjects.index(claim.subject) for claim in validation])
+        where = f"{len(validation):,} validation claims, model {model_dir}"
 
-    claims = claimdata.load(args.data)
-    _, validation, _ = claimdata.split_by_game(claims, seed=args.split_seed)
-    validation = [claim for claim in validation if claim.subject in subjects]
-
-    logits = logits_of(model_dir, validation, provenance)
     probabilities = softmax(logits)
     predicted = probabilities.argmax(axis=1)
     confidence = probabilities.max(axis=1)
-    truth = np.array([subjects.index(claim.subject) for claim in validation])
 
-    print(f"{len(validation):,} validation claims, model {model_dir}\n")
+    print(f"{where}\n")
     print(f"{'subject':<16} {'true':>5} {'said':>5} {'prec':>6} {'rec':>6}   mistaken for")
     for index, name in enumerate(subjects):
         precision, recall, support, said = rates(truth, predicted, index)
@@ -109,6 +121,11 @@ def main():
     # like from the inside.
     wrong = np.flatnonzero((predicted == index) & (truth != index))
     print(f"\n  the {min(args.examples, len(wrong))} most confident of its {len(wrong)} mistakes")
+    if not validation:
+        # The fold files carry the logits and the claim's name, never its text: what a review
+        # says is not written into this repository, and a diagnostic is not a reason to start.
+        print("    (the text is not in the fold files; re-run without --oof to read them)")
+        return
     for at in wrong[np.argsort(-confidence[wrong])][: args.examples]:
         claim = validation[at]
         text = " ".join(claim.text.split())[:96]
