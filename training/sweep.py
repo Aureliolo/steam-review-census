@@ -40,6 +40,7 @@ SETTINGS = {
     "max_length": None,
     "context": None,
     "mark": False,
+    "prefix": False,
     "balance": 0.0,
     "ambiguous_weight": 1.0,
     "split_wrong_weight": 1.0,
