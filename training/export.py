@@ -97,6 +97,37 @@ def sample_claims(path: Path, count: int, record: dict, tokenizer) -> list:
     return [one[0] if len(one) == 1 else one for one in pairs]
 
 
+def subject_lines(oof: str, subjects: list[str], min_accuracy: float):
+    """One abstention threshold per subject, drawn from the cross-validation folds.
+
+    Fitted on every non-frozen game at once rather than leave-one-game-out, because this is the
+    threshold that ships and it should see every claim there is. What a line is *worth* is a
+    different question, and `confidence.py` answers it out-of-fold; fitting the shipped one the
+    same way would throw away a fifth of the evidence for no gain.
+
+    The folds carry a class order of their own, so the lines are remapped onto the order this
+    export writes rather than trusted to match: two lists of twenty-six subjects that differ by
+    one position would silence the wrong subject and nothing would look wrong.
+    """
+    from confidence import most_coverage, pooled_folds, softmax
+
+    logits, truth, _, theirs = pooled_folds(Path(oof).glob("*.npz"))
+    if sorted(theirs) != sorted(subjects):
+        raise SystemExit("the folds and this run do not know the same subjects")
+
+    probabilities = softmax(logits)
+    predicted = probabilities.argmax(axis=1)
+    confidence = probabilities.max(axis=1)
+    correct = (predicted == truth).astype(float)
+
+    lines = []
+    for name in subjects:
+        mine = predicted == theirs.index(name)
+        line = most_coverage(confidence[mine], correct[mine], min_accuracy) if mine.any() else None
+        lines.append(None if line is None else round(float(line), 4))
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
@@ -110,6 +141,16 @@ def main():
         help="export half precision: half the download, and roughly half the arithmetic over "
         "millions of claims. Checked against the full-precision model like any other export.",
     )
+    parser.add_argument(
+        "--lines-from",
+        default=None,
+        help="a directory of cross-validation fold logits (`train.py --save-logits`), from "
+        "which to draw one abstention threshold per subject. One threshold keeps the promise "
+        "on average and breaks it subject by subject; a line per subject holds it for each "
+        "subject's own predictions, and a subject no threshold can make reliable is declined "
+        "outright. Without this the reader carries the one threshold it always has.",
+    )
+    parser.add_argument("--min-accuracy", type=float, default=0.75)
     args = parser.parse_args()
 
     # `runs/<name>` names a run of this project wherever the command was typed from, so a
@@ -269,12 +310,21 @@ def main():
     frozen = record.get("test", {}).get("at_validation_threshold", {})
     usual_declined = 1.0 - frozen["coverage"] if frozen.get("coverage") is not None else None
 
+    lines = subject_lines(args.lines_from, subjects, args.min_accuracy) if args.lines_from else None
+    if lines is not None:
+        silent = [name for name, line in zip(subjects, lines) if line is None]
+        drawn = sum(1 for line in lines if line is not None)
+        print(f"lines      {drawn} of {len(subjects)} subjects have one")
+        if silent:
+            print(f"           silent: {', '.join(silent)}")
+
     (run / "reader.json").write_text(
         json.dumps(
             {
                 "spine_version": args.spine,
                 "subjects": subjects,
                 "threshold": threshold,
+                "thresholds": lines,
                 "max_tokens": record["max_length"],
                 "context": record.get("context", False),
                 "mark": record.get("mark", False),

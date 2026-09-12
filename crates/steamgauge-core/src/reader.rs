@@ -68,6 +68,20 @@ pub struct Provenance {
     /// Below this the model says nothing. Chosen on validation claims, never on the held-out
     /// ones, because a threshold tuned against the test set makes the test set an opinion.
     pub threshold: f32,
+    /// One line per subject, in `subjects` order, where the export drew them.
+    ///
+    /// A single threshold keeps the promise on average and breaks it subject by subject,
+    /// because the reader is not equally reliable across twenty-six of them. Measured
+    /// out-of-fold over twenty-eight games, one line answers `compatibility` predictions at
+    /// 0.64 and `vr` at 0.17 while the overall figure sits on 0.75, and a report quoting a
+    /// `compatibility` count is quoting that 0.64. A line per subject holds the floor for each
+    /// subject's own predictions instead.
+    ///
+    /// `None` where a subject has no threshold that keeps the promise: that subject is
+    /// declined outright, which is the honest answer and not the same as a low one. Absent
+    /// entirely on a reader exported before this existed, and then `threshold` governs.
+    #[serde(default)]
+    pub thresholds: Option<Vec<Option<f32>>>,
     pub max_tokens: usize,
     /// Whether the model was trained on the claim with its review around it. A model trained
     /// one way and read the other is answering a question in a form it has never seen, and
@@ -102,6 +116,22 @@ pub struct Provenance {
     /// only honest thing such a report could say is nothing at all.
     #[serde(default)]
     pub frozen: Option<Frozen>,
+}
+
+impl Provenance {
+    /// The line this subject has to clear, by the model's own class index.
+    ///
+    /// Infinity where a subject has a line of `None`, so a subject nothing can make reliable
+    /// declines every claim rather than answering them at whatever threshold happens to be
+    /// lying around.
+    #[must_use]
+    pub fn line_for(&self, class: usize) -> f32 {
+        match self.thresholds.as_ref().and_then(|lines| lines.get(class)) {
+            Some(Some(line)) => *line,
+            Some(None) => f32::INFINITY,
+            None => self.threshold,
+        }
+    }
 }
 
 /// A model's own measurement, on games that chose nothing about it.
@@ -431,7 +461,7 @@ impl ClaimReader {
                 let (best, confidence) = softmax_best(subject.row(row).as_slice().unwrap_or(&[]));
                 let (polar, _) = softmax_best(polarity.row(row).as_slice().unwrap_or(&[]));
                 Reading {
-                    subject: (confidence >= self.provenance.threshold)
+                    subject: (confidence >= self.provenance.line_for(best))
                         .then(|| self.order.get(best).copied().unwrap_or(best)),
                     confidence,
                     polarity: Polarity::from_index(polar),
@@ -652,6 +682,44 @@ fn softmax_best(logits: &[f32]) -> (usize, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn provenance(lines: Option<Vec<Option<f32>>>) -> Provenance {
+        let mut written = serde_json::json!({
+            "spine_version": crate::CORE_SPINE_VERSION,
+            "subjects": ["verdict", "vr", "licensing"],
+            "threshold": 0.69,
+            "max_tokens": 128,
+        });
+        if let Some(lines) = lines {
+            written["thresholds"] = serde_json::to_value(lines).expect("lines are values");
+        }
+        serde_json::from_value(written).expect("a provenance")
+    }
+
+    #[test]
+    fn a_reader_exported_before_the_lines_existed_keeps_its_one_line() {
+        let found = provenance(None);
+        assert!((found.line_for(0) - 0.69).abs() < f32::EPSILON);
+        assert!((found.line_for(2) - 0.69).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_subject_no_threshold_can_make_reliable_answers_nothing() {
+        // Not a high line but no line: the export writes `null` where no threshold over the
+        // validation games keeps the promise for that subject, and a claim of that subject has
+        // to be declined rather than answered at whatever number was lying nearest.
+        let found = provenance(Some(vec![Some(0.55), Some(0.94), None]));
+        assert!((found.line_for(0) - 0.55).abs() < f32::EPSILON);
+        assert!((found.line_for(1) - 0.94).abs() < f32::EPSILON);
+        assert!(found.line_for(2).is_infinite());
+        assert!(1.0_f32 < found.line_for(2), "certainty must not clear it");
+    }
+
+    #[test]
+    fn a_class_the_lines_do_not_reach_falls_back_rather_than_answering_everything() {
+        let found = provenance(Some(vec![Some(0.55)]));
+        assert!((found.line_for(2) - 0.69).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn offsets_that_do_not_describe_the_review_give_a_window_of_nothing() {
