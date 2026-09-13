@@ -1230,6 +1230,35 @@ Then, in order:
    `compatibility`, which no word list holds. The narrowest margin per line is printed and is
    the figure to read: negative means the line scraped the floor for a subject the game does
    not hold, and its catch will mostly say `gameplay`.
+
+   **Labelled 2026-09-13, and retrieval beats the probes on every row.** Same games, same
+   budget of 200 claims each, the labeller told nothing about how either was drawn:
+
+   | draw | games | labels | on a starved row | `vr` | `accessibility` | `community` | `licensing` |
+   |---|---|---|---|---|---|---|---|
+   | lexical probes | 9 | 1,800 | 848 (47%) | 56 | 44 | 67 | 13 |
+   | retrieval, by margin | 7 | 1,400 | 935 (67%) | 61 | 102 | 77 | 16 |
+
+   Game by game the gap is wider than the totals show, because the two draws were run on the
+   same corpora and the retrieval draw could not take a review the probes had already taken.
+   On 553850 the probes landed 39% and retrieval 74%; on 438100, 68% against 90%; on 546560,
+   `vr` went from 8 labels to 39, because retrieval finds the comfort-and-tracking sense the
+   sheet means where the probe found the word. On 296970, a game `mine-check` said held almost
+   nothing, retrieval landed 70 of 200. `accessibility` more than doubled from the seven
+   retrieval games alone.
+
+   `licensing` did not move under either method, 13 and 16, and that is the same finding as
+   before: it needs games that adapt something, and none of these do. It is the one row the
+   next draw has to be aimed at by choosing games rather than by choosing claims.
+
+   Two things about the run itself. It was slow twice for reasons that had nothing to do with
+   the method: the first release binary was built without `--features directml` and ran the
+   encoder on the CPU, and the second embedded claims in review order, where every batch holds
+   one wall of text that pads two hundred and fifty short claims to five hundred tokens. Sorted
+   by length, the way the embedding pass already does, it runs at eleven hundred claims a
+   second and a three-million-claim game takes forty-five minutes. And a review drawn under one
+   teaching set was not excluded from the next, which would have labelled it twice; one had
+   been, and the fix reads every teaching set's sample before drawing.
 7. **Publishing**, which is the user's decision and not near.
 8. **Induced per-game categories** for the remaining games, one agent call of about 70k tokens
    each, behind everything else.
