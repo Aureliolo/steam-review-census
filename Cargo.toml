@@ -1,17 +1,17 @@
 [workspace]
 resolver = "3"
-members = ["crates/census-core", "crates/census-cli"]
+members = ["crates/steamgauge-core", "crates/steamgauge-app"]
 
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0"
-repository = "https://github.com/Aureliolo/steam-review-census"
+repository = "https://github.com/Aureliolo/steamgauge"
 authors = ["Aurelio <19254254+Aureliolo@users.noreply.github.com>"]
 
 [workspace.dependencies]
-census-core = { path = "crates/census-core" }
+steamgauge-core = { path = "crates/steamgauge-core" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

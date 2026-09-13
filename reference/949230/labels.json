@@ -1,0 +1,1545 @@
+[
+  {
+    "id": "148800843",
+    "primary": "content",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148800978",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148801698",
+    "primary": "bugs",
+    "secondary": [
+      "updates",
+      "monetisation",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "148804096",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148810273",
+    "primary": "price",
+    "secondary": [
+      "policy",
+      "monetisation",
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "148810876",
+    "primary": "performance",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148812391",
+    "primary": "performance",
+    "secondary": [
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148814015",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148818083",
+    "primary": "updates",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "148823766",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148825425",
+    "primary": "compatibility",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "148830186",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148845858",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "148847434",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148848461",
+    "primary": "performance",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "148848902",
+    "primary": "content",
+    "secondary": [
+      "updates",
+      "monetisation",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "148851423",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148853292",
+    "primary": "content",
+    "secondary": [
+      "performance",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "148854759",
+    "primary": "performance",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148860591",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148864097",
+    "primary": "gameplay",
+    "secondary": [
+      "performance",
+      "graphics",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148868670",
+    "primary": "gameplay",
+    "secondary": [
+      "performance",
+      "graphics",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148870944",
+    "primary": "bugs",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148890445",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148901866",
+    "primary": "performance",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "148955998",
+    "primary": "gameplay",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148961291",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148966715",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148977827",
+    "primary": "gameplay",
+    "secondary": [
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "148980633",
+    "primary": "difficulty",
+    "secondary": [
+      "performance",
+      "graphics",
+      "controls",
+      "content",
+      "gameplay",
+      "language"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "148983170",
+    "primary": "gameplay",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "149015745",
+    "primary": "performance",
+    "secondary": [
+      "graphics",
+      "compatibility"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "149031457",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "149057166",
+    "primary": "bugs",
+    "secondary": [
+      "performance",
+      "graphics",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "149066658",
+    "primary": "bugs",
+    "secondary": [
+      "content",
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "149066784",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "149122926",
+    "primary": "performance",
+    "secondary": [
+      "bugs",
+      "multiplayer",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "149164903",
+    "primary": "gameplay",
+    "secondary": [
+      "performance",
+      "bugs",
+      "monetisation",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "149192767",
+    "primary": "gameplay",
+    "secondary": [
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "149256425",
+    "primary": "content",
+    "secondary": [
+      "price",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "149261860",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "149372127",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "149384257",
+    "primary": "gameplay",
+    "secondary": [
+      "performance",
+      "content",
+      "bugs",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "149482754",
+    "primary": "performance",
+    "secondary": [
+      "bugs",
+      "updates",
+      "audio",
+      "policy"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "149703078",
+    "primary": "content",
+    "secondary": [
+      "performance",
+      "bugs",
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "149721904",
+    "primary": "updates",
+    "secondary": [
+      "gameplay",
+      "bugs",
+      "performance",
+      "price",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "149928906",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "150099367",
+    "primary": "graphics",
+    "secondary": [
+      "performance",
+      "price",
+      "content",
+      "gameplay",
+      "audio",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "150101614",
+    "primary": "content",
+    "secondary": [
+      "bugs",
+      "updates",
+      "price",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "150568747",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "150805846",
+    "primary": "updates",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "152217662",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "152241873",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "152716567",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "153003449",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "153864189",
+    "primary": "performance",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "155361190",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "158838786",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "158965451",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "159139484",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "159470024",
+    "primary": "updates",
+    "secondary": [
+      "price",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "160469620",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "160538434",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "160792929",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "162092559",
+    "primary": "bugs",
+    "secondary": [
+      "performance",
+      "price",
+      "monetisation",
+      "updates",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "162175199",
+    "primary": "gameplay",
+    "secondary": [
+      "bugs",
+      "monetisation",
+      "updates",
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "162709046",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "163528035",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "164120409",
+    "primary": "content",
+    "secondary": [
+      "monetisation",
+      "gameplay",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "165112112",
+    "primary": "bugs",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "165530717",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "166015961",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "167086820",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "168623241",
+    "primary": "difficulty",
+    "secondary": [
+      "graphics",
+      "performance",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "169131654",
+    "primary": "gameplay",
+    "secondary": [
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "169966424",
+    "primary": "gameplay",
+    "secondary": [
+      "updates",
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "171729068",
+    "primary": "performance",
+    "secondary": [
+      "bugs",
+      "compatibility",
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "173788061",
+    "primary": "bugs",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "174670818",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "175398398",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "177330494",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "178675906",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "178972451",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "179101490",
+    "primary": "audio",
+    "secondary": [
+      "bugs",
+      "accessibility"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "179179912",
+    "primary": "bugs",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "179357889",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "179387492",
+    "primary": "policy",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "179651339",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "180432800",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "182021444",
+    "primary": "performance",
+    "secondary": [
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "182137278",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "182252273",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "182315831",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "182849323",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "184592383",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "184595019",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "188260070",
+    "primary": "bugs",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "188962167",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "190983200",
+    "primary": "bugs",
+    "secondary": [
+      "updates"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "191550298",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "191608479",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "191633680",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "193900336",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "194161464",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "195189839",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "195833193",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "196314711",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "198098776",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "199135898",
+    "primary": "price",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "199481187",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "199547514",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "199693431",
+    "primary": "controls",
+    "secondary": [
+      "performance"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "202399014",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "204141484",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "204895091",
+    "primary": "performance",
+    "secondary": [
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "205661050",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "205978745",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "206348867",
+    "primary": "language",
+    "secondary": [
+      "updates",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "207087843",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "207979500",
+    "primary": "bugs",
+    "secondary": [
+      "updates",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "208196531",
+    "primary": "monetisation",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "208566510",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "208720298",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "208802841",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "208857756",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "209047714",
+    "primary": "gameplay",
+    "secondary": [
+      "bugs",
+      "difficulty",
+      "graphics",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "209280020",
+    "primary": "performance",
+    "secondary": [
+      "genre",
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "209457221",
+    "primary": "language",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "212539558",
+    "primary": "performance",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "215273396",
+    "primary": "updates",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "215476351",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "216198221",
+    "primary": "bugs",
+    "secondary": [
+      "content",
+      "monetisation"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "216395010",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "216820983",
+    "primary": "performance",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "217166902",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "217372835",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "219270591",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "220721312",
+    "primary": "performance",
+    "secondary": [
+      "policy"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "221421455",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "221992237",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "224748191",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "225242008",
+    "primary": "gameplay",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "227885881",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "228623022",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "228715762",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "231001636",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "231809632",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "232351155",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "233790549",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  }
+]

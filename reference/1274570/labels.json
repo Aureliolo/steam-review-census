@@ -1,0 +1,1384 @@
+[
+  {
+    "id": "100104853",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "100229106",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "100940977",
+    "primary": "multiplayer",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "101108881",
+    "primary": "gameplay",
+    "secondary": [
+      "multiplayer"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "101222381",
+    "primary": "multiplayer",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "102739751",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "103047938",
+    "primary": "gameplay",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "103370480",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "103450440",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "104251017",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "104616131",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "104995358",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "106277391",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "107658263",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "109581992",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "110562830",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "110648963",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "110654842",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "111805873",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "111957782",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "112662990",
+    "primary": "policy",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "112739060",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "112756626",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "112773287",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "112880278",
+    "primary": "monetisation",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "112987248",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "113523881",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "113676697",
+    "primary": "performance",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "114494630",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "116734849",
+    "primary": "tutorial",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "116788775",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "116949970",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "117001024",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "117206979",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "119250398",
+    "primary": "content",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "120208565",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "120497088",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "120610757",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "121004842",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "121204836",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "121638280",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "121899322",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "122865877",
+    "primary": "gameplay",
+    "secondary": [
+      "story",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "123765647",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "125586634",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "126617327",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "127408165",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "129055789",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "129392553",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "131355979",
+    "primary": "gameplay",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "134191721",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "134620766",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "135538180",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "135827236",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "137517519",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "138274051",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "139437910",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "139509272",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "142429453",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "142439945",
+    "primary": "graphics",
+    "secondary": [
+      "content"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "142932231",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "144374910",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "144600729",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "144761813",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "146766100",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "146777938",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "149537011",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "152072554",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "153682631",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "154476951",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "157906448",
+    "primary": "community",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "159616322",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "160662773",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "161385624",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "162187029",
+    "primary": "multiplayer",
+    "secondary": [
+      "audio"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "162755289",
+    "primary": "vr",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "163863758",
+    "primary": "story",
+    "secondary": [
+      "genre",
+      "gameplay",
+      "difficulty",
+      "graphics",
+      "audio"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "164016689",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "166452671",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "166911575",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "168226258",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "169021708",
+    "primary": "multiplayer",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "169284846",
+    "primary": "audio",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "171969073",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "172083461",
+    "primary": "difficulty",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "173850413",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "174842546",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "175547388",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "176860258",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "177732319",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "177984060",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "178043096",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "178516029",
+    "primary": "community",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "180233526",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "183030184",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "184157115",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "184871122",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "189368210",
+    "primary": "gameplay",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "189454632",
+    "primary": "content",
+    "secondary": [
+      "tutorial"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "196983761",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "198860303",
+    "primary": "story",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "200281513",
+    "primary": "gameplay",
+    "secondary": [
+      "graphics",
+      "audio",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "201742287",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "208131291",
+    "primary": "difficulty",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "208664782",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "209790807",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "211268645",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "214478975",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "223254688",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "230335219",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "85625421",
+    "primary": "genre",
+    "secondary": [
+      "difficulty"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "85851053",
+    "primary": "content",
+    "secondary": [
+      "genre",
+      "updates",
+      "bugs"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "85975551",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "86082895",
+    "primary": "difficulty",
+    "secondary": [
+      "bugs",
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "86327596",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "86897973",
+    "primary": "updates",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "87403547",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "87627826",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "87935208",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "88565311",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "88680568",
+    "primary": "audio",
+    "secondary": [
+      "gameplay"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "88683391",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "89461778",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "90273477",
+    "primary": "difficulty",
+    "secondary": [
+      "price"
+    ],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "90818451",
+    "primary": "content",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "90922482",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "91070647",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "91254814",
+    "primary": "updates",
+    "secondary": [
+      "genre"
+    ],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "91292092",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "91330602",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "91867024",
+    "primary": "bugs",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "91877889",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "91904505",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "91944509",
+    "primary": "gameplay",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "92455868",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "92506918",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "92898671",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "93015381",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "93335639",
+    "primary": "graphics",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "random",
+    "ambiguous": true
+  },
+  {
+    "id": "93499134",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "95654489",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "97556564",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "98374988",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "98389607",
+    "primary": "genre",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "low",
+    "subset": "stratified",
+    "ambiguous": true
+  },
+  {
+    "id": "98770054",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "stratified",
+    "ambiguous": false
+  },
+  {
+    "id": "98850465",
+    "primary": "offtopic",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "high",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "99844813",
+    "primary": "verdict",
+    "secondary": [],
+    "ironic": false,
+    "confidence": "medium",
+    "subset": "random",
+    "ambiguous": false
+  },
+  {
+    "id": "99936927",
+    "primary": "difficulty",
+    "secondary": [],
+    "ironic": true,
+    "confidence": "medium",
+    "subset": "stratified",
+    "ambiguous": false
+  }
+]

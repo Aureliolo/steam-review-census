@@ -1,0 +1,912 @@
+/* The window. Same palette as the report it exports, so the two never look like different
+   programs, but laid out as an application rather than as a document. */
+
+:root {
+  color-scheme: light dark;
+
+  --ink: #16181d;
+  --ink-soft: #4a505c;
+  --ink-faint: #6b7280;
+  --paper: #fbfbfc;
+  --card: #ffffff;
+  --line: #e3e5ea;
+  --line-strong: #c8ccd4;
+  --accent: #2f5fd0;
+  --accent-soft: #dfe8fb;
+  --accent-ink: #ffffff;
+  --over: #b4451f;
+  --over-soft: #fbeee9;
+  --under: #1f6f6b;
+
+  --radius: 10px;
+  --rail: 19rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink: #e8eaef;
+    --ink-soft: #b0b6c2;
+    --ink-faint: #8b93a1;
+    --paper: #121418;
+    --card: #1a1d23;
+    --line: #2a2e37;
+    --line-strong: #3c424e;
+    --accent: #7aa2f7;
+    --accent-soft: #23304d;
+    --accent-ink: #10141c;
+    --over: #e8875a;
+    --over-soft: #3a2419;
+    --under: #5fbfb8;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: var(--rail) 1fr;
+  height: 100%;
+}
+
+/* The library */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--card);
+  border-right: 1px solid var(--line);
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1.1rem 1rem 0.75rem;
+}
+
+.mark {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+}
+
+.add {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.add:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.rail-find {
+  padding: 0 1rem 0.75rem;
+}
+
+input[type='search'],
+input[type='text'] {
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+input::placeholder {
+  color: var(--ink-faint);
+}
+
+.shelf {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0.5rem 0.5rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.shelf li {
+  margin-bottom: 1px;
+}
+
+.shelf button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shelf button:hover {
+  background: var(--paper);
+}
+
+.shelf button[aria-current='true'] {
+  background: var(--accent-soft);
+}
+
+.shelf .title {
+  display: block;
+  overflow: hidden;
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shelf .meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink-faint);
+  font-size: 0.79rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pip {
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.pip.embedded {
+  border-color: var(--accent);
+}
+
+.pip.read {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.rail-foot {
+  margin: 0;
+  padding: 0.6rem 1rem 0.9rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+/* The pane */
+
+.stage {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 2.5rem 2.75rem 3rem;
+}
+
+h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.5rem;
+  font-weight: 620;
+  letter-spacing: -0.011em;
+  line-height: 1.25;
+}
+
+h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.empty,
+.finder {
+  max-width: 34rem;
+}
+
+.empty {
+  padding-top: 12vh;
+}
+
+.empty p,
+.finder p {
+  margin: 0 0 0.9rem;
+  color: var(--ink-soft);
+}
+
+.quiet {
+  color: var(--ink-faint);
+}
+
+code {
+  padding: 0.08em 0.3em;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-family: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.row input {
+  flex: 1;
+  min-width: 0;
+}
+
+button.primary,
+button.quiet-button {
+  padding: 0.44rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 120ms ease, background 120ms ease;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+button.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+button.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button.quiet-button {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+}
+
+button.quiet-button:hover {
+  background: var(--card);
+}
+
+/* A control that reads as part of a sentence: the language choice beside the read button,
+   and the one-click switch to the other reading. */
+label.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-weight: 400;
+}
+
+label.choice select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+button.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.note {
+  margin: 0.7rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  min-height: 1.2em;
+}
+
+.note.bad {
+  color: var(--over);
+}
+
+.found {
+  margin-top: 1.75rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+/* Facts */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.9rem 1.5rem;
+  margin: 0 0 1rem;
+}
+
+.facts.wide {
+  margin-bottom: 1.75rem;
+}
+
+.facts div {
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--ink-faint);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.facts dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
+.facts dd small {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.76rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.game-head {
+  margin-bottom: 1.5rem;
+}
+
+.game-head h2 {
+  margin-bottom: 0.15rem;
+}
+
+/* Work in progress */
+
+.work {
+  max-width: 34rem;
+  margin-bottom: 1.5rem;
+}
+
+.work-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.work-line .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+
+/* For work whose end is not knowable until it is reached. A bar that fills at a made-up rate
+   reads as a promise about when it will finish. */
+.fill.working {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0 35%,
+    var(--accent-soft) 50%,
+    var(--accent) 65% 100%
+  );
+  background-size: 260% 100%;
+  animation: sweep 1.4s linear infinite;
+}
+
+@keyframes sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill.working {
+    animation: none;
+  }
+}
+
+/* What people talk about */
+
+.lede {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  color: var(--ink-soft);
+}
+
+/* Prose built from the counts, in the ink the counts use: it is a finding, not a caption. */
+.in-short {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  line-height: 1.55;
+}
+
+/* The same chart the report page draws, in the same two shapes: bars for the months and a
+   line for the share recommending, against a dashed half. */
+figure.timeline {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0.9rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+figure.timeline .quiet {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+}
+
+figure.timeline svg {
+  display: block;
+  width: 100%;
+  height: 140px;
+}
+
+figure.timeline .bar {
+  fill: var(--accent);
+  opacity: 0.55;
+}
+
+figure.timeline .share {
+  fill: none;
+  stroke: var(--over);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+figure.timeline .midline {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Invisible, and the only thing wide enough to point at in a chart of hundreds of months. */
+figure.timeline .hit {
+  fill: transparent;
+}
+
+figure.timeline .hit:hover {
+  fill: var(--ink);
+  fill-opacity: 0.06;
+}
+
+figure.timeline figcaption {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.35rem;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+}
+
+.languages {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+}
+
+.induced {
+  max-width: 46rem;
+  margin-top: 2rem;
+}
+
+.induced h3 {
+  margin-bottom: 0.35rem;
+}
+
+.induced > .quiet {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.induced dl {
+  margin: 0;
+}
+
+.induced .found {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.induced dt {
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.induced dt .quiet {
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.induced dd {
+  margin: 0;
+}
+
+.induced dd > p {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+}
+
+.induced summary {
+  cursor: pointer;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.induced .quotes {
+  margin-top: 0.5rem;
+}
+
+/* The one thing a reader has to know before reading a rate. Set apart from the lede and
+   above the table because a footnote is where things go to be skipped, and a model that
+   declined most of the corpus is not a footnote. */
+.caveat {
+  max-width: 44rem;
+  margin: 0 0 1.25rem;
+  padding: 0.6rem 0.85rem;
+  border-left: 3px solid var(--over);
+  background: var(--over-soft);
+  color: var(--ink);
+  border-radius: 0 6px 6px 0;
+}
+
+.footnote {
+  max-width: 44rem;
+  margin: 1rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.82rem;
+}
+
+.counts {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.counts th {
+  padding: 0 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--ink-faint);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.counts th.num,
+.counts td.num {
+  text-align: right;
+}
+
+.counts td {
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.counts tbody tr:hover {
+  background: var(--card);
+}
+
+.counts td > span,
+.counts td > button {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.counts .subject {
+  font-weight: 520;
+}
+
+.counts .thin {
+  display: inline-block;
+  margin-left: 0.4rem;
+  width: 1.1em;
+  height: 1.1em;
+  line-height: 1.1em;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--over-soft);
+  color: var(--over);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: help;
+}
+
+.counts .corrected {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  cursor: help;
+}
+
+.counts .rate {
+  position: relative;
+  text-align: right;
+}
+
+.counts .bar {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 0.6rem;
+  right: 0.6rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.55;
+  transform-origin: right;
+}
+
+.counts .over {
+  color: var(--over);
+}
+
+.counts .under {
+  color: var(--under);
+}
+
+.counts .faint {
+  color: var(--ink-faint);
+}
+
+/* The reviews behind a number */
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 1.1rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.3rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.back:hover {
+  background: var(--accent-soft);
+}
+
+.back svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The words each side uses and the other does not, as rows of chips a reader can press. A
+   chip is a count with a word on it, so it sits with the numbers rather than decorating them. */
+.stands-out {
+  max-width: 46rem;
+  margin: 0 0 1.25rem;
+}
+
+.stands-out .side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.stands-out .lead {
+  min-width: 7rem;
+  font-weight: 550;
+}
+
+.stands-out .praise .lead {
+  color: var(--under);
+}
+
+.stands-out .complaint .lead {
+  color: var(--over);
+}
+
+.stands-out .term {
+  padding: 0.12rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stands-out .term:hover {
+  border-color: var(--accent);
+}
+
+.stands-out .term.chosen {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stands-out .term .n {
+  margin-left: 0.35rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.stands-out .term.chosen .n {
+  color: inherit;
+}
+
+#stands-out-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+}
+
+.quotes {
+  max-width: 46rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quotes li {
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.quotes p {
+  margin: 0 0 0.55rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+.byline .verdict-up {
+  color: var(--under);
+  font-weight: 550;
+}
+
+.byline .verdict-down {
+  color: var(--over);
+  font-weight: 550;
+}
+
+.byline a {
+  color: var(--accent);
+}
+
+.tag {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.paging {
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 62rem) {
+  :root {
+    --rail: 15rem;
+  }
+
+  .stage {
+    padding: 1.75rem 1.5rem 2.5rem;
+  }
+}

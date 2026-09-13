@@ -21,6 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # The desktop shell is Tauri, which links against the system webview. On Linux that is
+      # WebKitGTK, and without it the workspace does not build at all: the failure is
+      # `glib-sys` failing its build script, which names nothing about Tauri.
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       # Deliberately not --all-features: the cuda and metal backends need vendor toolchains
@@ -35,6 +39,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
 
@@ -48,9 +54,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-      - run: cargo run -p census-core --example sample-report -- report.html
+      # No system webview needed here: the example lives in the core crate, which is the
+      # half of the workspace that knows nothing about a window.
+      - run: cargo run -p steamgauge-core --example sample-report -- report.html
       - run: node tools/report-check/check.mjs report.html
       # A report of one game has no cross-game matrix and no contents to come back to, so it
       # is a different page and gets driven too.
-      - run: cargo run -p census-core --example sample-report -- one.html --one-game
+      - run: cargo run -p steamgauge-core --example sample-report -- one.html --one-game
       - run: node tools/report-check/check.mjs one.html
+      # A census of a genre is dozens of games, and that is where the cross-game table stops
+      # fitting on a screen at all. Four games never exercise it.
+      - run: cargo run -p steamgauge-core --example sample-report -- many.html --games 36
+      - run: node tools/report-check/check.mjs many.html
+      # The adjudication page is the only place a person's judgement enters the project, and
+      # every figure that can be called accuracy rather than agreement will rest on it. A
+      # shortcut that does nothing or an answer that does not survive a reload would be found
+      # after somebody had read a thousand claims, which is exactly too late.
+      - run: cargo run -p steamgauge-core --example sample-gold -- gold.html
+      - run: node tools/gold-check/check.mjs gold.html
+      # And again as it is actually run. A POST that silently does nothing looks exactly like
+      # one that worked, so the promise that every answer is on disk before the next question
+      # is drawn is the one worth a browser to check.
+      - run: node tools/gold-check/served.mjs gold.html

@@ -1,0 +1,146 @@
+{
+  "app_id": 296970,
+  "seed": 1,
+  "handout_size": 120,
+  "induced_by": "claude-opus-5",
+  "subjects": [
+    {
+      "id": "mood-combat",
+      "label": "Mood combat: fighting with words",
+      "description": "The attitude-based battle system where enemies are beaten by complimenting, seducing, insulting or frightening them as well as by hitting them, and the mood that shifts which approach pays; not the roster of explorers or generic praise for combat.",
+      "refines": "gameplay",
+      "evidence": [
+        "17859476",
+        "18852477",
+        "19827144",
+        "203590871",
+        "24899325",
+        "25296721",
+        "26857395",
+        "37900285",
+        "44014532",
+        "51121899",
+        "68638819",
+        "90130563"
+      ]
+    },
+    {
+      "id": "explorer-crew",
+      "label": "Explorer roster and team composition",
+      "description": "Picking a crew of three from the roster of explorers, which characters and leaders are strong or pointless, favourite named explorers such as Anna, Emilia, Ivan or Maria Rodriguez, and how team composition shapes a run; not the enemies you meet.",
+      "refines": "gameplay",
+      "evidence": [
+        "117687966",
+        "124862916",
+        "18077110",
+        "18487748",
+        "18852477",
+        "25275225",
+        "25277919",
+        "28012906",
+        "28266220",
+        "29703032",
+        "36827960",
+        "37204021",
+        "47578358",
+        "50700397"
+      ]
+    },
+    {
+      "id": "oddball-enemies",
+      "label": "Oddball enemies and encounters",
+      "description": "The absurd cast of opponents players remember meeting: sheep, foul-mouthed nuns, hyenas, old Hungarian women, a yeti, a wolf, an unimpressed monk, Charles Darwin on a velociraptor; not the playable explorers or the maps as such.",
+      "refines": null,
+      "evidence": [
+        "17859476",
+        "182089590",
+        "19827144",
+        "19967717",
+        "203590871",
+        "25277919",
+        "26857395",
+        "33554571"
+      ]
+    },
+    {
+      "id": "expedition-maps",
+      "label": "Expedition maps and destinations",
+      "description": "The individual expedition maps and the places they visit (Mali, Hungary, the Highlands, the snowy mountain, Africa), their star ratings, running out of maps, wanting more areas, and a map that is broken; not the enemies met there or the era theme.",
+      "refines": null,
+      "evidence": [
+        "18077110",
+        "182089590",
+        "192066933",
+        "25277919",
+        "25296721",
+        "53654983",
+        "77627796"
+      ]
+    },
+    {
+      "id": "save-scumming",
+      "label": "Save-scumming and reloading dice",
+      "description": "Reloading saves to beat percentage rolls and bad dice, farming a map by save and load, and the ironman version without saves; not general complaints that the game is hard.",
+      "refines": "difficulty",
+      "evidence": [
+        "182089590",
+        "190649226",
+        "54191585",
+        "58476913",
+        "59927527"
+      ]
+    },
+    {
+      "id": "short-runs",
+      "label": "Short runs and bite-sized sessions",
+      "description": "A full playthrough lasting an hour or two, the game as a quick break or stress reliever played in short bursts rather than for hours; not whether it gets repetitive or how much content there is overall.",
+      "refines": "content",
+      "evidence": [
+        "17914368",
+        "18077110",
+        "52605771",
+        "69047351",
+        "72347415"
+      ]
+    },
+    {
+      "id": "supplies-economy",
+      "label": "Supplies, renown and resource economy",
+      "description": "Managing supplies, gold, research and status tokens on an expedition, the food bank breaking, the supply limit deciding how much of a map you can see, and building a points engine; not the mood combat or the crew.",
+      "refines": "gameplay",
+      "evidence": [
+        "115988814",
+        "32881164",
+        "37933438",
+        "53204428",
+        "62941710"
+      ]
+    },
+    {
+      "id": "event-choices",
+      "label": "Event choices on the expedition map",
+      "description": "The board-game style node map where each stop offers a choice with risks and rewards, the pick-a-path adventure structure and the weight of its decisions; not the battle system itself.",
+      "refines": "gameplay",
+      "evidence": [
+        "153163287",
+        "17914368",
+        "18077110",
+        "24899325",
+        "25455437",
+        "32881164"
+      ]
+    },
+    {
+      "id": "colonial-theme",
+      "label": "Colonial-era explorer theme",
+      "description": "The turn-of-the-century adventurer setting, Indiana Jones flavour and 1920s tropes, and whether its portrayal of the places visited is stereotyped or racist; not the plot or the humour in general.",
+      "refines": "story",
+      "evidence": [
+        "24428669",
+        "29049031",
+        "66683628",
+        "68638819"
+      ]
+    }
+  ]
+}

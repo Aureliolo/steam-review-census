@@ -1,0 +1,16 @@
+{
+  "claims": 471,
+  "unanswered_rows": 0,
+  "coverage": 0.8535031847133758,
+  "accuracy_where_answered": 0.736318407960199,
+  "accuracy_interval": [
+    0.6911534443880122,
+    0.777009503914971
+  ],
+  "polarity_where_subject_right": 0.8716216216216216,
+  "macro_f1": 0.6479356847968799,
+  "off_sheet_subjects": {},
+  "model": "intfloat/multilingual-e5-large",
+  "trained_on": "8d9da61190f1ccb1",
+  "threshold": 0.69
+}

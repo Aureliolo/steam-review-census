@@ -10,7 +10,7 @@
 // with the machine asking for a dark screen, and again with the script cut out, which is what
 // a reader with scripting off is served. Everything checked is a promise the page makes.
 //
-//   cargo run -p census-core --example sample-report -- page.html
+//   cargo run -p steamgauge-core --example sample-report -- page.html
 //   node tools/report-check/check.mjs page.html
 //
 // Chrome is found through CHROME_PATH, or in the usual places on each platform.
@@ -246,6 +246,24 @@ const PROBE = `(function () {
         return i === 0 || names[i - 1] <= n;
       }));
     }
+  }
+
+  // The table of corpora sorts on the same machinery, and its numbers are the ones a string
+  // comparison gets most wrong: a million-review corpus sorts below a two-thousand one.
+  var corpora = document.querySelector('table.corpora');
+  var bySize = corpora && corpora.querySelector('thead th.num button.sort');
+  if (bySize) {
+    bySize.click();
+    var sizes = [];
+    Array.prototype.forEach.call(corpora.tBodies[0].rows, function (r) {
+      var cell = r.children[1];
+      if (cell && cell.getAttribute('data-value') !== null) {
+        sizes.push(parseFloat(cell.getAttribute('data-value')));
+      }
+    });
+    check('the corpora do not reorder by size', sizes.length > 1 && sizes.every(function (v, i) {
+      return i === 0 || sizes[i - 1] >= v;
+    }));
   }
 
   // Wide things belong in the containers built to scroll them. Anything reaching past the
@@ -577,7 +595,7 @@ const ON_PAPER = `(function () {
 
 const file = resolve(process.argv[2] ?? "sample-report.html");
 const page = pathToFileURL(file).href;
-const profile = await mkdtemp(join(tmpdir(), "census-report-check-"));
+const profile = await mkdtemp(join(tmpdir(), "steamgauge-report-check-"));
 
 // The same page with the script cut out, which is exactly what a reader with scripting off
 // is served. Driven as a page of its own rather than by turning scripting off in the

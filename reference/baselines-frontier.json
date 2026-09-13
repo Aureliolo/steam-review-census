@@ -1,0 +1,14 @@
+{
+  "claims": 471,
+  "unanswered_rows": 0,
+  "coverage": 0.9957537154989384,
+  "accuracy_where_answered": 0.8699360341151386,
+  "accuracy_interval": [
+    0.8364625001953991,
+    0.8973984798875717
+  ],
+  "polarity_where_subject_right": 0.9411764705882353,
+  "macro_f1": 0.8727811764251949,
+  "off_sheet_subjects": {},
+  "answered_by": "claude-opus-5"
+}

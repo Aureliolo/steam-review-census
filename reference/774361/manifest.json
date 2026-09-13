@@ -1,0 +1,13 @@
+{
+  "app_id": 774361,
+  "produced_by": "claude-fable-5-1 labellers working in parallel from reference/labelling-brief.txt, each shown the review text alone",
+  "spine_version": "core-4",
+  "human_verified": false,
+  "notes": [
+    "Blasphemous. Labelled from snapshot=1788943097, which holds 67,104 of the 67,109 reviews Valve reports (99.99%). Valve scores it Very Positive.",
+    "151 labels: 51 stratified and 100 random. The two subsets have different jobs and must not be merged. The stratified labels are TRAINING DATA, so any figure measured over them says what the anchors memorised. The random labels are held back from fitting entirely and are the only ones that measure anything.",
+    "Measured 2026-09-10 under onnx-community/gte-multilingual-base, anchors pooled from all 25 sets and fitted for mentions: 46.0% primary agreement on the held-out random subset [36.6, 55.7], mention macro F1 0.395. Split by how the labeller called it, 54.2% on the 72 clear-cut reviews and 25.0% on the 28 contested ones. Strongest categories here: `compatibility` 0.80, `audio` 0.73, `verdict` 0.72. Weakest: `performance` 0.00, `monetisation` 0.00, `accessibility` 0.00.",
+    "Labellers were given the review text and the category sheet, and never the game, the rating or the classifier's prediction. The classifier reads the text alone, so a label made from more than that would measure the difference in what the two were shown rather than how well the classifier reads. One labeller took this game's batches, so a corpus with a strong accent is partly identifiable from its own reviews; the effect runs towards labels the classifier cannot reproduce, which understates it rather than flattering it.",
+    "Every review here is labelled once. Nothing double-labels a subset, so this set cannot report its own reliability, and results measured against it are AGREEMENT WITH A MODEL rather than accuracy. Two language models agreeing can be wrong together, most easily on sarcasm and on the boundaries between categories, which is exactly where this classifier is weakest. Set human_verified to true only once a person has labelled a subset independently, and record how large that was."
+  ]
+}

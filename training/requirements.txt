@@ -1,0 +1,22 @@
+# Loose here, exact in requirements.lock. What a run actually used is recorded beside its
+# metrics, so the lock file is the reproducible artefact and this is the intent.
+#
+# Torch resolves to a CUDA build on Windows and Linux with an NVIDIA card. If pip gives you a
+# CPU build, install it from the CUDA index first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch>=2.4
+transformers>=4.44
+tokenizers>=0.19
+datasets>=2.20
+scikit-learn>=1.5
+numpy>=1.26
+pyarrow>=17
+onnx>=1.16
+onnxruntime-gpu>=1.19
+optimum[onnxruntime]>=1.21
+huggingface_hub>=0.25
+# The DeBERTa candidates in the bake-off ship a SentencePiece model rather than a tokenizer
+# JSON, and converting it to a fast tokenizer needs both of these.
+sentencepiece>=0.2
+protobuf>=4
+pytest>=8

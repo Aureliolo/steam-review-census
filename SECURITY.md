@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report privately through GitHub's [security advisory
-form](https://github.com/Aureliolo/steam-review-census/security/advisories/new). Please do
+form](https://github.com/Aureliolo/steamgauge/security/advisories/new). Please do
 not open a public issue for a vulnerability.
 
 There is no release yet, so there is nothing deployed to attack and no supported version to
@@ -18,7 +18,7 @@ developer machine.
 Verify an asset before running it:
 
 ```sh
-gh attestation verify <asset> --repo Aureliolo/steam-review-census
+gh attestation verify <asset> --repo Aureliolo/steamgauge
 ```
 
 Checksums for every asset are published as `SHA256SUMS` alongside the release.

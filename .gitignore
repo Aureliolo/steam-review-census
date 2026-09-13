@@ -4,16 +4,22 @@
 data/
 
 # Drawn reference samples carry the review text itself, unlike the labels beside them,
-# which name reviews by id only. `census sample` regenerates these from the corpus and
+# which name reviews by id only. `steamgauge sample` regenerates these from the corpus and
 # the seed recorded in the manifest, so nothing is lost by keeping them out.
 reference/**/sample.json
 reference/**/batches/
+# The diverse handouts carry review text too; the subjects induced from them do not.
+reference/distinct/*.json
 corpus/
 raw/
 
 # Rendered reports quote review text, which is the same reason the captures are not here.
-census-report.html
+steamgauge-report.html
 *-report.html
+# The adjudication page carries the review around every claim, for the same reason.
+gold.html
+*-gold.html
+gold-answers.json
 analysis/
 output/
 *.db
@@ -35,6 +41,22 @@ credentials.*
 # Embedding models are fetched on first run and verified by checksum.
 models/
 *.onnx
+
+# Training data carries review text, for the same reason the captures are not here. The
+# label set beside it names claims by review id and byte offset and is committed.
+training/data/
+# What a run produced. Its metrics and config are committed as a summary; the weights,
+# checkpoints and logs are not, because a model belongs on Hugging Face with a card.
+training/runs/*/checkpoints/
+training/runs/*/*.bin
+training/runs/*/*.safetensors
+training/runs/*/*.onnx
+# A tokenizer is seventeen megabytes and is reproducible from the backbone name recorded in
+# run.json, so it belongs with the published model rather than in the history. Both the
+# directory the trainer saves and the copy the export lays beside the graph.
+training/runs/*/tokenizer/
+training/runs/*/tokenizer.json
+training/.venv/
 
 # Build and dependency artefacts
 target/

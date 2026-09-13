@@ -1,0 +1,60 @@
+{
+  "app_id": 214490,
+  "seed": 1,
+  "handout_size": 120,
+  "induced_by": "claude-opus-5",
+  "subjects": [
+    {
+      "id": "alien-hunter",
+      "label": "The Alien as an opponent",
+      "description": "The xenomorph itself as an adversary: how its AI hunts rather than follows a script, how acute its senses are, how it learns and adapts to your tricks, and that it cannot be killed or reliably shaken off; not the fear it produces and not the station's other enemies.",
+      "refines": "gameplay",
+      "evidence": [
+        "142374301",
+        "207567167",
+        "215186422",
+        "233609393",
+        "39931679",
+        "88081711"
+      ]
+    },
+    {
+      "id": "hiding-and-crouching",
+      "label": "Hiding, lockers and crouching",
+      "description": "The player's side of the hunt: lockers and cabinets, crouching under desks, vents, staying still and being unable to run, and the hide-and-seek rhythm the whole game is played in; not the Alien's own behaviour and not the controls as such.",
+      "refines": "gameplay",
+      "evidence": [
+        "130111776",
+        "180387938",
+        "26256979",
+        "36464374",
+        "51750855",
+        "68428395"
+      ]
+    },
+    {
+      "id": "save-terminals",
+      "label": "Saving at terminals",
+      "description": "The save system specifically: being able to save only at fixed emergency terminals, the dread of dying before reaching one, and whether losing a long stretch of progress is the tension the game wants or simply punishment; not general difficulty or checkpoint placement in combat.",
+      "refines": "gameplay",
+      "evidence": [
+        "100752650",
+        "215186422",
+        "52065005",
+        "98285672"
+      ]
+    },
+    {
+      "id": "working-joes",
+      "label": "The android enemies",
+      "description": "The synthetic humans as a second, separate threat: how they look, move and bleed, players who find them worse than the Alien, and the long android-heavy stretches of the game; not the Alien and not the human survivors.",
+      "refines": "gameplay",
+      "evidence": [
+        "14592972",
+        "215186422",
+        "30734140",
+        "33044178"
+      ]
+    }
+  ]
+}

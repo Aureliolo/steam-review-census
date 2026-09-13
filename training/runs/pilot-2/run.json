@@ -1,0 +1,231 @@
+{
+  "backbone": "xlm-roberta-base",
+  "epochs": 6,
+  "batch_size": 32,
+  "learning_rate": 2e-05,
+  "max_length": 128,
+  "polarity_weight": 0.5,
+  "split_seed": 1,
+  "device": "cuda",
+  "git_sha": "224e269ba79a4bbbcdd0f5ef599f9771a844b0f0",
+  "data_fingerprint": "15619efd9a045aaf",
+  "claims": {
+    "train": 1629,
+    "validation": 417,
+    "test": 714
+  },
+  "subjects": [
+    "audio",
+    "bugs",
+    "compatibility",
+    "content",
+    "controls",
+    "difficulty",
+    "gameplay",
+    "genre",
+    "graphics",
+    "language",
+    "monetisation",
+    "offtopic",
+    "performance",
+    "policy",
+    "price",
+    "story",
+    "tutorial",
+    "updates",
+    "verdict"
+  ],
+  "seconds": 61,
+  "validation": {
+    "accuracy": 0.42685851318944845,
+    "macro_f1": 0.3951108444428047,
+    "threshold": 0.05,
+    "threshold_score": 0.42685851318944845,
+    "polarity_macro_f1": 0.6134655191766054,
+    "calibration_error": 0.12908728311745096,
+    "on_clear_cut": 0.4377104377104377,
+    "on_contested": 0.4,
+    "per_subject": {
+      "audio": {
+        "precision": 0.3333333333333333,
+        "recall": 0.8,
+        "f1": 0.47058823529411764,
+        "support": 5
+      },
+      "bugs": {
+        "precision": 0.6666666666666666,
+        "recall": 0.25925925925925924,
+        "f1": 0.37333333333333335,
+        "support": 54
+      },
+      "compatibility": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1
+      },
+      "content": {
+        "precision": 0.0625,
+        "recall": 0.09090909090909091,
+        "f1": 0.07407407407407407,
+        "support": 11
+      },
+      "controls": {
+        "precision": 0.37037037037037035,
+        "recall": 0.625,
+        "f1": 0.4651162790697674,
+        "support": 16
+      },
+      "difficulty": {
+        "precision": 0.6666666666666666,
+        "recall": 0.56,
+        "f1": 0.6086956521739131,
+        "support": 25
+      },
+      "gameplay": {
+        "precision": 0.5909090909090909,
+        "recall": 0.4105263157894737,
+        "f1": 0.484472049689441,
+        "support": 95
+      },
+      "genre": {
+        "precision": 0.46153846153846156,
+        "recall": 0.391304347826087,
+        "f1": 0.4235294117647059,
+        "support": 46
+      },
+      "graphics": {
+        "precision": 0.34375,
+        "recall": 0.7857142857142857,
+        "f1": 0.4782608695652174,
+        "support": 14
+      },
+      "language": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 2
+      },
+      "offtopic": {
+        "precision": 0.4090909090909091,
+        "recall": 0.36,
+        "f1": 0.3829787234042554,
+        "support": 25
+      },
+      "performance": {
+        "precision": 0.19047619047619047,
+        "recall": 0.6666666666666666,
+        "f1": 0.2962962962962963,
+        "support": 6
+      },
+      "price": {
+        "precision": 0.14285714285714285,
+        "recall": 1.0,
+        "f1": 0.25,
+        "support": 1
+      },
+      "story": {
+        "precision": 0.2647058823529412,
+        "recall": 0.36,
+        "f1": 0.30508474576271183,
+        "support": 25
+      },
+      "tutorial": {
+        "precision": 0.2857142857142857,
+        "recall": 0.6,
+        "f1": 0.3870967741935483,
+        "support": 10
+      },
+      "updates": {
+        "precision": 0.125,
+        "recall": 0.42857142857142855,
+        "f1": 0.19354838709677416,
+        "support": 7
+      },
+      "verdict": {
+        "precision": 0.6346153846153846,
+        "recall": 0.44594594594594594,
+        "f1": 0.5238095238095238,
+        "support": 74
+      }
+    },
+    "per_language": {
+      "english": {
+        "accuracy": 0.4410480349344978,
+        "claims": 229
+      },
+      "schinese": {
+        "accuracy": 0.31868131868131866,
+        "claims": 91
+      },
+      "russian": {
+        "accuracy": 0.49206349206349204,
+        "claims": 63
+      },
+      "tchinese": {
+        "accuracy": 0.5555555555555556,
+        "claims": 9
+      },
+      "brazilian": {
+        "accuracy": 0.7142857142857143,
+        "claims": 7
+      },
+      "german": {
+        "accuracy": 0.16666666666666666,
+        "claims": 6
+      },
+      "polish": {
+        "accuracy": 0.5,
+        "claims": 6
+      },
+      "ukrainian": {
+        "accuracy": 0.5,
+        "claims": 2
+      },
+      "french": {
+        "accuracy": 0.0,
+        "claims": 2
+      },
+      "hungarian": {
+        "accuracy": 1.0,
+        "claims": 1
+      },
+      "spanish": {
+        "accuracy": 1.0,
+        "claims": 1
+      }
+    },
+    "per_length": {
+      "medium": {
+        "accuracy": 0.46153846153846156,
+        "claims": 208
+      },
+      "short": {
+        "accuracy": 0.36129032258064514,
+        "claims": 155
+      },
+      "long": {
+        "accuracy": 0.48148148148148145,
+        "claims": 54
+      }
+    },
+    "abstention": {
+      "0.3": {
+        "answers_for": 0.486810551558753,
+        "accuracy": 0.541871921182266
+      },
+      "0.5": {
+        "answers_for": 0.1630695443645084,
+        "accuracy": 0.5
+      },
+      "0.7": {
+        "answers_for": 0.050359712230215826,
+        "accuracy": 0.5238095238095238
+      },
+      "0.9": {
+        "answers_for": 0.002398081534772182,
+        "accuracy": 1.0
+      }
+    }
+  }
+}

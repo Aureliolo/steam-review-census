@@ -28,13 +28,32 @@ is what a reader with scripting off is served. It needs Chrome and Node, and not
 corpus, no model, no network.
 
 ```sh
-cargo run -p census-core --example sample-report -- report.html
+cargo run -p steamgauge-core --example sample-report -- report.html
 node tools/report-check/check.mjs report.html
 ```
 
 Chrome is found in the usual places per platform, or wherever `CHROME_PATH` says. Every
 check in it is a promise the page makes in its own prose; if you change what the page says
 it does, change the check with it.
+
+### One build directory
+
+`target/`, and nothing beside it. The gates above build test binaries under `target/debug` and
+never produce a release one, so the only binary anyone runs for real work is
+`target/release/steamgauge.exe`. That one binary is both front ends: opened with no arguments it
+is the desktop application, and given arguments it is the pipeline. Where there is a GPU,
+build it with the backend for it, because embedding a million reviews on a CPU is the
+difference between an afternoon and a week:
+
+```sh
+cargo build --release -p steamgauge-app --features directml
+```
+
+Two things follow. A build without that flag replaces the same file with a CPU one, and the
+only sign is the device `steamgauge embed` prints on its third line: read it. And on Windows a
+running `steamgauge.exe` holds its own binary open, so a build started mid-crawl fails with
+"Access is denied": wait for the run rather than reaching for `--target-dir`, which is how
+this repository once ended up with four build trees and twenty gigabytes in them.
 
 Two of those promises are watched rather than read. The page is reloaded with the network
 being listened to and fails on any request but the file itself, because a stylesheet pulling

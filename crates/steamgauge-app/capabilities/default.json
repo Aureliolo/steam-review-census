@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the window is allowed to ask the core to do. Opening a link is the only thing that leaves the machine, and only to Steam, because every review the page shows has to be checkable at its source.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://steamcommunity.com/*" }, { "url": "https://store.steampowered.com/*" }]
+    }
+  ]
+}

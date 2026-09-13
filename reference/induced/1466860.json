@@ -1,0 +1,92 @@
+{
+  "app_id": 1466860,
+  "seed": 1,
+  "handout_size": 120,
+  "induced_by": "claude-opus-5",
+  "subjects": [
+    {
+      "id": "civilisation-asymmetry",
+      "label": "Civilisations and their unique units",
+      "description": "How the playable civilisations differ from one another and what it is like to play a particular one: the English food economy, Abbasid farms, Mongol horse archers, Byzantine aqueducts, the Nest of Bees, the Ottoman bombard, and calls to buff or nerf a named civilisation; not which nations are absent from the roster, and not generic praise for combat or balance.",
+      "refines": "gameplay",
+      "evidence": [
+        "103101049",
+        "103243811",
+        "116181352",
+        "123454665",
+        "142441803",
+        "152272407",
+        "193835632",
+        "221467812",
+        "228674093"
+      ]
+    },
+    {
+      "id": "missing-nations",
+      "label": "Nations missing from the roster",
+      "description": "Which real countries and peoples are not playable and the demand that they be added: Spain, Ukraine, Japan, a new civilisation announced or asked for, the complaint that no new factions have arrived; not how the civilisations already in the game play, and not disputes about how a nation's history is portrayed.",
+      "refines": "content",
+      "evidence": [
+        "102734611",
+        "142490369",
+        "204410760",
+        "210881249"
+      ]
+    },
+    {
+      "id": "real-history",
+      "label": "Real history and how it is told",
+      "description": "The actual past the game depicts and the fidelity of that depiction: the documentary segments and the history lessons they teach, dynastic costume changes and period accents, and arguments over whose history is being claimed or misnamed, such as Rus versus Muscovy, Korean inventions shown as Chinese, or Lunar versus Chinese New Year; not the fictional narrative of a campaign and not the choice of playable nations.",
+      "refines": null,
+      "evidence": [
+        "101794130",
+        "101881386",
+        "103006654",
+        "103603019",
+        "107043475",
+        "110789560",
+        "165486297"
+      ]
+    },
+    {
+      "id": "series-lineage",
+      "label": "Where it sits in the Age of Empires series",
+      "description": "Measurement against the earlier games in this franchise and the reviewer's own history with them: it has the Age of Empires 2 vibe, part 3 was richer, a step backwards from the previous entries, a worthy heir, I started with Age of Kings, returning after twenty years; not comparison to other real-time strategy games or to the genre in general.",
+      "refines": "genre",
+      "evidence": [
+        "101881386",
+        "103243811",
+        "103565448",
+        "107781267",
+        "120444907",
+        "121437768",
+        "127502724",
+        "142490369",
+        "214020591"
+      ]
+    },
+    {
+      "id": "computer-opponent",
+      "label": "The AI opponent",
+      "description": "The computer player in skirmish and campaign: whether it is competent or needs strengthening, how it behaves when it hides units in forests or plays erratically, and whether fighting it is a relaxing alternative to human opponents; not the difficulty setting as a number and not human matchmaking.",
+      "refines": null,
+      "evidence": [
+        "106488628",
+        "139264428",
+        "222374810"
+      ]
+    },
+    {
+      "id": "economy-macro",
+      "label": "Villager economy versus fighting",
+      "description": "The resource half of the game and how much attention it demands: villagers and what they cost, farms and food production, and the complaint that managing the economy gets in the way of the battles or turns the game into a farming sim; not combat mechanics and not the pace of a match.",
+      "refines": "gameplay",
+      "evidence": [
+        "133252921",
+        "137687565",
+        "142441803",
+        "181610787"
+      ]
+    }
+  ]
+}

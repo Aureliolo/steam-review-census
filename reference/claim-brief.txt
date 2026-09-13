@@ -1,0 +1,146 @@
+Categories (spine core-6). You are labelling CLAIMS: the separate points a review makes. Each claim gets exactly one subject.
+
+A review arrives split into numbered claims, and you label every one of them. The review is there so a claim like "it doesn't" or "same here" can be read in context; the label is about the claim, not about the review around it. A review that makes one point has one claim, and a review that makes twelve has twelve, which is the whole reason for labelling this way: the tool used to average a long review into a single vector and then file a two-word review under four subjects.
+
+You are not told which game it is, whether the reviewer recommended it, or what the model guessed. The model reads the text alone, so a label made from more than that measures what you were told rather than how well it reads.
+
+Most claims name no aspect at all. "Great game", "10/10", "gfg", a row of emoji: these are not graphics, not gameplay and not story, and filing them as any of those is the exact failure this set exists to fix. They are `verdict` when they judge the game and `offtopic` when they say nothing about it. Expect to use those two more than anything else, and do not go looking for a subject that is not there.
+
+Performance (performance)
+  The game runs badly. Low frame rate, stuttering, frame drops, poor optimisation, long loading times, and it struggles even on good hardware.
+  RULE: Frame rate and stuttering belong here. How the animation itself looks, and how fast it plays out, belong to graphics.
+
+Bugs and crashes (bugs)
+  The game is broken and buggy. It crashes to desktop, freezes, corrupts or loses save files, and is full of glitches that block progress.
+  RULE: Something that worked and now does not belongs here. Being unable to log in is here when the login itself is broken and policy when needing an account at all is the complaint. A game that never starts, with no reason given, is compatibility.
+
+Gameplay and mechanics (gameplay)
+  The systems and mechanics themselves. Combat, movement, crafting, building, exploration, progression systems, and whether the mechanics are deep or shallow.
+  RULE: Naming the genre or comparing the game to another one belongs to genre. Whether options are balanced against each other belongs to difficulty, and so does how hard an enemy is to beat; how that enemy behaves and what it does is a mechanic and belongs here. How much game there is belongs to content, and anything user-made belongs to mods. A system the game never explains belongs to tutorial, however good the system itself is.
+
+Genre and comparisons (genre)
+  What kind of game this is. A roguelike, turn-based tactics, a management sim, a deckbuilder, a soulslike. It plays like FTL, it is XCOM meets Darkest Dungeon, if you liked Slay the Spire you will like this, it reminds me of the old games in the genre.
+  RULE: Naming what kind of game it is, or which games it resembles, belongs here, and that includes calling it a co-op game or comparing it to other co-op games. As soon as a review says a mechanic is deep, shallow, satisfying or broken, that part is gameplay, and whether the co-op itself works is multiplayer. A comparison with this game's own predecessor belongs here when the difference itself is the point, and to verdict when it is only better or worse.
+
+Overall verdict only (verdict)
+  A verdict with no specific reason given. Great game, terrible game, ten out of ten, would recommend, do not buy, best game ever, an excellent city builder, I find this game childish, please make a sequel.
+  RULE: Only when no aspect is named at all. A review that gives a verdict and then names one specific thing belongs to that thing: "super fun, and the story is great" is story. A judgement with only the kind of game attached, "excellent city builder", is a verdict; genre is for when what kind of game it is, or which game it resembles, is the point being made. A community's own catchphrase used as a salute, "Rock and Stone", is a verdict and it is praise. Asking for a sequel belongs here; asking for a port belongs to compatibility.
+
+Says nothing about the game (offtopic)
+  The review is not about the game. A joke, a meme, a copypasta, a story about the reviewer's day, an argument with another reviewer, a complaint about Steam or the shop page, or a protest about something the publisher did elsewhere.
+  RULE: A joke that still makes a point about the game belongs to whatever it is joking about, most often gameplay or difficulty, and a protest about anything this game's publisher or platform did belongs to policy. This is only for reviews from which a reader would learn nothing at all, and that includes a review with nothing in it: a full stop, a row of emoji, a keyboard mash. A single word that does pass judgement, good or terrible or 10/10, is a verdict.
+
+Story and writing (story)
+  The story, plot and characters. The writing, the dialogue, the humour, the ending, the world and its lore, the characters players grew fond of, and whether the narrative is worth following.
+  RULE: Anecdotes from a playthrough belong here when they are about a character or an event, and to gameplay when they are about a mechanic. Humour in the writing is here; a charming art style is graphics.
+
+Atmosphere and feel (atmosphere)
+  What the game makes you feel while you are playing it. Genuinely terrifying, the tension never lets up, put headphones on and turn the lights off, it pulls you in and you lose whole evenings, the mood is oppressive and lonely, it has lost the soul the first one had, the people are just numbers to you now, you never really feel it.
+  RULE: This is the feeling itself, for reviews that name nothing that produces it. Being unable to stop playing, losing whole evenings and calling it addictive are here, and so is a reaction with nothing named behind it: it made me cry, the feels, I was terrified. Where a review says what creates the mood, that part belongs to what creates it: a frightening creature design is graphics, a soundtrack that unsettles is audio, a mechanic that keeps you on edge is gameplay, faithfulness to the film or book it adapts is licensing, and immersion broken by a crash is bugs.
+
+Graphics and art (graphics)
+  How the game looks. The visuals, the art style, the animation and how quickly it plays out, the environments and character models, whether it is beautiful or ugly or charming.
+  RULE: Animation quality and animation speed belong here. Frame rate belongs to performance.
+
+Audio and music (audio)
+  How the game sounds. The soundtrack, the music, the sound effects, the voice acting and the audio mixing.
+
+Controls and interface (controls)
+  The controls and the user interface. Clunky or responsive controls, keybindings, controller support, menus, the HUD, the inventory screens, and how many clicks it takes to do anything.
+  RULE: Whether a controller is supported belongs here, and so does anything the game makes you sit through or click past: a cutscene that cannot be skipped is a question of how many clicks it takes to do anything. Whether the game runs on a given device belongs to compatibility.
+
+Difficulty and balance (difficulty)
+  How hard the game is and whether it is fair. Difficulty spikes, grinding, whether the options are balanced against each other, luck and randomness deciding the outcome, and whether it is too easy or punishing.
+  RULE: Balance complaints belong here rather than to gameplay, including when they name a specific mechanic as overpowered or useless. How hard an enemy is to beat is here; how it is designed and what it does is gameplay. A complaint about what a patch changed is about the change and belongs here where the change was to balance, with updates for the patching itself. Being lost because nothing was explained belongs to tutorial. What a purchase gives you is monetisation, and how it plays once you have it is here.
+
+Amount of content (content)
+  How much game there is. Length, how many hours it lasts, replay value, whether runs differ from one another, whether it gets repetitive, and whether it feels finished or thin and runs out of things to do.
+  RULE: Replayability and repetitiveness are two ends of one axis and both belong here, never to gameplay. What the players made rather than the developers belongs to mods, however much of the game it accounts for.
+
+Mods and user content (mods)
+  Mods and what players have made. Whether the game supports modding, how easy mods are to install, the workshop, what the community has built, whether the game is worth playing unmodded, and mods breaking when the game updates.
+  RULE: Anything made by players rather than by the developers belongs here, including how much of the game's life it accounts for. Whether the developers support modding is here; whether a patch broke the mods is here too, because the subject is the mods. Paid mods and creator programmes are monetisation, and what the people who make them are like is community.
+
+Price and value (price)
+  What it costs and whether it is worth the money. Worth every penny, a waste of money, I refunded it, full price versus sale, value for money, and whether to wait for a discount.
+  RULE: What the base game costs belongs here, and so does judging its value in money: worth every penny and waste of money are both about what it was worth paying. What is sold on top of it belongs to monetisation.
+
+Monetisation and DLC (monetisation)
+  Paid extras and how they are sold. Microtransactions, battle passes, loot boxes, paywalls, season passes and content cut out to sell as DLC.
+  RULE: What is sold on top of the game, and how, belongs here, including what a purchase gives you: a pack whose contents are decided by chance is sold here, and whether luck then decides the match is difficulty. Wanting more of the game belongs to content even when the review asks for it as DLC: that is a review saying it ran out, not one about how the game is sold.
+
+Multiplayer and online (multiplayer)
+  Playing with or against other people. Matchmaking, servers, lag and ping, co-op, player counts, whether lobbies are dead and whether cheaters ruin it.
+  RULE: Servers, matchmaking and connection quality belong here, and so does what playing with other people is like: better with friends, dull on your own, worth it only in a group. What the other players are like belongs to community, and calling the game co-op as a kind of game belongs to genre. "The game is dead" is here when nobody is playing it and updates when nobody is developing it.
+
+Community and players (community)
+  The people who play it. Whether the community is welcoming or toxic, griefing and harassment, and what the playerbase is like.
+  RULE: What the people are like belongs here. What they have made belongs to mods, and whether there are enough of them online belongs to multiplayer.
+
+Updates and developer support (updates)
+  What the developers do after release. Patches, roadmaps, early access progress, communication with players, whether promises were kept, and whether the game is abandoned.
+  RULE: What the developers do to the game belongs here, and so does praise or blame aimed at the studio itself, including thanking them and telling them to fix it. A complaint about what a patch changed is about the change: balance to difficulty, a mechanic to gameplay, content removed to content. This is for the patching itself, its pace, and whether they listen. "The game is dead" is here when nobody is developing it and multiplayer when nobody is playing it. What the publisher or the platform requires of the player belongs to policy.
+
+Publisher and platform policy (policy)
+  Decisions taken by the publisher or the platform rather than by the game. Needing a second account to play, region locks and delistings, DRM and kernel-level anti-cheat, launcher requirements, price rises, and terms that changed after people had bought it.
+  RULE: Anything the publisher or the platform decided belongs here, including a protest that is angry and brief and names no particular term, and including celebrating one that was reversed: "we won" about a withdrawn account requirement is this, and it is praise. What a decision is belongs here; what it does while playing belongs where it happens, so a launcher that will not sign you in is here and an anti-cheat that keeps you out of a match is multiplayer. Only a protest about something with no connection to this game at all belongs to offtopic.
+
+Hardware and compatibility (compatibility)
+  Whether it runs on your setup at all. System requirements, Steam Deck, Linux and Proton, ultrawide and multi-monitor support, drivers and hardware, and asking for it on a console or handheld.
+  RULE: Asking for a port to another platform belongs here, and so does a game that will not start at all when no reason is given. A game that starts and then crashes is bugs. Asking for a sequel belongs to verdict, and anything about playing it in a headset belongs to VR.
+
+Accessibility and options (accessibility)
+  Settings and accommodations. Subtitles, colourblind modes, remappable controls, difficulty options, text size, and the settings players need in order to play at all.
+  RULE: Which languages the game is available in belongs to language, not here.
+
+Language and localisation (language)
+  Which languages the game is in and how good the translation is. No English, no Chinese, machine translation, a language dropped in an update, subtitles only in some languages, playing anyway with a dictionary.
+  RULE: Whether a language exists and how well it reads belongs here. Subtitles as an accommodation, in a language that is already supported, belong to accessibility.
+
+Tutorial and learning (tutorial)
+  How the game teaches itself. The tutorial, the first hour, systems that are never explained, the learning curve, reading a wiki to understand anything, and whether a new player is left to work it out alone.
+  RULE: Whether the game explains itself belongs here. Whether it is hard once you do understand it belongs to difficulty, and whether the systems themselves are any good belongs to gameplay.
+
+Licensed content (licensing)
+  Whether the game has the real names. Real teams, players, clubs and kits, real cars and tracks, licensed music, a licence lost or gained between releases, and how faithful the game is to the thing it is adapting.
+  RULE: A real name being present, missing or wrong belongs here. What is sold on top of the game belongs to monetisation, whether an adaptation is well written belongs to story, and a protest about a licence agreement, terms of service or an account belongs to policy.
+
+VR and headsets (vr)
+  Playing it in a headset. Room scale and seated play, motion sickness and comfort options, tracking and the controllers in your hands, whether it was built for a headset or is a flat game bolted into one, and which headsets it works with.
+  RULE: Anything about being in a headset belongs here, including whether a given headset is supported. A flat game called immersive is not this: immersion belongs to whatever creates it, most often graphics or story. How the game looks on a monitor belongs to graphics.
+
+Every claim label is six fields.
+
+subject
+  The one category this claim is about. Exactly one, always. Most claims name no aspect at
+  all: those are `verdict` if they judge the game and `offtopic` if they do not.
+
+polarity
+  What the claim does about its subject, in one of these words: praise, complaint, neutral. Praise and
+  complaint are about the game, not about the reviewer's mood. Neutral is for a claim that
+  states something without judging it, which is common and is not a failure to decide.
+
+ironic
+  The text says the opposite of what it appears to say. "0/10, I have not slept in three
+  days" is praise; "10/10 would lose my save file again" is a complaint. Judge this from
+  the words alone. You are not told whether the reviewer recommended the game, so that you
+  cannot be led by it. Where a claim is ironic, `polarity` is what the reviewer MEANS.
+
+confidence
+  How sure you are of the subject, in one of these words: high, medium, low. This one is about
+  you, and it is used: the model is trained against your uncertainty rather than against a
+  flattened guess, so a truthful "low" is worth more than a confident wrong answer.
+
+ambiguous
+  Whether the call is genuinely contested: two subjects fit and the rules above do not settle
+  which. This is about the claim and the taxonomy rather than about you, and it is read back.
+  Agreement is reported separately over the claims marked here.
+
+split_wrong
+  Whether this claim is really two points stuck together, or half of one that was cut in the
+  wrong place. The splitting is mechanical and it will be wrong sometimes; this is the only
+  signal that it was, and it is what improves it. Leave it false unless the text in front of
+  you is genuinely mis-cut.
+
+Return every one of these for every claim, in the order the claims are given. A judgement left
+out is not a judgement, and a label missing one is refused rather than filled in with a guess.

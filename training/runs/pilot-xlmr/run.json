@@ -1,0 +1,188 @@
+{
+  "backbone": "xlm-roberta-base",
+  "epochs": 5,
+  "batch_size": 16,
+  "learning_rate": 2e-05,
+  "max_length": 128,
+  "polarity_weight": 0.5,
+  "split_seed": 1,
+  "device": "cuda",
+  "git_sha": "4a9e8e58ef581b3a4e20b19f7627b71a2403f7a1",
+  "data_fingerprint": "6bc3a9a40e587b77",
+  "claims": {
+    "train": 430,
+    "validation": 126,
+    "test": 125
+  },
+  "subjects": [
+    "audio",
+    "bugs",
+    "compatibility",
+    "content",
+    "controls",
+    "difficulty",
+    "gameplay",
+    "genre",
+    "graphics",
+    "language",
+    "monetisation",
+    "offtopic",
+    "performance",
+    "price",
+    "story",
+    "tutorial",
+    "updates",
+    "verdict"
+  ],
+  "seconds": 17,
+  "validation": {
+    "accuracy": 0.19047619047619047,
+    "macro_f1": 0.16107620640229334,
+    "threshold": 0.05,
+    "threshold_score": 0.19047619047619047,
+    "polarity_macro_f1": 0.186307519640853,
+    "calibration_error": 0.06332937172717519,
+    "on_clear_cut": 0.19230769230769232,
+    "on_contested": 0.18181818181818182,
+    "per_subject": {
+      "audio": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 2
+      },
+      "bugs": {
+        "precision": 0.08333333333333333,
+        "recall": 0.09090909090909091,
+        "f1": 0.08695652173913043,
+        "support": 11
+      },
+      "content": {
+        "precision": 0.05263157894736842,
+        "recall": 0.25,
+        "f1": 0.08695652173913043,
+        "support": 4
+      },
+      "difficulty": {
+        "precision": 0.2,
+        "recall": 0.1,
+        "f1": 0.13333333333333333,
+        "support": 10
+      },
+      "gameplay": {
+        "precision": 0.36363636363636365,
+        "recall": 0.18604651162790697,
+        "f1": 0.24615384615384617,
+        "support": 43
+      },
+      "genre": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 4
+      },
+      "language": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 2
+      },
+      "monetisation": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1
+      },
+      "offtopic": {
+        "precision": 0.3333333333333333,
+        "recall": 0.07692307692307693,
+        "f1": 0.125,
+        "support": 13
+      },
+      "performance": {
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999,
+        "support": 5
+      },
+      "price": {
+        "precision": 0.15384615384615385,
+        "recall": 1.0,
+        "f1": 0.2666666666666667,
+        "support": 2
+      },
+      "story": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 11
+      },
+      "tutorial": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 4
+      },
+      "verdict": {
+        "precision": 0.6363636363636364,
+        "recall": 0.5,
+        "f1": 0.56,
+        "support": 14
+      }
+    },
+    "per_language": {
+      "english": {
+        "accuracy": 0.20689655172413793,
+        "claims": 58
+      },
+      "schinese": {
+        "accuracy": 0.1282051282051282,
+        "claims": 39
+      },
+      "russian": {
+        "accuracy": 0.4166666666666667,
+        "claims": 12
+      },
+      "german": {
+        "accuracy": 0.18181818181818182,
+        "claims": 11
+      },
+      "polish": {
+        "accuracy": 0.0,
+        "claims": 6
+      }
+    },
+    "per_length": {
+      "short": {
+        "accuracy": 0.1509433962264151,
+        "claims": 53
+      },
+      "medium": {
+        "accuracy": 0.2,
+        "claims": 55
+      },
+      "long": {
+        "accuracy": 0.2777777777777778,
+        "claims": 18
+      }
+    },
+    "abstention": {
+      "0.3": {
+        "answers_for": 0.0,
+        "accuracy": null
+      },
+      "0.5": {
+        "answers_for": 0.0,
+        "accuracy": null
+      },
+      "0.7": {
+        "answers_for": 0.0,
+        "accuracy": null
+      },
+      "0.9": {
+        "answers_for": 0.0,
+        "accuracy": null
+      }
+    }
+  }
+}

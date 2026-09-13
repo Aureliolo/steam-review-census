@@ -1,4 +1,4 @@
-# Steam Review Census
+# SteamGauge
 
 > **Unreleased and in development.** There is no installer and no release yet. This file
 > describes what the tool is and how it is meant to be judged, not a running product. What
@@ -26,10 +26,12 @@ The only way to remove the argument is to hold every review and count.
 ## What it does
 
 - Take one Steam app ID, or a whole list of them.
-- Download **every** review for those games, not a sample.
-- Sort each review into a category. Use the built-in set of categories or define your own.
-- Summarise, per category, what people are praising or complaining about.
-- Build an overall picture of the game from those category summaries.
+- Download **every** review for those games, not a sample, and bring the capture up to date
+  later without downloading it again.
+- Split each review into the points it makes and sort each point into a subject, with a
+  measured error and an honest "cannot tell".
+- Show, per subject, the words the praise uses and the complaints use, counted by reviewer.
+- Build a picture of the game in a paragraph from those counts.
 - Click through from any number, anywhere, to the actual reviews behind it.
 
 Results come out as one self-contained page: every rate, the reviews behind it, and what the
@@ -56,60 +58,109 @@ Where a figure is not a mention rate, it is labelled. Two others appear:
 No percentage is ever shown without saying which of the three it is. The point of counting
 everything is lost if the denominator is ambiguous.
 
-### One category, and only more when a review earns it
+### The unit is a claim, not a review
 
-Every review gets a single primary category. That keeps the primary shares clean: they add up
-to the number of reviews, and the figure means what it appears to mean.
+A review is not one opinion. "Looks incredible, runs like a slideshow, and the story is the
+best in the series" is three, about three different things, and a single vector for the whole
+review is their average: a point that belongs to none of them. So every review is first split
+into the separate points it makes, and a subject belongs to a point rather than to a review.
 
-A review that genuinely covers more than one thing also records the other topics it touches,
-so "great simulation, awful interface" is not filed under one of those and stripped of the
-other. A review about a single thing gets a single category and nothing else. Secondary
-topics are recorded when they exist, never invented to fill a slot.
+That is what keeps the arithmetic honest at both ends. A review that makes twelve points
+contributes to twelve subjects instead of being flattened into one. A review that makes one
+point can carry exactly one subject, which is the part that matters more than it sounds: a
+two-word review cannot be filed under four topics, because it does not contain four.
 
-### Categories are built from reviews, not from definitions
+A review's subjects are the union of its claims' subjects, and it still counts once towards
+each of them. The headline is a mention rate, a share of reviews, and it stays that way
+deliberately: counting claims instead would let whoever writes most set the numbers, which is
+the same distortion the tool exists to expose at the top of the pile.
 
-A category has to be described to a machine before it can be counted. Describing it is not
-enough: a written definition of a topic is prose *about* that topic, and reviews about it are
-not. "amauzing" is nowhere near a paragraph on audio mixing.
+### What reads a claim
 
-So each category is anchored by the reviews that belong to it, taken from labelled reference
-sets, and falls back to its written description only in proportion to how few of those exist.
-A category with plenty of labelled examples is defined by them; one with none is defined by
-its description alone and behaves exactly as it would without any of this. Fitting can
-therefore improve a category but never leaves one worse off for lack of data.
+A model trained on labelled claims, and nothing else. It says which subject a claim is about,
+whether it is praise, a complaint or neither, and how sure it is. Below a calibrated threshold
+it says nothing at all, and those claims are reported as unclassified rather than filed under
+whichever category happened to be nearest.
 
-A review usually raises several subjects and is mostly about one of them, and those are two
-different questions to be good at. Fitting for the second one alone is a trap: the setting
-that best identifies a review's main subject is to ignore secondary subjects entirely, which
-leaves every category that is usually somebody's *second* subject, graphics and audio and
-price among them, with almost nothing to be built from. Anchors are therefore fitted so that
-every category counts the same however rare it is, and the fit reports what the other choice
-would have scored on the same held-back reviews, so the decision is a measurement rather than
-an opinion.
+That last sentence is the whole of what changed. The previous classifier compared a review to
+twenty-four category prototypes and kept the nearest ones. A prototype comparison has no way
+to express "this is about nothing", so every string got a subject: a review reading "gfg" was
+filed under graphics and art, and one reading "this game is a lot of fun" under community and
+players. Those are not edge cases. Steam is full of two-word reviews, and each one of them was
+adding a fraction of a percent to a rate that was supposed to be a fact about players.
 
-Some categories are defined by what a review does *not* say, and two of them cannot share a
-review with anything: a bare verdict and a review that says nothing about the game are both
-claims that no aspect was named. The taxonomy says so and the classifier is held to it, so it
-can never report a review as naming an aspect and naming none.
+The model is fine-tuned from a multilingual encoder and shipped as an ONNX graph, so it runs
+on the same local runtime as everything else. No API key, no network, no account. Which
+encoder it starts from is decided by measurement across candidates on identical labels and an
+identical split, judged on accuracy, throughput, and how well its confidence tracks whether it
+is right, because a model that cannot tell when it is guessing cannot be allowed to abstain.
+
+**The threshold is chosen by what it promises, not by how much it answers.** The obvious way
+to pick one, maximising accuracy times coverage, has a degenerate optimum on a model that is
+not yet good: coverage rises faster than accuracy falls all the way down, so the sweep settles
+at its own floor and the model is told to answer everything. Measured, it chose 0.05, which
+across twenty-five subjects is barely above the 0.04 a uniform guess scores, and a corpus of
+17,596 claims came back with nothing declined at all. That is the prototype's failure wearing
+a trained model's clothes. The threshold is now the one giving the most coverage at a promised
+accuracy, and when no threshold reaches that accuracy the model is recorded as not good enough
+rather than quietly lowered to whatever it can manage.
+
+Some categories are defined by what a claim does *not* say. A bare verdict and a claim that
+says nothing about the game are both statements that no aspect was named, and on a corpus of
+real reviews they are the commonest labels there are.
 
 Where two categories genuinely overlap, the taxonomy settles it with a written rule rather
 than leaving each labeller to decide: replayability and repetitiveness are amount-of-content,
 balance is difficulty, animation speed is graphics, port requests are compatibility, sequel
-requests are a verdict. The rules ship with the taxonomy and generate the sheet every
-labeller works from, so a boundary can only be defined in one place.
+requests are a verdict, a system nobody explains is tutorial however good the system is,
+calling a game co-op is naming a kind of game and belongs to genre, and a protest about
+anything the publisher did belongs to policy even when it names no particular term. The rules
+ship with the taxonomy and generate the sheet every labeller works from, so a boundary can
+only be defined in one place.
+
+Categories are added when labellers report having nowhere to put something, not when
+somebody thinks of one. Every category in the current spine was asked for by the people
+labelling against the previous one.
 
 ### Depth is how closely each review is read
 
 Every review is analysed. Depth does not decide how many are included, it decides how finely
-each one is taken apart:
+each one is taken apart. **Deep** is the default and is described above: a review becomes the
+points it makes. **Shallow** treats the whole review as one point, which is faster and
+systematically understates anyone who wrote more than a sentence. Neither setting drops a
+review.
 
-- **Shallow** treats a review as one opinion about one thing.
-- **Deep** breaks it into the separate points it makes, so a long review contributes several
-  distinct opinions instead of one blurred average of them.
+### Praised, criticised, or both
 
-Deep reading is the default, because it is also what makes a mention rate correct: a review
-counts towards a category when any of its points belongs there. Shallow is faster and
-systematically understates multi-topic reviews. Neither setting drops a review.
+A thumb is attached to a review, not to a subject. Somebody who loves the art and despairs of
+the framerate has one thumb and two opposite opinions, and crediting both subjects with the
+same verdict is a straightforward misreading of what they wrote.
+
+So polarity belongs to the claim, and is reported per review per subject: of the reviews that
+discuss performance, the share that criticise it, the share that praise it, and the share that
+do both. **Mixed** is a real answer and appears as one. It is the most interesting thing a long
+review has to say, and any tool that forces it to a single sign is throwing that away.
+
+Claim-level polarity is available underneath, for reading rather than for headlines, and is
+labelled as what it is: a count of opinions, which the most talkative reviewers dominate.
+
+### What they said about it
+
+A fifth of reviewers complaining about performance is a count. Whether they mean stutter,
+crashes or load times is the thing a reader opened the row for, and no local model is asked to
+paraphrase anybody to say it. Instead, each side of a subject shows the **words that stand
+out**: the terms its complaints use far more than its praise does, and the reverse, each with
+the number of reviewers who used it. "stutter 84, crashes 61, memory leak 23" under
+performance is what was said, counted, and every term opens onto the exact claims it was
+counted from.
+
+The comparison is complaint against praise within one subject rather than against the corpus,
+because against the corpus a subject's vocabulary is mostly its own name: "fps" stands out in
+every performance claim and tells nobody anything. The ranking is a log-odds z-score with a
+half-count prior, so a word three reviewers used and nobody on the other side did does not
+outrank one three hundred used against ten, and a side with a handful of reviews shows nothing
+rather than promoting whatever those few happened to write. Counts are by reviewer, once per
+review however often it repeats itself, for the same reason the headline is a mention rate.
 
 ### Ratings that disagree with the text
 
@@ -117,21 +168,175 @@ A thumbs-down is not always a complaint. "0/10, haven't slept in three days" is 
 a costume, and counting it as negative quietly poisons every number downstream. The reverse is
 just as common: a recommendation that is really a warning not to buy yet.
 
-These are **flagged, not filed away**. The flag records that the rating and the text disagree;
-the review still sorts by what it is actually about, so the praise buried in a joke review
-still counts as praise of whatever it praises. You can then include, exclude or inspect the
-flagged ones deliberately, instead of discovering later that they were silently miscounted.
+These are **flagged, not filed away**. What a labeller flags is what the text does, judged
+from the words alone: they are never shown whether the reviewer recommended the game, so that
+they cannot be led by it, and so they are in no position to report that the two disagree.
+Putting that flag next to the rating is what finds the disagreement, and that is arithmetic
+rather than a judgement. The review still sorts by what it is actually about, so the praise
+buried in a joke review still counts as praise of whatever it praises.
+
+The flag lives on labelled reviews and nowhere else, which is deliberate rather than an
+omission waiting to be filled. Reading it off a whole corpus needs a classifier measured to
+find irony, and nothing here has measured that yet. What the reference sets buy in the
+meantime is the rate: how often, in reviews drawn at random, the text and the rating point
+opposite ways at all.
 
 ## How it knows whether it is right
 
 A census that cannot say how often it is wrong is just an opinion with decimal places.
 
-Every classifier here is measured against **reference sets**: reviews labelled one at a time,
-stored under `reference/<app id>/` with a manifest saying exactly what produced them. Each set
-is split at sampling time. A subset stratified by predicted category supplies the labelled
-examples categories are built from. A separate, randomly drawn subset is held back from that
-entirely and is the only part any figure is ever quoted from, because a stratified sample
-deliberately over-represents whatever the classifier rarely picks.
+The model is measured against **reference sets**: claims labelled one at a time, stored under
+`reference/claims/<app id>/` with the drawn sample beside them. Whole games are held out rather
+than whole claims, because two claims from one review are not independent evidence and a score
+that mixes them is a score for how well the model repeats itself.
+
+Three things are reported together, and separating them is what makes the number mean anything:
+
+- **Agreement**, over the claims the model was willing to answer for.
+- **Abstention**, the share it declined. A score that quietly drops those is a score for a
+  classifier nobody is running.
+- **Contest**, the share the labeller marked as genuinely ambiguous, reported apart from the
+  rest. Disagreement there says as much about the taxonomy as about the model.
+
+### What it is worth against the alternatives
+
+Measured over frozen games, which chose nothing about the model. Every row abstains where it is
+unsure, and every row is scored only on what it answered, because a score that quietly drops
+the declined claims is a score for a classifier nobody is running.
+
+| | answers | accuracy where it answers | macro F1 |
+|---|---|---|---|
+| the commonest subject | everything | 23.3% | 0.015 |
+| TF-IDF bag of words | 32% | 44.1% | 0.347 |
+| nearest subject centroid over an untuned encoder | 5% | 42.3% | 0.372 |
+| this reader, 278M parameters (2026-09-11) | 61% | 74.8% | 0.525 |
+| **this reader, 560M parameters** | **85%** | **73.6%** | **0.648** |
+| Claude Opus 5, given the same sheet | 99.6% | 87.0% | 0.873 |
+
+The third row is what this project did before it trained anything, and it is why the rebuild
+happened: cosine distance to a prototype cannot say "this is about nothing", so at the accuracy
+it promises it can answer one claim in twenty.
+
+The fourth and fifth rows are the same labels and the same claims, and what separates them is
+reading each claim inside its review and a backbone of twice the size. Twenty-four points of
+coverage and a tenth of a point of macro F1, for two training runs and no new labelling. A
+forty-configuration sweep of everything else, measured the same way, moved nothing outside its
+own noise: `DECISIONS.md` has the table and what each change was worth on its own.
+
+The last row is the one worth being honest about. **A frontier model asked directly is better
+than this, by thirteen points of accuracy and fifteen of coverage.** What it is not is
+affordable: that comparison cost 405,000 tokens for 471 claims, and a single large game holds
+three million claims. This reader does that game on one desktop GPU, offline, for the
+electricity. The claim being made is not that a 560M-parameter model beats a frontier one. It
+is that it gets most of the way there at four orders of magnitude less cost, and that it can
+tell you exactly how far short it falls.
+
+The two models in that table are deliberately different ones. The labels this reader was
+trained from were written by **Claude Fable 5.1**, and the model it is measured against is
+**Claude Opus 5**, which wrote none of them. A teacher scoring its own student would make the
+gap meaningless, and the gap is the point.
+
+That is not a projection. The library this was built against is **51 games, 7.5 million
+reviews, 20.1 million claims**, all of it read by this model on one card, and the counts and
+the rows behind them reconcile game by game (`--example check-readings`).
+
+### How a person turns silver into gold
+
+`steamgauge gold` writes one page, holding a blind random sample of claims from the games the
+model never saw and the claims two labellers answered differently. Blind means blind: a claim
+drawn for measurement carries no answer, because an answer on the page is an answer in the
+reader's head, and a figure produced by agreeing with a suggestion is a ratification rather
+than a measurement.
+
+The page marks each claim inside the review it came from and keeps answers as they are made. A
+letter picks a subject, a digit picks the polarity, and a claim with both moves on by itself; a
+thousand claims is not one sitting and a closed tab must not cost a night's work.
+
+**`steamgauge gold --serve` is the way to run it.** The page is served from the loopback
+address and every answer lands in a file on disk before the next question is drawn, so the disk
+is the copy that matters and the browser is a cache: reopen it anywhere and it carries on where
+the file ends. Nothing leaves the machine, and there is nothing to remember to press. Opened as
+a plain file instead, the page still works and still asks nothing of the network, but the
+browser is then the only copy until the Export button is pressed, which is a bad place for the
+only copy of somebody's own judgement.
+
+`steamgauge ingest-gold` reads those answers back, files them beside the labels already there
+rather than over them, and prints the share that agrees. That share is the first number this
+project can call accuracy rather than agreement.
+
+### How the reference sets are made
+
+They are a **silver standard**, not a gold one, and the distinction decides what every number
+downstream may be called. A gold standard is adjudicated by people. These labels are written by
+a language model reading one claim at a time, which makes the set good enough to train a model
+on and to measure against, and never good enough to quote as truth. Every manifest records
+`human_verified: false`, and until that changes the tool reports **agreement** and refuses the
+word accuracy.
+
+Which model wrote them is recorded per set, in `produced_by`, and printed with every result.
+A set labelled by one model and a set labelled by another are not the same evidence and must
+not be pooled without saying so; the sets shipped here were written by Claude Fable 5.1.
+
+What the set spends its size on is games rather than depth. A hundred reviews of one title
+would say nothing about whether a category survives contact with a corpus it was not built
+from. So the set runs to thousands of labels spread across dozens of games of different genres
+and different overall sentiment, and the figure it exists to produce is the one measured on a
+game the model never saw. A tenth of it is labelled twice by different labellers, which is what
+lets the set report its own reliability rather than only its agreement with a classifier.
+
+The mix of languages is chosen rather than inherited. A corpus is whatever languages its
+players happen to write in, and drawing straight from it would train the model mostly on
+whichever one that is. Roughly seven claims in ten are English and the rest are drawn from
+everything else the corpus holds, so the model holds up in the languages the reports do not
+default to.
+
+The protocol is fixed so it can be repeated, and so a disagreement with it is about the method
+rather than about somebody's afternoon:
+
+- **The sample is drawn before anyone reads anything.** `steamgauge sample-claims` takes a seed and
+  draws reviews per game with a fixed share of English, then splits each into its claims. The
+  same seed against the same capture draws the same reviews, so a set can be rebuilt without
+  being stored.
+- **Every claim of a drawn review is labelled, never a subset of them.** A review labelled in
+  part cannot say what share of a corpus names no aspect at all, which is the first thing worth
+  knowing about one.
+- **A set drawn to teach the model is marked as one and measures nothing.** A random draw
+  spends most of its budget on claims the reader already gets right, so `steamgauge declined`
+  draws instead from the claims it abstained on, uniformly rather than from the least confident
+  of them, because the bottom of a confidence ordering is mostly text with nothing in it. Every
+  row lands with `subset: declined`, which keeps it out of every prevalence figure; only the
+  claims drawn are asked about, though the whole review is still handed over, because a claim
+  reading "it doesn't" cannot be labelled without the sentence before it; and only games the
+  model already trains on may be drawn, because a held-out game taught from is not held out.
+- **Labellers are shown the claim inside the review it came from, and nothing else.** Not the
+  game, not whether the reviewer recommended it, not what the model guessed. The prediction is
+  withheld because anyone shown a proposed answer agrees with it more than someone reading
+  cold. The rating and the game are withheld for a different reason: the model does not see
+  them either, so a label made from more than the tool can read would measure the gap in what
+  the two were shown. The surrounding review is shown because a claim reading "it doesn't" is
+  not interpretable alone.
+- **The sheet every labeller works from is generated from the taxonomy**, so a boundary rule
+  exists in exactly one place and every labeller is given the same one. It is never changed
+  mid-run: half a set labelled against a revised sheet is half a set nobody can compare.
+- **Labelling runs in parallel, one labeller per game**, each working batch by batch and writing
+  each batch out before opening the next.
+- **Every label carries six fields**: one subject, whether the claim is praise, a complaint or
+  neither, whether the text is ironic, how sure the labeller was, whether the call was genuinely
+  contested, and whether the claim was cut in the wrong place. The last two are read back:
+  agreement is reported separately over the contested claims, and the mis-split rate is what
+  drives the splitting rules. Three rounds of them came from labellers reporting it.
+- **A tenth is read again by a different labeller, blind.** `steamgauge second-opinion` draws the
+  same reviews as fresh batches with no labels in them, and `steamgauge compare-labels` reads the
+  two labellings together. It reports each field apart from the others, because they fail
+  differently: subject is a judgement about the claim, and `ambiguous` is a judgement about the
+  taxonomy. Beside every percentage is Cohen's kappa, which is what the percentage cannot tell
+  you: a corpus is mostly `verdict` and `offtopic`, so two labellers who never read a claim
+  would still agree most of the time by landing on the commonest subject.
+- **What comes back is checked rather than trusted.** `steamgauge ingest-claims` refuses a set that
+  does not cover the drawn sample exactly: claims nobody labelled, labels naming claims nobody
+  drew, subjects the taxonomy does not have, claims labelled twice, and labels whose judgements
+  were never made. A judgement left out is dropped rather than defaulted, because a `false`
+  nobody wrote is a figure nobody stood behind.
 
 These rules keep those figures honest:
 
@@ -159,18 +364,118 @@ These rules keep those figures honest:
   or cold only where the interval on the reviews raising it clears the game's own baseline, so
   eight reviews all recommending the game is left as the 100% it is instead of dressed as the
   finding a thousand reviews at 98% would be.
-- **Reference sets span several games.** Anchors built from one game carry that game's
-  vocabulary. Sets are labelled across games of different genres and different overall
-  sentiment, so agreement can be measured on a game the anchors were never fitted to:
-  `census fit --leave-one-out` fits on every game but one and reports the one left out, which
-  is the only figure that says whether a category travels. Numbers from a single corpus
-  describe that corpus and nothing else. It reports that figure again over the reviews the
-  labeller called clear-cut and over the ones it called contested, because those answer
-  different questions: anchors that genuinely cannot reach a game are worse where the reading
-  was easy, and a taxonomy that does not fit a game is worse only where the labeller could
-  not place the review either.
+- **Reference sets span several games, and whole games are held out.** A model trained on one
+  game carries that game's vocabulary. Sets are labelled across games of different genres and
+  different overall sentiment, and the split holds out whole games rather than whole claims,
+  so the figure says whether a subject travels rather than whether the model can repeat itself.
+  Numbers from a single corpus describe that corpus and nothing else. The same figure is
+  reported again over the claims the labeller called clear-cut and over the ones it called
+  contested, because those answer different questions: a model that genuinely cannot reach a
+  game is worse where the reading was easy, and a taxonomy that does not fit a game is worse
+  only where the labeller could not place the claim either.
 
 ## Honest limits
+
+- **Reports default to English, so the headline is a fact about players who write English.**
+  The capture is always the whole census, every language in it, and the filter is applied when
+  the counting happens rather than when the crawling does, so the choice is reversible and no
+  corpus has to be downloaded twice. But a mention rate over English reviews is not a mention
+  rate over players: on some corpora English is under half of what was written. Every figure
+  says which set it is over, and switching the language recounts from the same capture. The
+  reason for the default is that evidence nobody can read is evidence nobody can check, and
+  being able to open a rate and read what is behind it is the whole design.
+
+- **The model declines claims it is not sure about, and those are counted rather than hidden.**
+  A claim below the threshold gets no subject and is reported as unclassified. That is a real
+  answer and an honest one, but it means a mention rate is a rate over the claims the model
+  would commit to. The share it declined is printed beside it, and a large one is a finding
+  about the corpus rather than a footnote.
+
+  **That share used to be most of the corpus and is now a sixth of it.** Trained on
+  thirty-six games, the model answers **84%** of the labelled claims in games it has never seen
+  and agrees with a labeller on **76%** of those. Sixteen games ago it answered an eighth of
+  them at 62%. What moved it, measured one change at a time on games it never saw: more labels,
+  then reading each claim inside the review it came from and training at the rate that suits
+  that (58% to 77%), then a backbone twice the size (77% to 84%). A threshold moved to make the
+  number look better would be the old classifier again, and the share it declines is still
+  printed beside every rate.
+
+  The model carries what it usually declines, measured on the eight frozen games, so a corpus
+  that declines far above it can be reported as a finding rather than a footnote. Read across
+  forty games of the library, thirty-two of which it had never seen, the average share declined
+  is **15.9%** against the **15.8%** it carries, and no game reaches the 1.2 times that would
+  trip the warning. The figure travels.
+
+- **A threshold chosen on a few games may not transfer to a new one.** The threshold promises
+  an accuracy, and that promise is measured on the games that chose it. On eleven games the
+  frozen ones delivered eighteen points less than promised; on twenty-seven they deliver four
+  points more. So every figure in the model card comes from the frozen games, and the
+  validation figures stay in the run record where they belong. Which games are frozen is fixed
+  by a hash of each game's id, so adding games never moves one across the line.
+
+- **The tool has to reproduce the training measurement, and when it does not the tool is
+  wrong.** They are separate implementations of one question: the trainer builds the window
+  around a claim in Python, the tool builds it in Rust over a corpus it split itself. Three
+  ways of asking exist so that any two can disagree, and each removes a suspect: Rust over the
+  exported claims, Python over the same, and the tool over its own reading of the game. On
+  2026-09-12 the first two agreed to a fifth of a point and the third was eight below, which
+  turned out to be the reader building its window out of the padding inside a tokenizer file.
+  Nothing about the output looked wrong, which is the argument for keeping all three. Fixed,
+  the tool reads the eight frozen games from their captures and reports 84.3% answered at 76.6%
+  where training reports 84.2% at 76.3% for the same claims: three tenths of a point across two
+  languages, two windowings and two corpora.
+
+- **Claim share is verbosity-weighted and never a headline.** Counting opinions instead of
+  people lets whoever writes most set the numbers, which is the same distortion this tool
+  exists to expose at the top of the pile. The headline is always the share of reviews.
+
+- **A tenth of the reference set is labelled twice, and the rest is labelled once.** Reliability
+  is measured on that tenth and assumed for the rest. It is a far better position than having
+  no second reading at all, and it is not the same as a set where every label was adjudicated.
+  The silver standard's own error is estimated rather than known, and the word accuracy still
+  does not apply: the labels were written by a model, so what is measured is consistency
+  between two models.
+
+  Measured so far, over 1,400 claims on thirty games: two labellers agree on the subject
+  87% of the time, kappa 0.85, and on polarity 93%, kappa 0.90. Those are figures a set can
+  stand on, and they did not move when the set grew from ten games to thirty.
+
+- **The contested flag measures the labeller as much as the claim.** Two labellers given the
+  same definition reached for it on three tenths and on half of the same claims, kappa 0.48.
+  The flag does find the right claims: where neither reached for it the two agree on the
+  subject 99% of the time, and where either did they agree three times in four. What differs is the
+  bar. So a game's contested rate is not compared with another game's, and agreement is
+  reported over the contested claims as a floor on how hard the taxonomy is rather than as a
+  property of the corpus.
+
+- **A labeller is not told which game it is, but is given one game at a time.** Withholding the
+  game keeps the label answerable from the same text the model reads. Handing over a whole
+  game's batches undermines that where a corpus has a strong accent: a hundred claims about
+  tracking and room scale identify a headset game whatever the sheet says. The effect runs one
+  way, towards labels the model cannot reproduce, so it understates the model rather than
+  flattering it. Shuffling reviews from several games into each batch would remove it, at the
+  cost of routing the labels back per game before they can be ingested.
+
+- **A claim is split mechanically, and the splitting is sometimes wrong.** Across thirty
+  labelled games it is **15.8%** of claims, between 8.9% and 26.2% depending on the game, and
+  every rule in the splitter came from one of those reports. The commonest failure was a
+  sentence that names three subjects at once: "stunning visuals, calm music, epic story" was
+  one claim carrying three, so two of them went uncounted; a list of short comma-separated
+  parts is now that many claims. The rate is measured rather than assumed, because it is the
+  one error in this pipeline that no amount of training fixes.
+
+  A label names the span of the review it was written about, not a position in a list, so the
+  splitter can change under a labelled set: a label whose span the new splitter no longer cuts
+  as one claim is counted as unjoined and said, rather than scored against whatever sentence
+  now sits at its old index. A reading records the splitter that cut it, and a reading cut by
+  an older one is refused wherever a claim would be quoted or scored by its index, until the
+  game is read again.
+
+- **How often labellers find a claim genuinely contested varies more than the claims do.**
+  28.9% overall, but from 13.5% on one game to **52.1%** on another. Some of that is the games,
+  and some of it is labellers reading "two subjects both fit" more or less strictly. It is the
+  clearest argument for the double-labelled tenth: contested is the one field with no way to
+  check itself.
 
 - **"Every review" means every review Valve will serve, and the request parameters decide how
   many that is.** Two API defaults quietly remove a large and biased slice. `purchase_type`
@@ -198,10 +503,12 @@ These rules keep those figures honest:
   window complete while it stays short. Coverage is reported per corpus either way, because
   the first number is the one worth doubting.
 
-- **The target moves.** New reviews arrive constantly, so a corpus is a snapshot with a
-  timestamp, and it can be topped up rather than rebuilt. Reviews are also edited and deleted
-  after the fact, and vote counts drift, so a top-up is periodically followed by a full
-  re-crawl.
+- **The target moves.** New reviews arrive constantly and old ones are edited, so a corpus is
+  a snapshot with a timestamp, and it is brought up to date rather than rebuilt: one walk in
+  last-edit order fetches everything written or changed since, and stops there. Nothing
+  already captured is overwritten. An edited review is held in both forms, with a record of
+  which one counts, so a capture never loses what a review used to say. Deleted reviews and
+  drifting vote counts are what a sweep cannot see, and only a full re-crawl catches those.
 
 - **A category with no labelled examples is only as good as its description.** Fitting cannot
   invent evidence. Where a game barely discusses something, that category stays weak for that
@@ -218,9 +525,9 @@ This repository holds no review data. Reviews belong to the people who wrote the
 Valve, and they are downloadable by anyone with the app ID, so there is nothing to gain from
 redistributing them here.
 
-By default nothing you pull leaves your machine. The crawler talks to Valve, and
-categorisation runs on a local embedding model, so a complete census is possible with no
-account, no key and no network beyond Steam itself. Reports are the same: one file with no
+By default nothing you pull leaves your machine. The crawler talks to Valve, and the reading
+runs on a model on your own card, so a complete census is possible with no account, no key and
+no network beyond Steam itself. Reports are the same: one file with no
 fonts, scripts or stylesheets fetched from anywhere, so reading a result is not a way of
 publishing it.
 
